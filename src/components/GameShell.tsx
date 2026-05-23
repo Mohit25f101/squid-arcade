@@ -8,50 +8,50 @@
  * The single mount point for every game in the Squid Arcade. Wraps the active
  * game with:
  *
- *  1. ResizeObserver — watches the container, computes the CSS scale factor,
- *     and writes ViewportState to the global store + inputManager. Games never
- *     need their own resize logic again (GlassBridge's internal observer is
- *     superseded; it will be removed in Phase 3).
+ * 1. ResizeObserver — watches the container, computes the CSS scale factor,
+ * and writes ViewportState to the global store + inputManager. Games never
+ * need their own resize logic again (GlassBridge's internal observer is
+ * superseded; it will be removed in Phase 3).
  *
- *  2. Canvas context provider — creates one <canvas> element and passes a
- *     stable ref down via GameShellContext. Games that opt in (DalgonaCandy)
- *     read the ref instead of creating their own. Games that manage their own
- *     canvas (GlassBridge) ignore the context — both patterns coexist safely.
+ * 2. Canvas context provider — creates one <canvas> element and passes a
+ * stable ref down via GameShellContext. Games that opt in (DalgonaCandy)
+ * read the ref instead of creating their own. Games that manage their own
+ * canvas (GlassBridge) ignore the context — both patterns coexist safely.
  *
- *  3. InputManager lifecycle — calls attach() on mount, setScale() on resize,
- *     reset() on game change, and detach() on unmount. Games import the
- *     singleton directly; GameShell owns the lifecycle so games don't have to.
+ * 3. InputManager lifecycle — calls attach() on mount, setScale() on resize,
+ * reset() on game change, and detach() on unmount. Games import the
+ * singleton directly; GameShell owns the lifecycle so games don't have to.
  *
- *  4. Global elimination overlay — subscribes to runtimePhase === "eliminated"
- *     and renders a universal cinematic death sequence (red flash → slow
- *     letterbox → "ELIMINATED" card). Individual games may show their own
- *     overlays on top; GameShell's overlay fires regardless, ensuring
- *     consistent UX across all games without duplicating overlay code.
+ * 4. Global elimination overlay — subscribes to runtimePhase === "eliminated"
+ * and renders a universal cinematic death sequence (red flash → slow
+ * letterbox → "ELIMINATED" card). Individual games may show their own
+ * overlays on top; GameShell's overlay fires regardless, ensuring
+ * consistent UX across all games without duplicating overlay code.
  *
- *  5. Global victory overlay — same pattern for runtimePhase === "victory".
+ * 5. Global victory overlay — same pattern for runtimePhase === "victory".
  *
- *  6. Transition curtain — renders the CSS-animated curtain that GameRouter's
- *     `transition` state drives. Moving it here means GameRouter stays a pure
- *     router with no visual responsibilities.
+ * 6. Transition curtain — renders the CSS-animated curtain that GameRouter's
+ * `transition` state drives. Moving it here means GameRouter stays a pure
+ * router with no visual responsibilities.
  *
- *  7. Frame boundary hook — calls inputManager.endFrame() at the end of every
- *     rAF tick so single-frame flags (justPressed, justReleased) are always
- *     cleared even when the active game doesn't call endFrame itself.
+ * 7. Frame boundary hook — calls inputManager.endFrame() at the end of every
+ * rAF tick so single-frame flags (justPressed, justReleased) are always
+ * cleared even when the active game doesn't call endFrame itself.
  *
  * USAGE (in GameRouter.tsx):
  *
- *   <GameShell worldW={1280} worldH={720}>
- *     <GlassBridge onExit={handleExit} />
- *   </GameShell>
+ * <GameShell worldW={1280} worldH={720}>
+ * <GlassBridge onExit={handleExit} />
+ * </GameShell>
  *
  * CONTEXT (for games that want the shell canvas):
  *
- *   const { canvasRef, scale } = useGameShell();
+ * const { canvasRef, scale } = useGameShell();
  *
  * WORLD SIZE NOTE:
- *   Pass the logical resolution of the current game. If your games have
- *   different resolutions, re-mount GameShell with the new dimensions when
- *   the active game changes (GameRouter already keys SceneWrapper per game).
+ * Pass the logical resolution of the current game. If your games have
+ * different resolutions, re-mount GameShell with the new dimensions when
+ * the active game changes (GameRouter already keys SceneWrapper per game).
  */
 
 import React, {
@@ -63,8 +63,9 @@ import React, {
   useState,
 } from "react";
 import { useGameStore } from "@/store/gameStore";
+import { inputManager } from "@/managers/InputManager";
+import { HUD } from "@/components/hud";
 import type { EliminationPayload, ViewportState } from "@/store/gameStore";
-// Input manager - use native event listeners
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 1 — CONTEXT
@@ -149,6 +150,7 @@ const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
   >("flash");
 
   useEffect(() => {
+    inputManager.reset();
     // Sequence timer chain
     const t1 = setTimeout(() => setPhase("letterbox"), ELIM_FLASH_DURATION_MS);
     const t2 = setTimeout(() => setPhase("card"), ELIM_CARD_DELAY_MS);
@@ -393,10 +395,10 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
  * is a pure routing component with no visual responsibilities.
  *
  * `state` values match the CSS classes you have (or will have) in globals.css:
- *   "idle"     → opacity 0, pointer-events none
- *   "entering" → animating in (opacity 0→1)
- *   "active"   → fully opaque (router swaps the scene here)
- *   "leaving"  → animating out (opacity 1→0)
+ * "idle"     → opacity 0, pointer-events none
+ * "entering" → animating in (opacity 0→1)
+ * "active"   → fully opaque (router swaps the scene here)
+ * "leaving"  → animating out (opacity 1→0)
  */
 const TransitionCurtain: React.FC<{ state: string }> = ({ state }) => {
   const isVisible = state !== "idle";
@@ -445,11 +447,11 @@ function useInputFrameBoundary(active: boolean): void {
     if (!active) return;
 
     function tick() {
-      // Input frame processing using native event listeners
+      inputManager.endFrame();
       rafRef.current = requestAnimationFrame(tick);
     }
 
-    rafRef.current = requestAnimationFrame(tick);
+     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [active]);
 }
@@ -568,6 +570,8 @@ const GameShell: React.FC<GameShellProps> = ({
       // Scale to fit while preserving the logical world aspect ratio
       const scale = Math.min(cw / worldW, ch / worldH);
 
+       inputManager.setScale(scale);
+
       const nextViewport: ViewportState = {
         containerW: cw,
         containerH: ch,
@@ -614,10 +618,14 @@ const GameShell: React.FC<GameShellProps> = ({
     const target = containerRef.current;
     if (!target) return;
 
+    inputManager.attach(target);
+
     // Input listeners are attached via native events
     // (previously managed by inputManager)
 
     return () => {
+      inputManager.detach();
+      inputManager.reset();
       // Cleanup handled by native event listener cleanup
     };
   }, []); // attach once; detach on shell unmount
@@ -687,29 +695,28 @@ const GameShell: React.FC<GameShellProps> = ({
           />
         )}
 
-        {/*
-          Game content. In Phase 1:
-            - GlassBridge renders its own canvas inside here
-            - DalgonaCandy (Phase 3) will use the shell canvas via context
-        */}
+        {/* Game content — sits in the flex-centered flow */}
         {children}
 
-        {/* ── Global overlays — rendered above all game content ─────────── */}
+        {/* HUD overlay — absolutely positioned so it never participates in
+        flex layout and cannot push or be pushed by the canvas.
+        `pointerEvents: none` on the wrapper means only interactive HUD
+        children (buttons etc.) need to opt back in with pointer-events: auto.
+        */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "none" }}>
+          <HUD />
+        </div>
 
-        {/* Elimination overlay: fires for ANY game that calls triggerElimination() */}
+        {/* Global overlays */}
         {runtimePhase === "eliminated" && eliminationPayload && (
           <EliminationOverlay
             payload={eliminationPayload}
             onComplete={handleEliminationComplete}
           />
         )}
-
-        {/* Victory overlay: fires for ANY game that sets runtimePhase → "victory" */}
         {runtimePhase === "victory" && (
           <VictoryOverlay onComplete={handleVictoryComplete} />
         )}
-
-        {/* Transition curtain: driven by GameRouter's transition prop */}
         <TransitionCurtain state={transition} />
       </div>
     </GameShellContext.Provider>
@@ -731,12 +738,12 @@ export default GameShell;
  *
  * Usage in GlassBridge.tsx (add after existing useState declarations):
  *
- *   useGameShellBridge({
- *     uiPhase,
- *     sourceGame: "glass-bridge",
- *     progressMarker: finalRow,
- *     progressTotal: TOTAL_ROWS,
- *   });
+ * useGameShellBridge({
+ * uiPhase,
+ * sourceGame: "glass-bridge",
+ * progressMarker: finalRow,
+ * progressTotal: TOTAL_ROWS,
+ * });
  *
  * That's the entire bridge. GlassBridge keeps all internal logic untouched.
  *
@@ -759,6 +766,7 @@ export function useGameShellBridge(opts: {
   const { uiPhase, sourceGame, progressMarker, progressTotal, reason } = opts;
 
   useEffect(() => {
+    
     switch (uiPhase) {
       case "intro":
         setRuntimePhase("intro");

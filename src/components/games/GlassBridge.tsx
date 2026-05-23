@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useGameShellBridge } from "@/components/GameShell";
+import { useHUDSync } from "@/components/hud/useHUDSync";
 
 interface GameProps {
   onExit?: () => void;
@@ -1196,7 +1198,13 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
   const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
   const [finalRow, setFinalRow] = useState(0);
   const [finalElapsed, setFinalElapsed] = useState(0);
-
+  useGameShellBridge({
+  uiPhase,
+  sourceGame: "glass-bridge",
+  progressMarker: finalRow,
+  progressTotal: TOTAL_ROWS,
+});
+const hudSync = useHUDSync({ flushInterval: 100 });
   const isTouchDevice =
     typeof window !== "undefined" &&
     (window.matchMedia("(pointer: coarse)").matches ||
@@ -1229,17 +1237,21 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
   // ROOT CAUSE FIX: Added Escape key listener
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-        inputRef.current.left = true;
-      }
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
-        inputRef.current.right = true;
-      }
-      if (e.key === "Escape" && onExit) {
-        onExit();
-      }
-    };
+    // AFTER:
+const onKey = (e: KeyboardEvent) => {
+  // P2-2: guard key-repeat so held keys don't flood inputRef between ticks.
+  // Escape is exempt — repeat on Escape is harmless and the guard would
+  // swallow it if the key is held very briefly.
+  if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+    if (!e.repeat) inputRef.current.left = true;
+  }
+  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+    if (!e.repeat) inputRef.current.right = true;
+  }
+  if (e.key === "Escape" && onExit) {
+    onExit();
+  }
+};
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onExit]);
@@ -1267,6 +1279,14 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     if (!ctx) return;
 
     gameTick(gs, dt, inputRef);
+    hudSync.write({
+  score:    gs.currentRow,          // rows cleared = score proxy
+  lives:    1,                      // single-player — always 1 life
+  time:     Math.ceil(gs.timeLeft),
+  health:   gs.player.status === "alive" ? 100 : 0,
+  maxHealth: 100,
+  level:    gs.currentRow,
+});
 
     if (gs.phase === "gameover" && uiPhase === "playing") {
       setFinalRow(gs.currentRow);
@@ -1279,7 +1299,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
     const quality: "high" | "low" = true ? "high" : "low";
     renderFrame(ctx, gs, assets, quality);
-  }, [uiPhase]);
+  }, [uiPhase,hudSync]);
 
   useGameLoop(tick, uiPhase === "playing");
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { audioEventBus } from "../lib/audio/AudioEventBus";
 import { useSoundManager } from "./useSoundManager";
 import { useGameStore, selectPhase } from "../store/gameStore";
 import type { SoundId } from "../managers/SoundManager";
@@ -70,6 +71,38 @@ export function useAmbientAudio(): void {
   }, [sm]);
 }
 
+export function useAudioSubscriptions() {
+  const sm = useSoundManager();
+
+  useEffect(() => {
+    const onGreenLight = () => {
+      // Tension releases — fade out sting, resume ambient movement track.
+      sm.stop("heartbeat", 300);
+      sm.loop("ambient_bg");
+    };
+
+    const onRedLight = () => {
+      // Hard cut: silence movement audio, play freeze/tension sting.
+      sm.stop("ambient_bg", 150);
+      sm.play("heartbeat");
+    };
+
+    const onElimination = (_id: string) => {
+      // payload is string (player ID) per AudioEvents type definition.
+      sm.play("player_eliminated");
+    };
+
+    audioEventBus.on("greenLightActivated", onGreenLight);
+    audioEventBus.on("redLightActivated", onRedLight);
+    audioEventBus.on("playerEliminated", onElimination);
+
+    return () => {
+      audioEventBus.off("greenLightActivated", onGreenLight);
+      audioEventBus.off("redLightActivated", onRedLight);
+      audioEventBus.off("playerEliminated", onElimination);
+    };
+  }, [sm]); 
+} // [] — subscribe once on mount, clean up on unmount
 // ─── useGameAudio: per-game event sound helper ────────────────────────────────
 
 /**

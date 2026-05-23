@@ -1,12 +1,11 @@
-export { SoundManager }        from "./SoundManager";
+// src/managers/index.ts
+export { SoundManager } from "./SoundManager";
 export type { SoundId, SoundCategory } from "./SoundManager";
-export { InputManager }        from "./InputManager";
+
+export { InputManager, inputManager } from "./InputManager";
 export type {
-  InputAction,
-  InputDevice,
-  InputSnapshot,
-  Vector2,
-  TouchRegion,
-  KeyBinding,
+  UnifiedInput,
+  IntentKey,
+  TouchContact,
   InputManagerOptions,
 } from "./InputManager";

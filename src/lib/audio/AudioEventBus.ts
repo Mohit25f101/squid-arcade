@@ -1,6 +1,5 @@
 // lib/audio/AudioEventBus.ts
 
-// These are the exact events Claude outlined in the state machine
 export type AudioEvents = {
   'greenLightActivated': void;
   'redLightActivated': void;
@@ -20,6 +19,13 @@ class EventBus {
   on<K extends keyof AudioEvents>(event: K, callback: (payload: AudioEvents[K]) => void) {
     if (!this.listeners[event]) this.listeners[event] = [];
     this.listeners[event]!.push(callback);
+  }
+
+  // P2-1 FIX: removal method so useEffect cleanups can unsubscribe without
+  // accumulating duplicate listeners across hook remounts.
+  off<K extends keyof AudioEvents>(event: K, callback: (payload: AudioEvents[K]) => void) {
+    if (!this.listeners[event]) return;
+    this.listeners[event] = this.listeners[event]!.filter(cb => cb !== callback);
   }
 
   emit<K extends keyof AudioEvents>(event: K, payload?: AudioEvents[K]) {

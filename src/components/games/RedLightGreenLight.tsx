@@ -1,6 +1,7 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
 import { audioEventBus } from '../../lib/audio/AudioEventBus';
+import { useHUDSync } from "@/components/hud/useHUDSync";
 import React, {
   useEffect,
   useRef,
@@ -14,7 +15,6 @@ import { useCanvasScale } from "@/hooks/useCanvasScale";
 import { useSceneCleanup } from "@/hooks/useSceneCleanup";
 import MobileTouchControls from "@/components/touch/MobileTouchControls";
 import CanvasWrapper, { type CanvasWrapperHandle, type CanvasSize } from "../canvas/CanvasWrapper";
-import { useHUDSync } from "../hud/useHUDSync";
 import { useGameAudio } from "../../hooks/useAmbientAudio";
 import { drawMinecraftCharacter } from "@/lib/render/drawMinecraftCharacter";
 
@@ -1125,7 +1125,7 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
 
   const gsRef     = useRef<GameState>(makeGameState(diffNum));
   const canvasRef = useRef<CanvasWrapperHandle>(null);
-  const hudSync   = useHUDSync({ flushInterval: 80 });
+
   const audio     = useGameAudio();
 
   const inputRef = useRef({ left: false, right: false, jump: false, sprint: false });
@@ -1196,6 +1196,7 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
   // ── Game tick ─────────────────────────────────────────────────────────────
   const prevUIPhase = useRef<GameState["phase"]>("countdown");
   const prevCountdown = useRef(3);
+  const hudSync = useHUDSync({ flushInterval: 80 });
 
   const onTick = useCallback(
     (rawDelta: number) => {
@@ -1213,7 +1214,13 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
       gs.inputJump   = inputRef.current.jump;
 
       if (gs.inputJump) inputRef.current.jump = false;
-
+hudSync.write({
+  score:    Math.floor(gs.playerScore),
+  lives:    gs.aliveCount,         // alive player count doubles as "lives remaining"
+  time:     Math.ceil(gs.timeLeft),
+  health:   gs.players[0].status === "alive" ? 100 : 0,
+  maxHealth: 100,
+});
       gameTick(gs, rawDelta);
       renderFrame(ctx, size, gs);
 
@@ -1272,7 +1279,7 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
         }
       }
     },
-    [audio, hudSync, addScore]
+    [audio, addScore,hudSync]
   );
 
   const rawCanvasRef = useRef<HTMLCanvasElement | null>(null);

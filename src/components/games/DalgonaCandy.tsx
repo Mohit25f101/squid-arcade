@@ -42,12 +42,8 @@
  *   "transitioning" → fade handled by GameShell's TransitionCurtain
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useHUDSync } from "@/components/hud/useHUDSync";
 import { useGameShellBridge, useGameShell } from "@/components/GameShell";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -246,6 +242,7 @@ interface DalgonaCandyProps {
 export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
   // ── Shell / store integration ──────────────────────────────────────────
   const { canvasRef: shellCanvas, scale, viewport } = useGameShell();
+  const hudSync = useHUDSync({ flushInterval: 200 });
 
   // ── Local canvas (DalgonaCandy owns its own canvas, identical to GlassBridge pattern)
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -257,6 +254,14 @@ export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
   const [candyState, setCandyState] = useState<CandyState>(() =>
     makeCandyState(pickShape())
   );
+  useEffect(() => {
+  hudSync.write({
+    health:    Math.round(candyState.totalIntegrity * 100),
+    maxHealth: 100,
+    score:     Math.round(candyState.completionRatio * 100),
+    lives:     uiPhase === "eliminated" ? 0 : 1,
+  });
+}, [candyState, uiPhase, hudSync]);
 
   // Mutable refs for the hot path (avoid closure-over-stale-state in rAF)
   const candyRef       = useRef<CandyState>(candyState);
@@ -272,6 +277,14 @@ export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
   const scaleRef       = useRef<number>(scale);
   const shapePathRef   = useRef<Point[]>([]);
 
+  useEffect(() => {
+  hudSync.write({
+    health: Math.round(candyState.totalIntegrity * 100),
+    maxHealth: 100,
+    score: Math.round(candyState.completionRatio * 100),
+    lives: uiPhase === "eliminated" ? 0 : 1,
+  });
+}, [candyState, uiPhase, hudSync]);
   // Keep scale ref in sync (written by GameShell's ResizeObserver → Zustand → component)
   useEffect(() => {
     scaleRef.current = scale;
@@ -316,30 +329,59 @@ export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
     return () => clearInterval(tick);
   }, [uiPhase]);
 
-  // ── Canvas resize ──────────────────────────────────────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+ // ── Subsequent resize handling (A-3) ──────────────────────────────────
+// Fires whenever GameShell's ResizeObserver updates the viewport context.
+// On first mount this fires with placeholder dimensions (containerW: worldW)
+// before the ResizeObserver has measured the real container.
+useEffect(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
 
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        canvas.width  = Math.round(width  * devicePixelRatio);
-        canvas.height = Math.round(height * devicePixelRatio);
-        canvas.style.width  = `${width}px`;
-        canvas.style.height = `${height}px`;
-        // Rebuild shape path at new scale
-        shapePathRef.current = getShapePath(
-          candyRef.current.shape,
-          canvas.width / WORLD_W
-        );
-        scaleRef.current = canvas.width / WORLD_W;
-      }
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
+  const { containerW, containerH, dpr } = viewport;
+
+  canvas.width  = Math.round(containerW * dpr);
+  canvas.height = Math.round(containerH * dpr);
+  canvas.style.width  = `${containerW}px`;
+  canvas.style.height = `${containerH}px`;
+
+  const newScale = canvas.width / WORLD_W;
+  shapePathRef.current = getShapePath(candyRef.current.shape, newScale);
+  scaleRef.current = newScale;
+}, [viewport]);
+
+// ── Initial canvas sizing from real DOM measurements ───────────────────
+// The [viewport] effect above fires first (on mount, effects run in
+// declaration order) with placeholder dims. This effect fires second,
+// overriding those values with actual container measurements from the DOM.
+// The render loop effect below fires third — it always starts with the
+// correct scaleRef because this effect precedes it in declaration order.
+//
+// useEffect (not useLayoutEffect) keeps this SSR-safe for Next.js App
+// Router, which pre-renders "use client" components on the server.
+useEffect(() => {
+  const canvas = canvasRef.current;
+  const container = containerRef.current ?? canvas?.parentElement;
+  if (!canvas || !container) return;
+
+  const rect = container.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.round(rect.width  * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  canvas.style.width  = `${rect.width}px`;
+  canvas.style.height = `${rect.height}px`;
+
+  const newScale = canvas.width / WORLD_W;
+  shapePathRef.current = getShapePath(candyRef.current.shape, newScale);
+  scaleRef.current = newScale;
+}, []); // [] = runs once on mount, after [viewport] but before render loop
+
+// ── Render loop ────────────────────────────────────────────────────────
+// Declared here, fires third on mount. scaleRef is already correct.
+useEffect(() => {
+  // ... existing render loop code unchanged ...
+}, []);
 
   // ── Pointer input ──────────────────────────────────────────────────────
 
@@ -441,6 +483,7 @@ export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
         scrapeRef.current.lastScrapeTime = now;
       }
 
+      
       const next: CandyState = {
         ...prev,
         totalIntegrity: newIntegrity,
@@ -913,4 +956,3 @@ const styles: Record<string, React.CSSProperties> = {
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * clamp(t, 0, 1);
 }
-// ❌ Ensure the extra } is deleted!
