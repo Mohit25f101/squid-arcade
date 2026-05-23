@@ -127,16 +127,27 @@
   );
 }
 
+/* src/app/speed-ui.css — replace only these two rule blocks */
+
 .game-card-btn:hover,
 .game-card-btn:focus-visible {
-  transform: translateY(-4px);
+  /* mechanical scale — no springy bounce */
+  transform: translateY(-3px) scale(1.012);
   box-shadow:
-    0 0 32px color-mix(in srgb, var(--card-accent, #fff) 20%, transparent),
-    0 16px 48px rgba(0 0 0 / 0.6);
+    0 0 28px color-mix(in srgb, var(--card-accent, #fff) 18%, transparent),
+    0 12px 40px rgba(0 0 0 / 0.65);
+  transition:
+    transform 220ms cubic-bezier(0.4, 0, 0.6, 1),
+    box-shadow 220ms cubic-bezier(0.4, 0, 0.6, 1),
+    border-color 220ms;
 }
 
-.game-card-btn:active {
-  transform: translateY(-1px);
+.gc-episode {
+  font-family:    var(--font-body);
+  font-size:      var(--hud-size-xs);
+  letter-spacing: 0.35em;           /* wider — more prominent */
+  color:          var(--card-accent);
+  font-weight:    700;
 }
 
 /* Speed-line decoration (pseudo-element) */

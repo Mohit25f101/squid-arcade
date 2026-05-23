@@ -48,45 +48,50 @@ body {
 }
 
 /* ── Design tokens ────────────────────────────────────────────────────── */
+/* src/app/globals.css — only the :root token block changes */
+/* Replace your existing :root { ... } with this: */
+
 :root {
-  /* Speed-game color palette */
+  /* Squid Arcade color palette — aligned to roadmap spec */
   --color-neon-green:   #00ff88;
-  --color-neon-red:     #ff2d55;
+  --color-neon-red:     #ff2d2d;   /* was #ff2d55 → roadmap blood red */
   --color-neon-yellow:  #ffd60a;
   --color-neon-blue:    #0a84ff;
+  --color-pink:         #ff4fa3;   /* new — roadmap neon pink */
+  --color-charcoal:     #111111;   /* new — roadmap charcoal */
   --color-bg:           #060608;
   --color-surface:      #0d0d12;
   --color-surface-2:    #14141d;
   --color-border:       rgba(255 255 255 / 0.08);
-  --color-text:         #f0ece0;
-  --color-muted:        rgba(240 236 224 / 0.45);
+  --color-text:         #f5f5f5;   /* was #f0ece0 (warm) → cold white */
+  --color-muted:        rgba(245 245 245 / 0.45);
 
   /* Typography */
   --font-display: "Barlow Condensed", "Impact", sans-serif;
   --font-body:    "DM Mono", "JetBrains Mono", monospace;
   --font-hud:     "Barlow Condensed", sans-serif;
 
-  /* Spacing — scales with viewport, clamped to sane min/max */
+  /* Spacing */
   --space-xs:   clamp(0.25rem, 0.5vw, 0.5rem);
   --space-sm:   clamp(0.5rem,  1vw,   0.75rem);
   --space-md:   clamp(0.75rem, 1.5vw, 1.25rem);
   --space-lg:   clamp(1rem,    2.5vw, 2rem);
   --space-xl:   clamp(1.5rem,  4vw,   3rem);
 
-  /* HUD font sizes — clamp keeps them readable on all screens */
+  /* HUD font sizes */
   --hud-size-xs:  clamp(0.6rem,  1.2vw, 0.8rem);
   --hud-size-sm:  clamp(0.75rem, 1.5vw, 1rem);
   --hud-size-md:  clamp(1rem,    2vw,   1.4rem);
   --hud-size-lg:  clamp(1.5rem,  3vw,   2.2rem);
   --hud-size-xl:  clamp(2rem,    5vw,   4rem);
 
-  /* Touch target minimum (WCAG 2.5.8) */
+  /* Touch target minimum */
   --touch-target: 44px;
 
-  /* Game canvas aspect ratio — locked at 16:9 for landscape */
+  /* Game canvas aspect ratio */
   --game-aspect: 16 / 9;
 
-  /* Transition speeds */
+  /* Transitions */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-fast: 150ms var(--ease-out-expo);
   --transition-med:  300ms var(--ease-out-expo);

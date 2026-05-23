@@ -1,18 +1,4 @@
-/**
- * SECTION 6 — FULL UI/UX THEME REDESIGN
- * src/components/ui/GameMenu.tsx
- *
- * Speed-themed game selection screen.
- * Visual identity: dark racing aesthetic, neon speed streaks,
- * Barlow Condensed for that sports-broadcast feel.
- *
- * Color language:
- *   Green (#00ff88)  = safe / go / Glass Bridge accent
- *   Red   (#ff2d55)  = danger / stop / Red Light accent
- *   Yellow (#ffd60a) = warning / active state
- *   Blue  (#0a84ff)  = info / neutral
- *   Dark  (#060608)  = background (near black, not flat black)
- */
+// src/components/ui/GameMenu.tsx
 
 "use client";
 
@@ -26,16 +12,12 @@ interface GameMenuProps {
 export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Atmospheric speed-streak background
- useEffect(() => {
-  // 1. Explicitly cast it so the closures never doubt its existence
-  const canvas = canvasRef.current as HTMLCanvasElement; 
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d')!;
-  // ...
+  useEffect(() => {
+    const canvas = canvasRef.current as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
 
     let raf: number;
-    let streaks: Streak[] = [];
 
     interface Streak {
       x: number; y: number;
@@ -43,21 +25,29 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
       alpha: number; color: string;
     }
 
-    const COLORS = ["#00ff8820", "#ff2d5515", "#ffd60a12", "#0a84ff10"];
+    // Dark red / charcoal streaks instead of multi-color neon
+    const COLORS = [
+      "rgba(255,45,45,0.12)",
+      "rgba(255,45,45,0.07)",
+      "rgba(180,20,20,0.09)",
+      "rgba(255,255,255,0.04)",
+    ];
+
+    let streaks: Streak[] = [];
 
     function resize() {
-      canvas.width = canvas.offsetWidth;
+      canvas.width  = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     }
 
     function spawnStreak(): Streak {
       return {
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        x:      Math.random() * canvas.width,
+        y:      Math.random() * canvas.height,
         length: 60 + Math.random() * 200,
-        speed: 4 + Math.random() * 12,
-        alpha: 0.4 + Math.random() * 0.6,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        speed:  4 + Math.random() * 12,
+        alpha:  0.4 + Math.random() * 0.6,
+        color:  COLORS[Math.floor(Math.random() * COLORS.length)],
       };
     }
 
@@ -67,7 +57,6 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       for (const s of streaks) {
         ctx.save();
         ctx.globalAlpha = s.alpha;
@@ -77,14 +66,12 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
         ctx.fillStyle = grad;
         ctx.fillRect(s.x, s.y, s.length, 1);
         ctx.restore();
-
         s.x += s.speed;
         if (s.x > canvas.width + s.length) {
           s.x = -s.length;
           s.y = Math.random() * canvas.height;
         }
       }
-
       raf = requestAnimationFrame(draw);
     }
 
@@ -95,7 +82,7 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
     };
   }, []);
 
-  async function handleSelectGame(id: GameId) {
+  function handleSelectGame(id: GameId) {
     onLaunch?.(id);
   }
 
@@ -103,13 +90,25 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
     <div className="menu-root">
       <canvas ref={canvasRef} className="menu-bg-canvas" aria-hidden />
 
-      <div className="menu-content">
+      {/* Pure-CSS scanline overlay — zero JS */}
+      <div
+        aria-hidden="true"
+        style={{
+          position:        "absolute",
+          inset:           0,
+          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px)",
+          pointerEvents:   "none",
+          zIndex:          1,
+        }}
+      />
+
+      <div className="menu-content" style={{ zIndex: 2 }}>
         {/* Header */}
         <header className="menu-header">
-          <div className="menu-eyebrow">SEASON 1 — SELECT GAME</div>
+          <div className="menu-eyebrow">BROADCAST — EPISODE SELECT</div>
           <h1 className="menu-title">
-            <span className="menu-title-main">SPEED</span>
-            <span className="menu-title-sub">ARENA</span>
+            <span className="menu-title-main">SQUID</span>
+            <span className="menu-title-sub">ARCADE</span>
           </h1>
           <div className="menu-tagline">Survive. Or don't.</div>
         </header>
@@ -122,7 +121,7 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
             title="Red Light"
             subtitle="Green Light"
             desc="Run. Freeze. Survive 60 seconds. One false move ends everything."
-            accent="#ff2d55"
+            accent="#ff2d2d"
             symbol="●"
             difficulty={3}
             onSelect={handleSelectGame}
@@ -144,20 +143,18 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
             title="Dalgona"
             subtitle="Candy"
             desc="Carve the shape without breaking the candy. Steady hands survive."
-            accent="#ffd60a" 
+            accent="#ffd60a"
             symbol="★"
             difficulty={3}
             onSelect={handleSelectGame}
           />
         </div>
 
-        {/* Platform hint */}
         <div className="menu-hint">
           Use ← → arrow keys to move · Space to jump
         </div>
       </div>
 
-      {/* Portrait rotation warning */}
       <div className="portrait-warning" role="alert">
         <div className="portrait-warning-icon">📱</div>
         <p style={{ fontFamily: "var(--font-hud)", letterSpacing: "0.1em" }}>
@@ -168,18 +165,16 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
   );
 }
 
-// ── GameCard sub-component ─────────────────────────────────────────────────
-
 interface GameCardProps {
-  id: "glass-bridge" | "red-light-green-light" | "dalgona";
-  episode: number;
-  title: string;
-  subtitle: string;
-  desc: string;
-  accent: string;
-  symbol: string;
+  id:         "glass-bridge" | "red-light-green-light" | "dalgona";
+  episode:    number;
+  title:      string;
+  subtitle:   string;
+  desc:       string;
+  accent:     string;
+  symbol:     string;
   difficulty: number;
-  onSelect: (id: "glass-bridge" | "red-light-green-light" | "dalgona") => void;
+  onSelect:   (id: "glass-bridge" | "red-light-green-light" | "dalgona") => void;
 }
 
 function GameCard({
@@ -191,9 +186,8 @@ function GameCard({
       style={{ "--card-accent": accent } as React.CSSProperties}
       onClick={() => onSelect(id)}
       aria-label={`Play ${title} ${subtitle}`}
-      
     >
-      <div className="gc-episode">EP. {episode}</div>
+      <div className="gc-episode">EP. {String(episode).padStart(2, "0")}</div>
       <div className="gc-symbol">{symbol}</div>
       <div className="gc-title">
         <span>{title}</span>

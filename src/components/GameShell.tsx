@@ -513,6 +513,7 @@ export interface GameShellProps {
    * Default: "#000"
    */
   background?: string;
+  showGlobalHUD?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -529,6 +530,7 @@ const GameShell: React.FC<GameShellProps> = ({
   onEliminationComplete,
   onVictoryComplete,
   background = "#000",
+  showGlobalHUD = true,
 }) => {
   // ── Store subscriptions ─────────────────────────────────────────────────
   const runtimePhase   = useGameStore((s) => s.runtimePhase);
@@ -703,9 +705,12 @@ const GameShell: React.FC<GameShellProps> = ({
         `pointerEvents: none` on the wrapper means only interactive HUD
         children (buttons etc.) need to opt back in with pointer-events: auto.
         */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "none" }}>
-          <HUD />
-        </div>
+         {/* HUD overlay */}
+        {showGlobalHUD && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "none" }}>
+            <HUD />
+          </div>
+        )}
 
         {/* Global overlays */}
         {runtimePhase === "eliminated" && eliminationPayload && (

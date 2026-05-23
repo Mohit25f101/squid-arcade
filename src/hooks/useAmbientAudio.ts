@@ -1,3 +1,6 @@
+// src/hooks/useAmbientAudio.ts
+// Full file replacement.
+
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -6,145 +9,126 @@ import { useSoundManager } from "./useSoundManager";
 import { useGameStore, selectPhase } from "../store/gameStore";
 import type { SoundId } from "../managers/SoundManager";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Layered ambient config per phase ─────────────────────────────────────────
+// Each phase defines a base layer (always on while in that phase) and an
+// optional tension layer (fades in on red light, fades out on green).
 
-interface AmbientConfig {
-  /** Sound to loop while in this phase */
-  soundId:  SoundId;
-  /** Fade-in duration ms */
-  fadeIn?:  number;
-  /** Fade-out duration ms */
-  fadeOut?: number;
+interface LayerConfig {
+  base:    SoundId[];   // loops that start when entering the phase
+  fadeIn:  number;      // ms
+  fadeOut: number;      // ms
 }
 
-// ─── Phase → ambient mapping ──────────────────────────────────────────────────
-
-const PHASE_AMBIENT: Partial<Record<string, AmbientConfig>> = {
-  menu:    { soundId: "ambient_bg",  fadeIn: 1200, fadeOut: 800 },
-  playing: { soundId: "ambient_bg",  fadeIn:  800, fadeOut: 600 },
-  paused:  { soundId: "ambient_bg",  fadeIn:  400, fadeOut: 400 },
+const PHASE_LAYERS: Partial<Record<string, LayerConfig>> = {
+  menu:    { base: ["room_tone"],                    fadeIn: 1200, fadeOut: 800  },
+  playing: { base: ["drone_root", "room_tone"],      fadeIn:  800, fadeOut: 600  },
+  paused:  { base: ["room_tone"],                    fadeIn:  400, fadeOut: 400  },
 };
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// ─── useAmbientAudio ─────────────────────────────────────────────────────────
 
-/**
- * useAmbientAudio
- *
- * Subscribes to Zustand game phase and automatically manages ambient
- * music fading. Handles transitions cleanly — old ambient fades out
- * before new one fades in.
- */
 export function useAmbientAudio(): void {
   const sm          = useSoundManager();
   const phase       = useGameStore(selectPhase);
   const prevPhaseRef= useRef<string | null>(null);
-  const prevSoundRef= useRef<SoundId | null>(null);
+  const activeLayers= useRef<SoundId[]>([]);
 
   useEffect(() => {
     const prevPhase = prevPhaseRef.current;
-    const prevSound = prevSoundRef.current;
-    const config    = PHASE_AMBIENT[phase];
+    const config    = PHASE_LAYERS[phase];
 
-    // Stop previous ambient if different sound
-    if (prevSound && prevSound !== config?.soundId) {
-      const prevConfig = prevPhase ? PHASE_AMBIENT[prevPhase] : null;
-      sm.stop(prevSound, prevConfig?.fadeOut ?? 600);
+    // Stop layers from the previous phase that aren't in the new phase
+    const nextBase  = config?.base ?? [];
+    for (const id of activeLayers.current) {
+      if (!nextBase.includes(id)) {
+        const prevConfig = prevPhase ? PHASE_LAYERS[prevPhase] : null;
+        sm.stop(id, prevConfig?.fadeOut ?? 600);
+      }
     }
 
-    // Start new ambient
+    // Start new layers
     if (config) {
-      sm.loop(config.soundId);
-      prevSoundRef.current = config.soundId;
+      for (const id of config.base) {
+        sm.loop(id);
+      }
+      activeLayers.current = [...config.base];
     } else {
-      prevSoundRef.current = null;
+      activeLayers.current = [];
     }
 
     prevPhaseRef.current = phase;
   }, [phase, sm]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      const active = prevSoundRef.current;
-      if (active) sm.stop(active, 400);
+      for (const id of activeLayers.current) sm.stop(id, 400);
     };
   }, [sm]);
 }
+
+// ─── useAudioSubscriptions ────────────────────────────────────────────────────
+// Red light phase adds scan_tone tension layer.
+// Green light phase removes it and restores the base ambient.
 
 export function useAudioSubscriptions() {
   const sm = useSoundManager();
 
   useEffect(() => {
     const onGreenLight = () => {
-      // Tension releases — fade out sting, resume ambient movement track.
-      sm.stop("heartbeat", 300);
-      sm.loop("ambient_bg");
+      // Tension layer out — resume base ambient movement
+      sm.stop("scan_tone",  300);
+      sm.stop("heartbeat",  300);
+      sm.loop("drone_root");
+      sm.loop("room_tone");
     };
 
     const onRedLight = () => {
-      // Hard cut: silence movement audio, play freeze/tension sting.
-      sm.stop("ambient_bg", 150);
+      // Add scan tone tension over the existing drone layers
+      sm.loop("scan_tone");
       sm.play("heartbeat");
     };
 
     const onElimination = (_id: string) => {
-      // payload is string (player ID) per AudioEvents type definition.
       sm.play("player_eliminated");
     };
 
     audioEventBus.on("greenLightActivated", onGreenLight);
-    audioEventBus.on("redLightActivated", onRedLight);
-    audioEventBus.on("playerEliminated", onElimination);
+    audioEventBus.on("redLightActivated",   onRedLight);
+    audioEventBus.on("playerEliminated",    onElimination);
 
     return () => {
       audioEventBus.off("greenLightActivated", onGreenLight);
-      audioEventBus.off("redLightActivated", onRedLight);
-      audioEventBus.off("playerEliminated", onElimination);
+      audioEventBus.off("redLightActivated",   onRedLight);
+      audioEventBus.off("playerEliminated",    onElimination);
     };
-  }, [sm]); 
-} // [] — subscribe once on mount, clean up on unmount
-// ─── useGameAudio: per-game event sound helper ────────────────────────────────
+  }, [sm]);
+}
 
-/**
- * Returns imperative sound trigger functions for use inside a game component.
- * All calls are safe to make from RAF loops via the stable sm handle.
- */
+// ─── useGameAudio ─────────────────────────────────────────────────────────────
+
 export function useGameAudio() {
   const sm = useSoundManager();
 
   return {
-    onGreenLight:  ()          => {
-      sm.play("green_light", 100);
-      sm.setHeartbeat(0);
-    },
-    onRedLight:    ()          => {
-      sm.play("red_light", 100);
-      sm.setHeartbeat(0.6);
-    },
-    onDollTurn:    ()          => sm.play("doll_turn",          80),
-    onStep:        ()          => sm.play("player_step",        40, 0.15),
-    onJump:        ()          => sm.play("player_jump",        80, 0.08),
-    onLand:        ()          => sm.play("player_land",        60, 0.1),
-    onEliminated:  ()          => {
-      sm.play("player_eliminated", 0);
-      sm.play("crowd_gasp", 200);
-      sm.setHeartbeat(0);
-    },
-    onVictory:     ()          => {
-      sm.play("player_victory", 0);
-      sm.play("crowd_cheer",    300);
-      sm.setHeartbeat(0);
-    },
-    onCountdownBeep: ()        => sm.play("countdown_beep",     50),
-    onCountdownGo:   ()        => sm.play("countdown_go",        0),
-    onCombo:         ()        => sm.play("combo_hit",           80, 0.12),
+    onGreenLight:    () => { sm.play("green_light", 100); sm.setHeartbeat(0); },
+    onRedLight:      () => { sm.play("red_light",   100); sm.setHeartbeat(0.6); },
+    onDollTurn:      () => sm.play("doll_turn",          80),
+    onStep:          () => sm.play("player_step",        40, 0.15),
+    onJump:          () => sm.play("player_jump",        80, 0.08),
+    onLand:          () => sm.play("player_land",        60, 0.1),
+    onEliminated:    () => { sm.play("player_eliminated", 0); sm.play("crowd_gasp", 200); sm.setHeartbeat(0); },
+    onVictory:       () => { sm.play("player_victory", 0); sm.play("crowd_cheer", 300); sm.setHeartbeat(0); },
+    onCountdownBeep: () => sm.play("countdown_beep",     50),
+    onCountdownGo:   () => sm.play("countdown_go",        0),
+    onCombo:         () => sm.play("combo_hit",           80, 0.12),
     setDangerLevel:  (v: number) => sm.setHeartbeat(v),
-    stopHeartbeat:   ()        => sm.stop("heartbeat", 400),
-    preloadGame:     ()        => sm.preload([
+    stopHeartbeat:   () => sm.stop("heartbeat", 400),
+    preloadGame:     () => sm.preload([
       "green_light", "red_light", "player_step", "player_jump",
       "player_land", "player_eliminated", "player_victory",
       "countdown_beep", "countdown_go", "doll_turn",
       "crowd_gasp", "crowd_cheer", "heartbeat",
+      "drone_root", "room_tone", "scan_tone",
     ]),
     sm,
   };

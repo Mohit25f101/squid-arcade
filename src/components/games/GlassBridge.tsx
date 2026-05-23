@@ -1278,24 +1278,33 @@ const onKey = (e: KeyboardEvent) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    gameTick(gs, dt, inputRef);
-    hudSync.write({
-  score:    gs.currentRow,          // rows cleared = score proxy
-  lives:    1,                      // single-player — always 1 life
-  time:     Math.ceil(gs.timeLeft),
-  health:   gs.player.status === "alive" ? 100 : 0,
-  maxHealth: 100,
-  level:    gs.currentRow,
-});
+// In the tick useCallback — replace the hudSync.write block and the
+// two gs.phase checks that follow it:
 
-    if (gs.phase === "gameover" && uiPhase === "playing") {
-      setFinalRow(gs.currentRow);
-      setUiPhase("gameover");
-    }
-    if (gs.phase === "victory" && uiPhase === "playing") {
-      setFinalElapsed(gs.elapsed);
-      setUiPhase("victory");
-    }
+  gameTick(gs, dt, inputRef);
+
+  const playerAlive = gs.player.status === "alive";
+  hudSync.write({
+    score:    gs.currentRow,
+    lives:    playerAlive ? 1 : 0,
+    time:     Math.ceil(Math.max(0, gs.timeLeft)),
+    health:   playerAlive ? 100 : 0,
+    maxHealth: 100,
+    level:    gs.currentRow,
+  });
+  hudSync.tick(performance.now());   // ← was missing: flush never happened
+
+  if (gs.phase === "gameover" && uiPhase === "playing") {
+    // Force-push terminal state before the loop stops on next render
+    hudSync.write({ health: 0, lives: 0 });
+    hudSync.forceFlush();
+    setFinalRow(gs.currentRow);
+    setUiPhase("gameover");
+  }
+  if (gs.phase === "victory" && uiPhase === "playing") {
+    setFinalElapsed(gs.elapsed);
+    setUiPhase("victory");
+  }
 
     const quality: "high" | "low" = true ? "high" : "low";
     renderFrame(ctx, gs, assets, quality);
