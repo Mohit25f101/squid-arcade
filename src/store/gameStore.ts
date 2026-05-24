@@ -127,6 +127,7 @@ export interface HUDState {
  */
 export interface ViewportState {
   /** Container element's client width in CSS pixels */
+  
   containerW: number;
   /** Container element's client height in CSS pixels */
   containerH: number;
@@ -273,6 +274,12 @@ const DEFAULT_VIEWPORT: ViewportState = {
   containerH: 720,
   scale: 1,
   dpr: 1,
+  breakpoint: "desktop-landscape",
+  orientation: "landscape",
+  safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+  gameRect: { x: 0, y: 0, width: 1280, height: 720 },
+  isTouch: false,
+  isResizing: false,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -616,3 +623,37 @@ export const selectIsVictory = (s: GameStoreState) =>
 
 /** Viewport dimensions + scale — written by GameShell, read by games */
 export const selectViewport = (s: GameStoreState) => s.viewportState;
+// Put this near the top of the file, outside of any functions!
+export type Breakpoint =
+  | "desktop-landscape"
+  | "tablet-landscape"
+  | "tablet-portrait"
+  | "mobile-landscape"
+  | "mobile-portrait";
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface GameRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ViewportState {
+  containerW: number;
+  containerH: number;
+  scale: number;
+  dpr: number;
+  breakpoint: Breakpoint;
+  orientation: "portrait" | "landscape";
+  safeArea: SafeAreaInsets;
+  gameRect: GameRect;
+  isTouch: boolean;
+  isResizing: boolean;
+}

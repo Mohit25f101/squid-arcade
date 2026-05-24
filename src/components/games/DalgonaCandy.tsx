@@ -756,12 +756,6 @@ useEffect(() => {
         touchAction: "none",
      }}
     >
-      {/* 👇 PASTE THE BACK BUTTON HERE 👇 */}
-      {onExit && (
-        <button style={styles.backBtn} onClick={onExit}>
-          ◀ MENU
-        </button>
-      )}
     
       {/* ── Canvas ── */}
       <canvas
@@ -900,22 +894,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "rgba(255,220,140,0.65)",
     letterSpacing: "0.06em",
   },
- backBtn: {
-    position: "absolute",
-    top: 16,
-    left: 16,
-    fontFamily: "'Courier New', monospace",
-    fontSize: "14px",
-    fontWeight: 900,
-    color: "#ffffff",
-    background: "#ed1b76", // Squid Game Guard Pink
-    border: "4px solid #000000", // Minecraft blocky edge
-    boxShadow: "4px 4px 0px #000000", // 8-bit shadow
-    padding: "8px 16px",
-    cursor: "pointer",
-    zIndex: 50, // Keeps it on top of the canvas
-    textTransform: "uppercase",
-  },
+
   btn: {
     fontFamily: "'Courier New', monospace",
     fontSize: "clamp(13px, 3vw, 16px)",

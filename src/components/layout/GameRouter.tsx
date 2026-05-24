@@ -7,12 +7,14 @@ import { useGameStore, selectIsTransitioning, type GameId } from "@/store/gameSt
 import { usePlatformDetection } from "@/hooks/usePlatformDetection";
 import GameShell from "@/components/GameShell";
 import GameMenu from "@/components/ui/GameMenu";
+import { useViewport } from "@/hooks/useViewport";
 
 const DalgonaCandy = lazy(() => import("@/components/games/DalgonaCandy"));
 const GlassBridge = lazy(() => import("@/components/games/GlassBridge"));
 const RedLightGreenLight = lazy(() => import("@/components/games/RedLightGreenLight"));
 
 export default function GameRouter() {
+   useViewport(); 
   const activeGame = useGameStore((s) => s.activeGame);
   const setActiveGame = useGameStore((s) => s.setActiveGame);
   const runtimePhase = useGameStore((s) => s.runtimePhase);
@@ -50,22 +52,34 @@ export default function GameRouter() {
           <GameMenu onLaunch={(id: GameId) => setActiveGame(id)} />
         )}
 
-       // In the JSX — add showGlobalHUD={false} to the two games with native HUDs:
         {activeGame === "glass-bridge" && (
+          // showGlobalHUD=false: GlassBridge has its own canvas-rendered HUD.
+          // onExit is NOT passed here yet — GlassBridge manages its own back button
+          // because it runs outside GameShell's ResizeObserver context (Priority 3).
           <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
             <GlassBridge onExit={handleExit} />
           </SceneWrapper>
         )}
 
         {activeGame === "red-light-green-light" && (
+          // showGlobalHUD=false: RLGL has its own canvas-rendered HUD.
+          // onExit is NOT passed here yet — same reason as GlassBridge (Priority 3).
           <SceneWrapper key="red-light-green-light" transition={transitionState} showGlobalHUD={false}>
             <RedLightGreenLight onExit={handleExit} />
           </SceneWrapper>
         )}
 
-        {/* DalgonaCandy uses GameShell directly — showGlobalHUD defaults to true */}
         {activeGame === "dalgona" && (
-          <GameShell key="dalgona" worldW={390} worldH={844} transition={transitionState}>
+          // DalgonaCandy IS fully wrapped in GameShell. Pass onExit here so
+          // GameShell renders GameNav at z:300, and DalgonaCandy's inline back
+          // button can be removed (see Change 3 below).
+          <GameShell
+            key="dalgona"
+            worldW={390}
+            worldH={844}
+            transition={transitionState}
+            onExit={handleExit}
+          >
             <DalgonaCandy onExit={handleExit} />
           </GameShell>
         )}
@@ -74,18 +88,25 @@ export default function GameRouter() {
   );
 }
 
-// Replace the SceneWrapper helper at the bottom of the file:
 function SceneWrapper({
   children,
   transition = "idle",
   showGlobalHUD = true,
+  onExit,
 }: {
   children: React.ReactNode;
   transition?: string;
   showGlobalHUD?: boolean;
+  onExit?: () => void;
 }) {
   return (
-    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD}>
+    <GameShell
+      worldW={1280}
+      worldH={720}
+      transition={transition}
+      showGlobalHUD={showGlobalHUD}
+      onExit={onExit}
+    >
       {children}
     </GameShell>
   );

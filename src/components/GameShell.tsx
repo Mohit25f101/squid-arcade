@@ -386,6 +386,76 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3b — GAME NAV (back button, consolidated)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GameNav — the single, authoritative back-to-menu button.
+ *
+ * Rendered by GameShell at z:300, above the HUD overlay (z:100).
+ * Games that are wrapped in GameShell (currently: DalgonaCandy via GameRouter's
+ * SceneWrapper) should pass onExit to GameShell and remove their own inline
+ * back buttons.
+ *
+ * GlassBridge and RLGL keep their own buttons because they are not fully
+ * wrapped in GameShell yet (Priority 3 work). For now they co-exist —
+ * this component is used only when GameShell receives onExit.
+ */
+const GameNav: React.FC<{ onExit: () => void }> = ({ onExit }) => (
+  <button
+    onClick={onExit}
+    aria-label="Back to menu"
+    style={{
+      margin:          "14px 16px",
+      padding:         "9px 16px",
+      display:         "flex",
+      alignItems:      "center",
+      gap:             6,
+      background:      "rgba(5, 5, 8, 0.72)",
+      border:          "1px solid rgba(255, 255, 255, 0.18)",
+      borderRadius:    3,
+      color:           "rgba(245, 245, 245, 0.85)",
+      fontFamily:      "'JetBrains Mono', 'Fira Mono', monospace",
+      fontSize:        11,
+      fontWeight:      700,
+      letterSpacing:   "0.18em",
+      textTransform:   "uppercase",
+      cursor:          "pointer",
+      backdropFilter:  "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
+      // Crisp mechanical transition — matches the broadcast aesthetic
+      transition:      "background 120ms, border-color 120ms",
+      // Minimum touch target
+      minHeight:       44,
+      minWidth:        44,
+    }}
+    onMouseEnter={(e) => {
+      (e.currentTarget as HTMLButtonElement).style.background      = "rgba(255, 45, 45, 0.18)";
+      (e.currentTarget as HTMLButtonElement).style.borderColor     = "rgba(255, 45, 45, 0.5)";
+    }}
+    onMouseLeave={(e) => {
+      (e.currentTarget as HTMLButtonElement).style.background  = "rgba(5, 5, 8, 0.72)";
+      (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255, 255, 255, 0.18)";
+    }}
+  >
+    {/* Left-pointing chevron — SVG avoids font-dependency */}
+    <svg
+      width="8" height="12" viewBox="0 0 8 12"
+      fill="none" xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M7 1L1 6L7 11"
+        stroke="rgba(245,245,245,0.7)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+    MENU
+  </button>
+);
+// ─────────────────────────────────────────────────────────────────────────────
 // SECTION 4 — TRANSITION CURTAIN
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -462,58 +532,23 @@ function useInputFrameBoundary(active: boolean): void {
 
 export interface GameShellProps {
   children: React.ReactNode;
-
-  /**
-   * Logical world width of the active game.
-   * Used to compute the scale factor and to configure inputManager.
-   * Default: 1280
-   */
   worldW?: number;
-
-  /**
-   * Logical world height of the active game.
-   * Default: 720
-   */
   worldH?: number;
-
-  /**
-   * When true, GameShell renders and manages its own <canvas> element,
-   * passing a ref via context. Set to false for games like GlassBridge
-   * that manage their own canvas.
-   * Default: false (games own their canvas during Phase 1 migration)
-   */
   ownCanvas?: boolean;
-
-  /**
-   * Device pixel ratio override. Defaults to
-   * Math.min(window.devicePixelRatio, 2).
-   */
   dpr?: number;
-
-  /**
-   * Transition state string read from the router.
-   * Passed straight to TransitionCurtain.
-   * Default: "idle"
-   */
   transition?: string;
-
-  /**
-   * Called when the elimination overlay sequence finishes animating.
-   * Typically used to navigate the router to the game-over screen or menu.
-   */
   onEliminationComplete?: () => void;
-
-  /**
-   * Called when the victory overlay sequence finishes animating.
-   */
   onVictoryComplete?: () => void;
-
-  /**
-   * Background color of the shell container.
-   * Default: "#000"
-   */
   background?: string;
   showGlobalHUD?: boolean;
+  /**
+   * When provided, GameShell renders a GameNav back button at z:300.
+   * Games that pass onExit to GameShell should REMOVE their own inline
+   * back buttons to avoid duplicates. GlassBridge and RLGL keep their
+   * own buttons because they are not wrapped in GameShell by default;
+   * only DalgonaCandy uses this prop.
+   */
+  onExit?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -531,6 +566,7 @@ const GameShell: React.FC<GameShellProps> = ({
   onVictoryComplete,
   background = "#000",
   showGlobalHUD = true,
+  onExit,
 }) => {
   // ── Store subscriptions ─────────────────────────────────────────────────
   const runtimePhase   = useGameStore((s) => s.runtimePhase);
@@ -549,6 +585,12 @@ const GameShell: React.FC<GameShellProps> = ({
     containerH: worldH,
     scale: 1,
     dpr: 1,
+    breakpoint: "desktop-landscape",
+    orientation: "landscape",
+    safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+    gameRect: { x: 0, y: 0, width: worldW, height: worldH },
+    isTouch: false,
+    isResizing: false,
   });
 
   // Whether the input frame boundary loop should run
@@ -572,13 +614,24 @@ const GameShell: React.FC<GameShellProps> = ({
       // Scale to fit while preserving the logical world aspect ratio
       const scale = Math.min(cw / worldW, ch / worldH);
 
-       inputManager.setScale(scale);
+      inputManager.setScale(scale);
+
+      const isPortrait = cw < ch;
+      const isMobile = cw < 768;
 
       const nextViewport: ViewportState = {
         containerW: cw,
         containerH: ch,
         scale,
         dpr: computedDpr,
+        breakpoint: isMobile
+          ? (isPortrait ? "mobile-portrait" : "mobile-landscape")
+          : "desktop-landscape",
+        orientation: isPortrait ? "portrait" : "landscape",
+        safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+        gameRect: { x: 0, y: 0, width: worldW * scale, height: worldH * scale },
+        isTouch: typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0),
+        isResizing: false,
       };
 
       // 1. Update the shell's own canvas if we own one
@@ -705,9 +758,33 @@ const GameShell: React.FC<GameShellProps> = ({
         `pointerEvents: none` on the wrapper means only interactive HUD
         children (buttons etc.) need to opt back in with pointer-events: auto.
         */}
-         {/* HUD overlay */}
+        {/* ── GameNav — back button, always wins over HUD ── */}
+        {onExit && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              zIndex: 300,
+              pointerEvents: "auto",
+            }}
+          >
+            <GameNav onExit={onExit} />
+          </div>
+        )}
+
+        {/* ── HUD overlay — z:100, pointer-events:none wrapper ──
+            Child elements with pointer-events:auto still receive clicks.
+            Wrapper must be none so canvas clicks pass through. */}
         {showGlobalHUD && (
-          <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "none" }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 100,
+              pointerEvents: "none",
+            }}
+          >
             <HUD />
           </div>
         )}
