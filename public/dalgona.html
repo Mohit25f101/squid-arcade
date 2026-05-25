@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Dalgona Candy — Survival Physics</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #060404; overflow: hidden; font-family: 'Courier New', monospace; }
+  #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; touch-action: none; cursor: crosshair; }
+  #ui-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .phase-screen {
+    display: none; flex-direction: column; align-items: center; gap: 20px;
+    background: rgba(0,0,0,0.85); border: 1px solid rgba(255,200,60,0.3);
+    padding: 40px 50px; backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+  .phase-screen.active { display: flex; }
+  .title-big {
+    font-size: clamp(36px, 6vw, 72px); font-weight: 900;
+    letter-spacing: 0.15em; text-transform: uppercase; line-height: 1;
+  }
+  .subtitle { font-size: clamp(12px, 2vw, 16px); letter-spacing: 0.25em; color: rgba(255,220,140,0.6); text-transform: uppercase; }
+  .shape-badge {
+    font-size: clamp(48px, 10vw, 96px); color: #ffd93d;
+    text-shadow: 0 0 40px rgba(255,210,60,0.8); line-height: 1;
+  }
+  .countdown-num {
+    font-size: clamp(80px, 18vw, 160px); font-weight: 900;
+    color: #fff; text-shadow: 0 0 60px rgba(255,255,255,0.5); line-height: 1;
+  }
+  .btn {
+    font-family: 'Courier New', monospace; font-size: 14px; font-weight: 900;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    padding: 14px 36px; cursor: pointer; border: none;
+    border: 3px solid #000; box-shadow: 4px 4px 0 #000;
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 #000; }
+  .btn-green { background: #037a76; color: #fff; }
+  .btn-pink { background: #ed1b76; color: #fff; }
+  .result-title { font-size: clamp(42px, 8vw, 88px); font-weight: 900; letter-spacing: 0.12em; text-shadow: 0 0 40px currentColor; }
+  .result-sub { font-size: 14px; color: rgba(255,220,140,0.65); letter-spacing: 0.1em; }
+  .integrity-warning {
+    position: fixed; bottom: 22%; left: 50%; transform: translateX(-50%);
+    font-size: clamp(11px, 2vw, 15px); font-weight: 700; letter-spacing: 0.12em;
+    color: #ff6b35; text-shadow: 0 0 14px rgba(255,80,0,0.6);
+    pointer-events: none; white-space: nowrap; opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .hud-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; background: rgba(0,0,0,0.7);
+    border-top: 1px solid rgba(255,200,60,0.15); pointer-events: none;
+  }
+  .hud-item { display: flex; flex-direction: column; gap: 4px; }
+  .hud-label { font-size: 9px; letter-spacing: 0.2em; color: rgba(255,220,140,0.5); text-transform: uppercase; }
+  .hud-value { font-size: 16px; font-weight: 700; color: #fff; }
+  .progress-track { width: 160px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: #ffd93d; transition: width 0.15s; }
+  .needle-guide {
+    position: fixed; top: 50%; right: 24px; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+    pointer-events: none; opacity: 0; transition: opacity 0.5s;
+  }
+  .guide-line { font-size: 10px; letter-spacing: 0.1em; color: rgba(255,200,60,0.5); text-align: right; }
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0,0,0,0) 100%);
+    transition: background 0.3s;
+  }
+  #back-btn {
+    position: fixed; top: 14px; left: 14px; z-index: 20;
+    font-family: 'Courier New', monospace; font-size: 12px; font-weight: 900;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    color: #fff; background: #ed1b76; border: 3px solid #000;
+    box-shadow: 3px 3px 0 #000; padding: 8px 14px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="root"><canvas id="c"></canvas></div>
+<div id="vignette"></div>
+
+<!-- INTRO -->
+<div id="screen-intro" class="phase-screen">
+  <div class="subtitle">Episode 03 — Dalgona Candy</div>
+  <div id="shape-icon" class="shape-badge">▲</div>
+  <div class="title-big" style="color:#ffd93d;" id="shape-name-title">TRIANGLE</div>
+  <div class="subtitle" style="margin-top:8px;">Carve the shape. Don't break the candy.</div>
+  <div class="subtitle" style="color:rgba(255,220,140,0.4); margin-top:4px;">Move your needle slowly along the dotted line</div>
+  <div id="countdown-display" class="countdown-num" style="margin-top:16px;">3</div>
+</div>
+
+<!-- SUCCESS -->
+<div id="screen-success" class="phase-screen">
+  <div class="result-title" style="color:#ffd93d;">SUCCESS</div>
+  <div class="result-sub" id="success-sub">Shape preserved · Integrity 100%</div>
+  <div style="display:flex;gap:16px;margin-top:8px;">
+    <button class="btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
+  </div>
+</div>
+
+<!-- ELIMINATED -->
+<div id="screen-eliminated" class="phase-screen">
+  <div class="result-title" style="color:#ff4444;">ELIMINATED</div>
+  <div class="result-sub">The candy snapped.</div>
+  <div style="display:flex;gap:16px;margin-top:8px;">
+    <button class="btn btn-green" onclick="restartGame()">TRY AGAIN</button>
+  </div>
+</div>
+
+<!-- HUD (playing) -->
+<div class="hud-bar" id="hud" style="display:none;">
+  <div class="hud-item">
+    <div class="hud-label">Integrity</div>
+    <div class="progress-track"><div class="progress-fill" id="integrity-bar" style="width:100%;background:#ffd93d;"></div></div>
+  </div>
+  <div class="hud-item" style="align-items:center;">
+    <div class="hud-label">Shape</div>
+    <div class="hud-value" id="hud-shape">TRIANGLE</div>
+  </div>
+  <div class="hud-item" style="align-items:flex-end;">
+    <div class="hud-label">Carved</div>
+    <div class="hud-value" id="hud-carved">0%</div>
+  </div>
+</div>
+
+<div class="integrity-warning" id="warning-text">⚠ EASE UP — STEADY YOUR HAND</div>
+
+<div class="needle-guide" id="needle-guide">
+  <div class="guide-line">Follow the</div>
+  <div class="guide-line">dotted line</div>
+  <div class="guide-line">— slowly</div>
+</div>
+
+<button id="back-btn" onclick="history.back()">◀ MENU</button>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DALGONA CANDY — CINEMATIC PHYSICS SYSTEM
+// ═══════════════════════════════════════════════════════
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ── World dimensions ──────────────────────────────────
+const WORLD_W = 420;
+const WORLD_H = 780;
+const CANDY_W = 290;
+const CANDY_H = 290;
+const CANDY_X = (WORLD_W - CANDY_W) / 2;
+const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 30;
+
+// ── Physics constants ─────────────────────────────────
+const BASE_STRESS = 0.00055;
+const INSTABILITY_MULT = 0.008;
+const EDGE_TO_INTEGRITY = 0.30;
+const FRACTURE_THRESHOLD = 0.52;
+const CARVE_RADIUS = 16;
+const ON_EDGE_TOL = 26;
+const COMPLETION_WIN = 0.80;
+const SCRAPE_AUDIO_MS = 90;
+
+// ── State ─────────────────────────────────────────────
+let phase = 'intro'; // intro | playing | success | eliminated
+let candyIntegrity = 1.0;
+let edgeStress = 0.0;
+let completionRatio = 0.0;
+let fracturePoints = [];
+let carvedSegments = new Set();
+let shapePath = [];
+let shapeId = 'triangle';
+let scale = 1;
+let cssScale = 1;
+
+// Needle / scrape state
+let needleDown = false;
+let needleX = 0, needleY = 0;
+let needlePrevX = 0, needlePrevY = 0;
+let needleVel = 0;
+let lastScrapeAudio = 0;
+
+// Stability (rolling variance of velocity)
+const STAB_BUF_SIZE = 48;
+let stabBuf = new Float32Array(STAB_BUF_SIZE);
+let stabHead = 0, stabCount = 0;
+let stability = 1.0;
+
+// Particles
+let particles = [];
+
+// Camera shake
+let shakeX = 0, shakeY = 0, shakeIntensity = 0;
+
+// Countdown
+let countdownVal = 3;
+let countdownTimer = 0;
+
+// Vignette / tension
+let vignetteRed = 0;
+
+// Heartbeat pulse
+let heartbeatPhase = 0;
+
+// Offscreen candy surface (for carving)
+let candyOffscreen = null;
+let crackOffscreen = null;
+
+// Frame counter
+let frame = 0;
+let rafId = null;
+
+// ── Audio (Web Audio API) ─────────────────────────────
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return audioCtx;
+}
+
+function playTick(freq, dur = 0.05, vol = 0.15) {
+  try {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.connect(g); g.connect(ac.destination);
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+    osc.start(); osc.stop(ac.currentTime + dur);
+  } catch(e){}
+}
+
+function playScrape(intensity) {
+  try {
+    const ac = getAudio();
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.08, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.3;
+    const src = ac.createBufferSource();
+    const g = ac.createGain();
+    const filt = ac.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = 2000 + intensity * 3000;
+    filt.Q.value = 2;
+    src.buffer = buf; src.connect(filt); filt.connect(g); g.connect(ac.destination);
+    g.gain.setValueAtTime(intensity * 0.25, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.08);
+    src.start(); src.stop(ac.currentTime + 0.08);
+  } catch(e){}
+}
+
+function playMicrocrack(severity) {
+  try {
+    const ac = getAudio();
+    // Sharp metallic crack
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / ac.sampleRate;
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 40) * severity;
+    }
+    const src = ac.createBufferSource();
+    const g = ac.createGain();
+    const filt = ac.createBiquadFilter();
+    filt.type = 'highpass'; filt.frequency.value = 1500;
+    src.buffer = buf; src.connect(filt); filt.connect(g); g.connect(ac.destination);
+    g.gain.value = 0.4;
+    src.start();
+  } catch(e){}
+}
+
+function playSnap() {
+  try {
+    const ac = getAudio();
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.4, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / ac.sampleRate;
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 18);
+    }
+    const src = ac.createBufferSource();
+    const g = ac.createGain(); g.gain.value = 0.7;
+    src.buffer = buf; src.connect(g); g.connect(ac.destination);
+    src.start();
+  } catch(e){}
+}
+
+// ── Shape definitions (normalised [0,1] coords) ───────
+const SHAPES = {
+  triangle: () => [
+    {nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}
+  ],
+  circle: () => {
+    const pts = [];
+    for (let i = 0; i < 80; i++) {
+      const a = (i/80)*Math.PI*2;
+      pts.push({nx: 0.5+Math.cos(a)*0.40, ny: 0.5+Math.sin(a)*0.40});
+    }
+    return pts;
+  },
+  star: () => {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (i/10)*Math.PI*2 - Math.PI/2;
+      const r = i%2===0 ? 0.43 : 0.19;
+      pts.push({nx: 0.5+Math.cos(a)*r, ny: 0.5+Math.sin(a)*r});
+    }
+    return pts;
+  },
+  umbrella: () => [
+    {nx:0.50,ny:0.90},{nx:0.50,ny:0.76},{nx:0.44,ny:0.76},
+    {nx:0.44,ny:0.70},{nx:0.10,ny:0.70},{nx:0.10,ny:0.58},
+    {nx:0.16,ny:0.44},{nx:0.26,ny:0.34},{nx:0.38,ny:0.28},
+    {nx:0.50,ny:0.26},{nx:0.62,ny:0.28},{nx:0.74,ny:0.34},
+    {nx:0.84,ny:0.44},{nx:0.90,ny:0.58},{nx:0.90,ny:0.70},
+    {nx:0.56,ny:0.70},{nx:0.56,ny:0.76},{nx:0.50,ny:0.76}
+  ]
+};
+
+const SHAPE_ICONS = { triangle:'▲', circle:'●', star:'★', umbrella:'☂' };
+const SHAPE_NAMES = { triangle:'TRIANGLE', circle:'CIRCLE', star:'STAR', umbrella:'UMBRELLA' };
+
+// ── Geometry helpers ──────────────────────────────────
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+function lerp(a,b,t){return a+(b-a)*clamp(t,0,1);}
+function dist(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
+
+function normToCanvas(n){
+  return {
+    x: (CANDY_X + n.nx * CANDY_W) * scale,
+    y: (CANDY_Y + n.ny * CANDY_H) * scale
+  };
+}
+
+function buildShapePath(id){
+  return SHAPES[id]().map(normToCanvas);
+}
+
+function distToSegment(p, a, b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const lenSq=dx*dx+dy*dy;
+  if(lenSq===0) return dist(p,a);
+  const t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/lenSq,0,1);
+  return dist(p,{x:a.x+t*dx,y:a.y+t*dy});
+}
+
+function distToOutline(p, path){
+  let minD=Infinity;
+  for(let i=0;i<path.length;i++){
+    minD=Math.min(minD, distToSegment(p, path[i], path[(i+1)%path.length]));
+  }
+  return minD;
+}
+
+// ── Stability calculation ─────────────────────────────
+function pushStab(mag){
+  stabBuf[stabHead]=mag;
+  stabHead=(stabHead+1)%STAB_BUF_SIZE;
+  if(stabCount<STAB_BUF_SIZE) stabCount++;
+}
+
+function computeStability(){
+  if(stabCount<3){stability=1;return;}
+  let sum=0, n=Math.min(stabCount,32);
+  for(let i=0;i<n;i++) sum+=stabBuf[(stabHead-1-i+STAB_BUF_SIZE)%STAB_BUF_SIZE];
+  const mean=sum/n;
+  let varSum=0;
+  for(let i=0;i<n;i++){
+    const d=stabBuf[(stabHead-1-i+STAB_BUF_SIZE)%STAB_BUF_SIZE]-mean;
+    varSum+=d*d;
+  }
+  stability = 1/(1+(varSum/n)/120);
+}
+
+// ── Canvas sizing ─────────────────────────────────────
+function resize(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const fitScale=Math.min(vw/WORLD_W, vh/WORLD_H);
+  cssScale=fitScale;
+  canvas.style.width=`${WORLD_W*fitScale}px`;
+  canvas.style.height=`${WORLD_H*fitScale}px`;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  scale=fitScale*dpr;
+  canvas.width=Math.round(WORLD_W*scale);
+  canvas.height=Math.round(WORLD_H*scale);
+  // Rebuild shape path for new scale
+  if(shapeId) shapePath=buildShapePath(shapeId);
+  rebuildOffscreens();
+}
+
+function rebuildOffscreens(){
+  // Candy surface offscreen
+  candyOffscreen = document.createElement('canvas');
+  candyOffscreen.width = Math.round(CANDY_W*scale);
+  candyOffscreen.height = Math.round(CANDY_H*scale);
+  const c2d = candyOffscreen.getContext('2d');
+  drawCandyBase(c2d, CANDY_W*scale, CANDY_H*scale);
+
+  crackOffscreen = document.createElement('canvas');
+  crackOffscreen.width = canvas.width;
+  crackOffscreen.height = canvas.height;
+}
+
+// ── Draw candy base to offscreen ─────────────────────
+function drawCandyBase(c2d, W, H){
+  // Amber gradient
+  const grad = c2d.createLinearGradient(0,0,W,H);
+  grad.addColorStop(0,'#e8a428');
+  grad.addColorStop(0.5,'#d4841a');
+  grad.addColorStop(1,'#b86010');
+  c2d.fillStyle=grad; c2d.fillRect(0,0,W,H);
+
+  // Gloss highlight
+  const gloss=c2d.createLinearGradient(0,0,0,H*0.5);
+  gloss.addColorStop(0,'rgba(255,255,220,0.25)');
+  gloss.addColorStop(1,'rgba(255,255,220,0)');
+  c2d.fillStyle=gloss; c2d.fillRect(0,0,W,H*0.5);
+
+  // Sugar texture (fine noise)
+  for(let i=0;i<300;i++){
+    const tx=Math.random()*W, ty=Math.random()*H;
+    const ts=Math.random()*2+0.5;
+    c2d.fillStyle=`rgba(255,220,120,${Math.random()*0.08})`;
+    c2d.fillRect(tx,ty,ts,ts);
+  }
+}
+
+// ── Particle emitter ──────────────────────────────────
+function emitDust(x,y,count=4){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2;
+    const spd=Math.random()*2+0.5;
+    particles.push({
+      x,y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-1,
+      life:1, decay:0.03+Math.random()*0.02,
+      r:220, g:180, b:100, size:Math.random()*3+1
+    });
+  }
+}
+
+function emitCrackSpark(x,y,severity){
+  for(let i=0;i<Math.round(8*severity);i++){
+    const a=Math.random()*Math.PI*2;
+    const spd=Math.random()*4+1;
+    particles.push({
+      x,y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-2,
+      life:1, decay:0.05+Math.random()*0.04,
+      r:255, g:Math.floor(150+Math.random()*80), b:50,
+      size:Math.random()*2+0.5
+    });
+  }
+}
+
+// ── Pick random shape ─────────────────────────────────
+function pickShape(exclude){
+  const all=['triangle','circle','star','umbrella'];
+  const pool=exclude?all.filter(s=>s!==exclude):all;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+
+// ── Reset / init ──────────────────────────────────────
+function initGame(id){
+  shapeId = id || pickShape();
+  shapePath = buildShapePath(shapeId);
+  candyIntegrity = 1.0;
+  edgeStress = 0.0;
+  completionRatio = 0.0;
+  fracturePoints = [];
+  carvedSegments = new Set();
+  particles = [];
+  needleDown = false;
+  needleVel = 0;
+  stabCount = 0; stabHead = 0;
+  stability = 1;
+  shakeIntensity = 0;
+  vignetteRed = 0;
+  frame = 0;
+  rebuildOffscreens();
+}
+
+// ── Phase transitions ─────────────────────────────────
+function setPhase(p){
+  phase=p;
+  document.getElementById('screen-intro').classList.remove('active');
+  document.getElementById('screen-success').classList.remove('active');
+  document.getElementById('screen-eliminated').classList.remove('active');
+  document.getElementById('hud').style.display='none';
+  document.getElementById('needle-guide').style.opacity='0';
+
+  if(p==='intro'){
+    document.getElementById('screen-intro').classList.add('active');
+    document.getElementById('shape-icon').textContent=SHAPE_ICONS[shapeId];
+    document.getElementById('shape-name-title').textContent=SHAPE_NAMES[shapeId];
+    document.getElementById('countdown-display').textContent='3';
+    countdownVal=3; countdownTimer=0;
+  } else if(p==='playing'){
+    document.getElementById('hud').style.display='flex';
+    document.getElementById('hud-shape').textContent=SHAPE_NAMES[shapeId];
+    document.getElementById('needle-guide').style.opacity='1';
+    setTimeout(()=>document.getElementById('needle-guide').style.opacity='0', 3000);
+  } else if(p==='success'){
+    document.getElementById('screen-success').classList.add('active');
+    document.getElementById('success-sub').textContent=
+      `Shape preserved · Integrity ${Math.round(candyIntegrity*100)}%`;
+  } else if(p==='eliminated'){
+    document.getElementById('screen-eliminated').classList.add('active');
+  }
+}
+
+function restartGame(){
+  const prev=shapeId;
+  initGame(pickShape(prev));
+  setPhase('intro');
+}
+
+// ── Pointer → canvas coords ────────────────────────────
+function toCanvas(clientX, clientY){
+  const rect=canvas.getBoundingClientRect();
+  const ratio=canvas.width/rect.width;
+  return {
+    x:(clientX-rect.left)*ratio,
+    y:(clientY-rect.top)*ratio
+  };
+}
+
+// ── Input handlers ────────────────────────────────────
+canvas.addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  const pos=toCanvas(e.clientX,e.clientY);
+  needleDown=true;
+  needleX=pos.x; needleY=pos.y;
+  needlePrevX=pos.x; needlePrevY=pos.y;
+  needleVel=0;
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+  getAudio(); // unlock
+}, {passive:false});
+
+canvas.addEventListener('pointermove', e=>{
+  e.preventDefault();
+  const pos=toCanvas(e.clientX,e.clientY);
+  needlePrevX=needleX; needlePrevY=needleY;
+  needleX=pos.x; needleY=pos.y;
+  const dx=needleX-needlePrevX, dy=needleY-needlePrevY;
+  const mag=Math.sqrt(dx*dx+dy*dy);
+  needleVel=mag;
+  pushStab(mag);
+
+  if(needleDown && phase==='playing') processCarve();
+}, {passive:false});
+
+canvas.addEventListener('pointerup', e=>{
+  needleDown=false;
+  needleVel=0;
+});
+canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
+
+// ── Core carving logic ────────────────────────────────
+function processCarve(){
+  const pos={x:needleX, y:needleY};
+  const edgeDist=distToOutline(pos, shapePath);
+  const onEdge=edgeDist < ON_EDGE_TOL*scale;
+
+  if(!onEdge || needleVel < 0.3) return;
+
+  // Mark carved segments
+  for(let i=0;i<shapePath.length;i++){
+    const a=shapePath[i], b=shapePath[(i+1)%shapePath.length];
+    const mid={x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    if(dist(pos,mid)<CARVE_RADIUS*scale*1.6){
+      carvedSegments.add(i);
+    }
+  }
+
+  computeStability();
+
+  // Stress delta based on velocity and stability
+  const velocityFactor=clamp(needleVel/(scale*12), 0, 1);
+  const stressDelta = BASE_STRESS + (1-stability)*INSTABILITY_MULT + velocityFactor*0.002;
+  edgeStress = clamp(edgeStress + stressDelta, 0, 1);
+  candyIntegrity = clamp(candyIntegrity - stressDelta*EDGE_TO_INTEGRITY, 0, 1);
+  completionRatio = carvedSegments.size / shapePath.length;
+
+  // Emit dust
+  if(Math.random()<0.4) emitDust(needleX, needleY, 2);
+
+  // Fracture generation
+  if(edgeStress>FRACTURE_THRESHOLD && Math.random()<(edgeStress-FRACTURE_THRESHOLD)*0.25){
+    const jitter=()=>(Math.random()-0.5)*28*scale;
+    const severity=clamp(edgeStress-FRACTURE_THRESHOLD+0.1, 0.1, 1);
+    fracturePoints.push({
+      x:needleX+jitter(), y:needleY+jitter(),
+      radius:4*scale, maxRadius:(8+severity*18)*scale,
+      age:0, severity,
+      spokeAngles: Array.from({length:Math.round(3+severity*5)},(_,k)=>(k/(3+severity*5))*Math.PI*2+Math.random()*0.5)
+    });
+    edgeStress=clamp(edgeStress-0.10, 0, 1);
+    emitCrackSpark(needleX,needleY,severity);
+    playMicrocrack(severity);
+    shakeIntensity=Math.max(shakeIntensity, severity*6);
+  }
+
+  // Scrape audio
+  const now=performance.now();
+  if(now-lastScrapeAudio>SCRAPE_AUDIO_MS){
+    lastScrapeAudio=now;
+    playScrape(clamp(needleVel/(scale*10),0,1));
+  }
+
+  // HUD
+  const pct=Math.round(candyIntegrity*100);
+  const bar=document.getElementById('integrity-bar');
+  if(bar){
+    const barColor=pct>50?'#ffd93d':pct>25?'#ff9900':'#ff4444';
+    bar.style.width=pct+'%';
+    bar.style.background=barColor;
+    bar.style.boxShadow=pct<25?`0 0 8px ${barColor}99`:'none';
+  }
+  const carvedEl=document.getElementById('hud-carved');
+  if(carvedEl) carvedEl.textContent=Math.round(completionRatio*100)+'%';
+
+  // Warning overlay
+  const warnEl=document.getElementById('warning-text');
+  if(warnEl){
+    const stressWarn=edgeStress-0.4;
+    if(stressWarn>0){
+      warnEl.style.opacity=clamp(stressWarn/0.6,0,1);
+      warnEl.textContent=edgeStress>0.72?'⚠ CRITICAL — STEADY YOUR HAND':'⚠ EASE UP';
+    } else {
+      warnEl.style.opacity=0;
+    }
+  }
+
+  // Check win/lose
+  if(candyIntegrity<=0){
+    playSnap();
+    shakeIntensity=20;
+    phase='snap'; // brief snap animation then eliminate
+    setTimeout(()=>setPhase('eliminated'), 800);
+    return;
+  }
+  if(completionRatio>=COMPLETION_WIN){
+    playTick(880,0.3,0.3);
+    setTimeout(()=>playTick(1100,0.3,0.3),200);
+    setPhase('success');
+    return;
+  }
+}
+
+// ── Particle update ────────────────────────────────────
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.vy+=0.18; p.vx*=0.95;
+    p.x+=p.vx; p.y+=p.vy;
+    p.life-=p.decay;
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+// ── Main render ───────────────────────────────────────
+function render(){
+  frame++;
+
+  // Camera shake decay
+  shakeIntensity*=0.88;
+  if(shakeIntensity>0.1){
+    shakeX=(Math.random()-0.5)*shakeIntensity;
+    shakeY=(Math.random()-0.5)*shakeIntensity*0.5;
+  } else { shakeX=0; shakeY=0; }
+
+  // Vignette tension
+  const tension=1-candyIntegrity;
+  vignetteRed=lerp(vignetteRed, tension*0.7, 0.04);
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
+
+  // ── Background ──────────────────────────────────────
+  const bg=ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,canvas.width*0.8);
+  bg.addColorStop(0,'#1e0e00'); bg.addColorStop(1,'#080300');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // ── Candy slab ──────────────────────────────────────
+  const cx=CANDY_X*scale, cy=CANDY_Y*scale;
+  const cw=CANDY_W*scale, ch=CANDY_H*scale;
+
+  // Drop shadow + glow
+  const glowAlpha=0.15+tension*0.25;
+  ctx.shadowColor=`rgba(200,100,0,${glowAlpha})`;
+  ctx.shadowBlur=40*scale;
+
+  // Draw candy body
+  const integ=candyIntegrity;
+  const r=Math.round(lerp(180,220,integ)), g2=Math.round(lerp(100,145,integ)), b=Math.round(lerp(20,35,integ));
+  const bodyGrad=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
+  bodyGrad.addColorStop(0,`rgb(${r+24},${g2+18},${b+8})`);
+  bodyGrad.addColorStop(0.5,`rgb(${r},${g2},${b})`);
+  bodyGrad.addColorStop(1,`rgb(${r-20},${g2-14},${b-4})`);
+
+  // Draw rounded candy
+  ctx.fillStyle=bodyGrad;
+  ctx.beginPath();
+  const rad=10*scale;
+  ctx.moveTo(cx+rad,cy);
+  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
+  ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
+  ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
+  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Candy offscreen texture
+  if(candyOffscreen){
+    ctx.save();
+    ctx.globalAlpha=0.85;
+    ctx.beginPath();
+    ctx.moveTo(cx+rad,cy);
+    ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
+    ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
+    ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
+    ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
+    ctx.closePath(); ctx.clip();
+    ctx.drawImage(candyOffscreen, cx, cy, cw, ch);
+    ctx.restore();
+  }
+
+  // Gloss
+  const gloss=ctx.createLinearGradient(cx,cy,cx,cy+ch*0.5);
+  gloss.addColorStop(0,'rgba(255,255,220,0.20)');
+  gloss.addColorStop(1,'rgba(255,255,220,0)');
+  ctx.fillStyle=gloss;
+  ctx.beginPath();
+  ctx.moveTo(cx+rad,cy);
+  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
+  ctx.lineTo(cx+cw,cy+ch*0.5); ctx.lineTo(cx,cy+ch*0.5);
+  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
+  ctx.closePath(); ctx.fill();
+
+  // Stress crack discoloration
+  if(tension>0.1){
+    const stressGrad=ctx.createRadialGradient(cx+cw/2,cy+ch/2,0,cx+cw/2,cy+ch/2,cw*0.6);
+    stressGrad.addColorStop(0,`rgba(80,30,0,${tension*0.35})`);
+    stressGrad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=stressGrad;
+    ctx.beginPath();
+    ctx.moveTo(cx+rad,cy);
+    ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
+    ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
+    ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
+    ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ── Shape outline ───────────────────────────────────
+  if(shapePath.length>1){
+    // Ghost outline (dashed)
+    ctx.setLineDash([7*scale, 5*scale]);
+    ctx.beginPath();
+    ctx.moveTo(shapePath[0].x, shapePath[0].y);
+    for(let i=1;i<shapePath.length;i++) ctx.lineTo(shapePath[i].x, shapePath[i].y);
+    ctx.closePath();
+    // Shimmer on the line
+    const shimmerAlpha=0.15+Math.sin(frame*0.04)*0.06;
+    ctx.strokeStyle=`rgba(255,220,100,${shimmerAlpha})`;
+    ctx.lineWidth=2.5*scale;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Carved segments (bright amber glow)
+    ctx.lineWidth=4*scale;
+    ctx.lineCap='round';
+    for(const idx of carvedSegments){
+      const a=shapePath[idx], b=shapePath[(idx+1)%shapePath.length];
+      // Glow layer
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle='rgba(255,210,60,0.2)';
+      ctx.lineWidth=8*scale; ctx.stroke();
+      // Core
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle='rgba(255,200,55,0.9)';
+      ctx.lineWidth=3.5*scale; ctx.stroke();
+    }
+    ctx.lineCap='butt'; ctx.lineWidth=1;
+  }
+
+  // ── Fracture points ─────────────────────────────────
+  for(const fp of fracturePoints){
+    fp.age++;
+    fp.radius=Math.min(fp.radius+0.35*scale, fp.maxRadius);
+    const a=clamp(0.5+fp.severity*0.4,0,0.9);
+
+    // Crack halo
+    ctx.beginPath();
+    ctx.arc(fp.x,fp.y,fp.radius,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(60,25,0,${a})`;
+    ctx.lineWidth=1.5*scale; ctx.stroke();
+
+    // Spokes with organic wobble
+    for(let k=0;k<fp.spokeAngles.length;k++){
+      const angle=fp.spokeAngles[k]+fp.age*0.008;
+      const len=fp.radius*(1.5+Math.sin(fp.age*0.06+k*1.3)*0.4);
+      // Secondary hairline
+      const bAngle=angle+(Math.random()-0.5)*0.4;
+      ctx.beginPath();
+      ctx.moveTo(fp.x,fp.y);
+      ctx.lineTo(fp.x+Math.cos(bAngle)*len*0.6, fp.y+Math.sin(bAngle)*len*0.6);
+      ctx.strokeStyle=`rgba(40,15,0,${a*0.5})`;
+      ctx.lineWidth=0.6*scale; ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(fp.x,fp.y);
+      ctx.lineTo(fp.x+Math.cos(angle)*len, fp.y+Math.sin(angle)*len);
+      ctx.strokeStyle=`rgba(50,20,0,${a*0.8})`;
+      ctx.lineWidth=0.9*scale; ctx.stroke();
+    }
+
+    // Stress glow if near-critical
+    if(fp.severity>0.6){
+      ctx.beginPath();
+      ctx.arc(fp.x,fp.y,fp.radius*1.5,0,Math.PI*2);
+      const g=ctx.createRadialGradient(fp.x,fp.y,0,fp.x,fp.y,fp.radius*1.5);
+      g.addColorStop(0,`rgba(255,80,0,${0.12*fp.severity})`);
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.fill();
+    }
+  }
+
+  // ── Particles ───────────────────────────────────────
+  for(const p of particles){
+    const a=p.life;
+    ctx.fillStyle=`rgba(${p.r},${p.g},${p.b},${a})`;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.size*(0.5+a*0.5),0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // ── Needle cursor (when playing) ─────────────────────
+  if((phase==='playing'||phase==='snap') && needleDown){
+    const nx=needleX, ny=needleY;
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(nx,ny,CARVE_RADIUS*scale,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,240,180,0.5)';
+    ctx.lineWidth=1.5*scale; ctx.stroke();
+
+    // Needle body
+    ctx.beginPath();
+    ctx.moveTo(nx, ny-CARVE_RADIUS*scale*0.5);
+    ctx.lineTo(nx, ny+CARVE_RADIUS*scale*2.5);
+    ctx.strokeStyle='rgba(200,200,200,0.7)';
+    ctx.lineWidth=1.5*scale; ctx.stroke();
+
+    // Contact dot
+    ctx.beginPath();
+    ctx.arc(nx,ny,3*scale,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,240,180,0.95)';
+    ctx.fill();
+
+    // Velocity trail
+    if(needleVel>1){
+      const dxt=needleX-needlePrevX, dyt=needleY-needlePrevY;
+      ctx.beginPath();
+      ctx.moveTo(needlePrevX,needlePrevY);
+      ctx.lineTo(needleX,needleY);
+      ctx.strokeStyle=`rgba(255,200,80,${clamp(needleVel/(scale*8),0,0.4)})`;
+      ctx.lineWidth=2*scale; ctx.stroke();
+    }
+  }
+
+  // ── Integrity arc (bottom of candy) ──────────────────
+  if(phase==='playing'){
+    const arcCX=canvas.width/2;
+    const arcCY=(CANDY_Y+CANDY_H+52)*scale;
+    const arcR=24*scale;
+
+    // Track
+    ctx.beginPath();
+    ctx.arc(arcCX,arcCY,arcR,-Math.PI/2,Math.PI*2-Math.PI/2);
+    ctx.strokeStyle='rgba(255,255,255,0.06)';
+    ctx.lineWidth=5*scale; ctx.stroke();
+
+    // Fill
+    const arcColor=integ>0.5?'#ffd93d':integ>0.25?'#ff9900':'#ff4444';
+    ctx.beginPath();
+    ctx.arc(arcCX,arcCY,arcR,-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
+    ctx.strokeStyle=arcColor;
+    ctx.lineWidth=4*scale; ctx.stroke();
+
+    // Heartbeat pulse on arc
+    if(integ<0.4){
+      heartbeatPhase+=0.08;
+      const pulse=Math.sin(heartbeatPhase*3)*0.5+0.5;
+      ctx.beginPath();
+      ctx.arc(arcCX,arcCY,arcR+(pulse*4*scale),-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
+      ctx.strokeStyle=`rgba(255,60,60,${pulse*0.3})`;
+      ctx.lineWidth=8*scale; ctx.stroke();
+    }
+
+    // Center text
+    ctx.fillStyle='rgba(255,220,140,0.75)';
+    ctx.font=`bold ${Math.round(9*scale)}px 'Courier New',monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`${Math.round(integ*100)}%`,arcCX,arcCY);
+  }
+
+  // ── Completion ring (top-right indicator) ─────────────
+  if(phase==='playing'){
+    const rx=(CANDY_X+CANDY_W+26)*scale;
+    const ry=(CANDY_Y+20)*scale;
+    const rr=16*scale;
+    ctx.beginPath();
+    ctx.arc(rx,ry,rr,-Math.PI/2,Math.PI*2-Math.PI/2);
+    ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=3*scale; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(rx,ry,rr,-Math.PI/2,-Math.PI/2+completionRatio*Math.PI*2);
+    ctx.strokeStyle='rgba(255,200,55,0.8)'; ctx.lineWidth=3*scale; ctx.stroke();
+    ctx.fillStyle='rgba(255,220,120,0.65)';
+    ctx.font=`${Math.round(7*scale)}px 'Courier New',monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`${Math.round(completionRatio*100)}%`,rx,ry);
+  }
+
+  // ── Snap flash ─────────────────────────────────────
+  if(phase==='snap'){
+    const flashA=clamp(1-(frame%20)/20,0,0.7);
+    ctx.fillStyle=`rgba(180,0,0,${flashA})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  // ── Vignette (tension) ──────────────────────────────
+  if(vignetteRed>0.02){
+    const vig=ctx.createRadialGradient(
+      canvas.width/2,canvas.height/2, canvas.height*0.1,
+      canvas.width/2,canvas.height/2, canvas.width*0.75
+    );
+    vig.addColorStop(0,'rgba(0,0,0,0)');
+    vig.addColorStop(1,`rgba(120,0,0,${vignetteRed})`);
+    ctx.fillStyle=vig; ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  ctx.restore();
+
+  // ── Vignette element update ─────────────────────────
+  const vEl=document.getElementById('vignette');
+  if(vEl && phase==='playing' && edgeStress>0.3){
+    const vs=clamp((edgeStress-0.3)/0.7,0,0.5);
+    vEl.style.background=`radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, rgba(80,0,0,${vs}) 100%)`;
+  } else if(vEl){ vEl.style.background='none'; }
+}
+
+// ── Game loop ─────────────────────────────────────────
+let lastTime=0;
+function loop(ts){
+  const dt=Math.min((ts-lastTime)/1000, 0.05);
+  lastTime=ts;
+
+  // Countdown phase
+  if(phase==='intro'){
+    countdownTimer+=dt;
+    if(countdownTimer>=1){
+      countdownTimer=0; countdownVal--;
+      const el=document.getElementById('countdown-display');
+      if(el) el.textContent=countdownVal>0?countdownVal:'GO!';
+      if(countdownVal>0) playTick(660,0.07,0.2);
+      else { playTick(880,0.15,0.3); setTimeout(()=>setPhase('playing'),300); }
+    }
+  }
+
+  if(phase==='playing'||phase==='snap'){
+    updateParticles();
+    // Stress slow decay when not carving
+    if(!needleDown && edgeStress>0){
+      edgeStress=Math.max(0,edgeStress-0.0008);
+    }
+  }
+
+  render();
+  rafId=requestAnimationFrame(loop);
+}
+
+// ── Boot ──────────────────────────────────────────────
+window.addEventListener('resize', resize);
+resize();
+
+initGame(pickShape());
+setPhase('intro');
+
+lastTime=performance.now();
+rafId=requestAnimationFrame(loop);
+
+// Expose for buttons
+window.restartGame = restartGame;
+</script>
+</body>
+</html>
