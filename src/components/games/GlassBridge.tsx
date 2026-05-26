@@ -7,6 +7,7 @@ import { useHUDSync } from "@/components/hud/useHUDSync";
 interface GameProps {
   onExit?: () => void;
 }
+
 // ============================================================
 // 1. CONSTANTS & PALETTE
 // ============================================================
@@ -21,13 +22,13 @@ const PANEL_GAP_X = 24;
 const PANEL_GAP_Y = 36;
 const BRIDGE_X_LEFT = WORLD_W / 2 - PANEL_W - PANEL_GAP_X / 2;
 const BRIDGE_X_RIGHT = WORLD_W / 2 + PANEL_GAP_X / 2;
-const ROW_0_Y = WORLD_H * 0.85; // player starts near bottom, scrolls up
+const ROW_0_Y = WORLD_H * 0.85; 
 
-const JUMP_DURATION = 0.38; // seconds per jump
-const JUMP_HEIGHT = 60; // pixels arc
-const FALL_GRAVITY = 1800; // px/s²
+const JUMP_DURATION = 0.38; 
+const JUMP_HEIGHT = 60; 
+const FALL_GRAVITY = 1800; 
 const SLOW_MO_SCALE = 0.08;
-const SLOW_MO_RESTORE_DELAY = 0.9; // seconds in slow-mo before restoring
+const SLOW_MO_RESTORE_DELAY = 0.9; 
 
 const SHAKE_SHATTER = 14;
 const SHAKE_DECAY_RATE = 0.88;
@@ -40,9 +41,9 @@ const FRAGILE_BLUE: [number, number, number] = [148, 190, 168];
 const VOID_COLOR = "#050810";
 
 const CAMERA_LERP = 5;
-const CAMERA_ROW_OFFSET = 2.5; // rows above player kept visible
+const CAMERA_ROW_OFFSET = 2.5; 
 
-const COUNTDOWN_TOTAL = 120; // seconds
+const COUNTDOWN_TOTAL = 120; 
 
 // ============================================================
 // 2. TYPES
@@ -53,10 +54,10 @@ interface Panel {
   col: 0 | 1;
   safe: boolean;
   state: "intact" | "cracking" | "shattered" | "gone";
-  crackTimer: number; // 0→1
+  crackTimer: number; 
   glintTimer: number;
-  glintPhase: number; // randomized freq offset
-  glintPhase2: number; // second freq for fragile noise
+  glintPhase: number; 
+  glintPhase2: number; 
   wobbleAmp: number;
   wobblePhase: number;
   reflectionAlpha: number;
@@ -64,10 +65,10 @@ interface Panel {
 }
 
 interface PlayerState {
-  row: number; // current bridge row (0 = start platform)
-  col: 0 | 1 | null; // null = on start/end platform
-  worldY: number; // world-space Y
-  jumpT: number; // 0→1 arc interpolation
+  row: number; 
+  col: 0 | 1 | null; 
+  worldY: number; 
+  jumpT: number; 
   jumping: boolean;
   targetRow: number;
   targetCol: 0 | 1;
@@ -78,7 +79,6 @@ interface PlayerState {
   fallVy: number;
   screenShakeX: number;
   screenShakeY: number;
-  // walk bob
   walkBob: number;
   walkBobDir: number;
 }
@@ -98,7 +98,7 @@ interface Particle {
   y: number;
   vx: number;
   vy: number;
-  life: number; // 0→1 (1=alive, 0=dead)
+  life: number; 
   decay: number;
   r: number;
   g: number;
@@ -107,13 +107,7 @@ interface Particle {
   active: boolean;
 }
 
-type Phase =
-  | "intro"
-  | "playing"
-  | "falling"
-  | "gameover"
-  | "victory"
-  | "transitioning";
+type Phase = "intro" | "playing" | "falling" | "gameover" | "victory" | "transitioning";
 type ElimPhase = "none" | "shatter" | "slow_fall" | "showing";
 
 interface GameState {
@@ -439,10 +433,6 @@ function emitBurst(gs: GameState, opts: BurstOptions): void {
   }
 }
 
-// ============================================================
-// 9. UPDATE — PARTICLES
-// ============================================================
-
 function updateParticles(gs: GameState, dtSec: number): void {
   const pool = getPool();
   let i = gs.particles.length;
@@ -460,10 +450,6 @@ function updateParticles(gs: GameState, dtSec: number): void {
     }
   }
 }
-
-// ============================================================
-// 10. UPDATE — CAMERA
-// ============================================================
 
 function updateCamera(gs: GameState, dtSec: number): void {
   const cam = gs.camera;
@@ -494,10 +480,6 @@ function applyShake(ctx: CanvasRenderingContext2D, cam: CameraState): void {
     ctx.translate(sx, sy);
   }
 }
-
-// ============================================================
-// 11. UPDATE — PLAYER
-// ============================================================
 
 function startJump(gs: GameState, targetCol: 0 | 1): void {
   if (gs.player.jumping || gs.player.status !== "alive") return;
@@ -619,10 +601,6 @@ function updatePanels(gs: GameState, dtSec: number): void {
   }
 }
 
-// ============================================================
-// 12. UPDATE — ELIMINATION SEQUENCE
-// ============================================================
-
 function updateElimination(gs: GameState, dtSec: number): void {
   gs.elimTimer += dtSec;
   gs.flashAlpha = Math.max(0, gs.flashAlpha - dtSec * 4);
@@ -648,10 +626,6 @@ function updateElimination(gs: GameState, dtSec: number): void {
       break;
   }
 }
-
-// ============================================================
-// 13. UPDATE — ATMOSPHERE / AMBIENT
-// ============================================================
 
 function updateAtmosphere(gs: GameState, dtSec: number): void {
   gs.atmosphericT += dtSec * 0.4;
@@ -679,10 +653,6 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
   }
 }
 
-// ============================================================
-// 14. MASTER GAME TICK
-// ============================================================
-
 function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject<TouchState>): void {
   if (gs.phase === "gameover" || gs.phase === "victory" || gs.phase === "intro") return;
 
@@ -705,10 +675,6 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
   if (gs.phase === "falling") updateElimination(gs, dtSec);
   gs.elapsed += dtSec;
 }
-
-// ============================================================
-// 15. RENDER — PANELS
-// ============================================================
 
 function renderPanel(
   ctx: CanvasRenderingContext2D,
@@ -802,10 +768,6 @@ function renderPanel(
   ctx.restore();
 }
 
-// ============================================================
-// 16. RENDER — PLAYER
-// ============================================================
-
 function renderPlayer(
   ctx: CanvasRenderingContext2D,
   player: PlayerState,
@@ -858,15 +820,7 @@ function renderPlayer(
   ctx.restore();
 }
 
-// ============================================================
-// 17. RENDER — PARTICLES
-// ============================================================
-
-function renderParticles(
-  ctx: CanvasRenderingContext2D,
-  particles: Particle[],
-  camY: number
-): void {
+function renderParticles(ctx: CanvasRenderingContext2D, particles: Particle[], camY: number): void {
   if (particles.length === 0) return;
   ctx.save();
   for (const p of particles) {
@@ -877,10 +831,6 @@ function renderParticles(
   }
   ctx.restore();
 }
-
-// ============================================================
-// 18. RENDER — HUD
-// ============================================================
 
 function renderHUD(ctx: CanvasRenderingContext2D, gs: GameState): void {
   const progress = gs.currentRow / gs.totalRows;
@@ -926,10 +876,6 @@ function renderHUD(ctx: CanvasRenderingContext2D, gs: GameState): void {
   }
 }
 
-// ============================================================
-// 19. RENDER — OVERLAYS
-// ============================================================
-
 function renderOverlays(ctx: CanvasRenderingContext2D, gs: GameState, assets: BakedAssets): void {
   if (gs.vignetteIntensity > 0.01) {
     ctx.globalAlpha = gs.vignetteIntensity;
@@ -948,10 +894,6 @@ function renderOverlays(ctx: CanvasRenderingContext2D, gs: GameState, assets: Ba
   ctx.fillStyle = `rgba(10,30,70,${breatheA})`;
   ctx.fillRect(0, 0, WORLD_W, WORLD_H);
 }
-
-// ============================================================
-// 20. MASTER RENDER FRAME
-// ============================================================
 
 function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: BakedAssets, quality: "high" | "low"): void {
   ctx.clearRect(0, 0, WORLD_W, WORLD_H);
@@ -1024,10 +966,6 @@ interface TouchState {
   right: boolean;
 }
 
-// ============================================================
-// 22. GAME STATE FACTORY
-// ============================================================
-
 function createGameState(seed: number): GameState {
   const startY = rowWorldY(0);
   return {
@@ -1054,6 +992,10 @@ function useGameLoop(callback: (dt: number) => void, active: boolean): React.Mut
   const scaleRef = useRef<((s: number) => void) | null>(null);
   const scaleValRef = useRef(1);
 
+  // Architecture Loop Fix: Decouples rendering engine ticks from reference closures
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
   scaleRef.current = (s: number) => { scaleValRef.current = s; };
 
   useEffect(() => {
@@ -1061,19 +1003,15 @@ function useGameLoop(callback: (dt: number) => void, active: boolean): React.Mut
     function frame(now: number) {
       const raw = Math.min((now - lastRef.current) / 1000, 0.05);
       lastRef.current = now;
-      callback(raw);
+      callbackRef.current(raw);
       rafRef.current = requestAnimationFrame(frame);
     }
     lastRef.current = performance.now();
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [active, callback]);
+  }, [active]);
   return scaleRef;
 }
-
-// ============================================================
-// 24. MOBILE TOUCH CONTROLS COMPONENT
-// ============================================================
 
 interface MobileTouchControlsProps {
   visible: boolean;
@@ -1115,10 +1053,6 @@ const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inpu
   );
 };
 
-// ============================================================
-// 25. SCREEN OVERLAYS (INTRO / GAMEOVER / VICTORY)
-// ============================================================
-
 const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,4,14,0.92)", zIndex: 10 }}>
     <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(140,200,255,0.95)", fontSize: "clamp(28px, 5vw, 48px)", fontWeight: "bold", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 8, textShadow: "0 0 40px rgba(80,160,255,0.6)" }}>
@@ -1136,7 +1070,6 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-// ROOT CAUSE FIX: Added onExit button to GameOver Screen
 const GameOverScreen: React.FC<{ row: number; total: number; onRestart: () => void; onExit?: () => void }> = ({
   row, total, onRestart, onExit
 }) => (
@@ -1160,7 +1093,6 @@ const GameOverScreen: React.FC<{ row: number; total: number; onRestart: () => vo
   </div>
 );
 
-// ROOT CAUSE FIX: Added onExit button to Victory Screen
 const VictoryScreen: React.FC<{ elapsed: number; onRestart: () => void; onExit?: () => void }> = ({
   elapsed, onRestart, onExit
 }) => (
@@ -1198,13 +1130,28 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
   const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
   const [finalRow, setFinalRow] = useState(0);
   const [finalElapsed, setFinalElapsed] = useState(0);
+
+  // Sync reference guard configuration prevents closures from leaking stale metadata states
+  const uiPhaseRef = useRef(uiPhase);
+  useEffect(() => {
+    uiPhaseRef.current = uiPhase;
+  }, [uiPhase]);
+
+  // Memory Hygiene: Explicit particle system teardown prevent memory leaks across sessions
+  useEffect(() => {
+    return () => {
+      particlePool = null;
+    };
+  }, []);
+
   useGameShellBridge({
-  uiPhase,
-  sourceGame: "glass-bridge",
-  progressMarker: finalRow,
-  progressTotal: TOTAL_ROWS,
-});
-const hudSync = useHUDSync({ flushInterval: 100 });
+    uiPhase,
+    sourceGame: "glass-bridge",
+    progressMarker: finalRow,
+    progressTotal: TOTAL_ROWS,
+  });
+
+  const hudSync = useHUDSync({ flushInterval: 100 });
   const isTouchDevice =
     typeof window !== "undefined" &&
     (window.matchMedia("(pointer: coarse)").matches ||
@@ -1235,23 +1182,18 @@ const hudSync = useHUDSync({ flushInterval: 100 });
     return () => ro.disconnect();
   }, []);
 
-  // ROOT CAUSE FIX: Added Escape key listener
   useEffect(() => {
-    // AFTER:
-const onKey = (e: KeyboardEvent) => {
-  // P2-2: guard key-repeat so held keys don't flood inputRef between ticks.
-  // Escape is exempt — repeat on Escape is harmless and the guard would
-  // swallow it if the key is held very briefly.
-  if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-    if (!e.repeat) inputRef.current.left = true;
-  }
-  if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
-    if (!e.repeat) inputRef.current.right = true;
-  }
-  if (e.key === "Escape" && onExit) {
-    onExit();
-  }
-};
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        if (!e.repeat) inputRef.current.left = true;
+      }
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        if (!e.repeat) inputRef.current.right = true;
+      }
+      if (e.key === "Escape" && onExit) {
+        onExit();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onExit]);
@@ -1278,37 +1220,35 @@ const onKey = (e: KeyboardEvent) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-// In the tick useCallback — replace the hudSync.write block and the
-// two gs.phase checks that follow it:
+    gameTick(gs, dt, inputRef);
 
-  gameTick(gs, dt, inputRef);
+    const playerAlive = gs.player.status === "alive";
+    hudSync.write({
+      score:    gs.currentRow,
+      lives:    playerAlive ? 1 : 0,
+      time:     Math.ceil(Math.max(0, gs.timeLeft)),
+      health:   playerAlive ? 100 : 0,
+      maxHealth: 100,
+      level:    gs.currentRow,
+    });
+    
+    // Explicit frame cycle sync tick flush instruction prevents telemetry interface lag
+    hudSync.tick(performance.now());   
 
-  const playerAlive = gs.player.status === "alive";
-  hudSync.write({
-    score:    gs.currentRow,
-    lives:    playerAlive ? 1 : 0,
-    time:     Math.ceil(Math.max(0, gs.timeLeft)),
-    health:   playerAlive ? 100 : 0,
-    maxHealth: 100,
-    level:    gs.currentRow,
-  });
-  hudSync.tick(performance.now());   // ← was missing: flush never happened
+    if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
+      hudSync.write({ health: 0, lives: 0 });
+      hudSync.forceFlush();
+      setFinalRow(gs.currentRow);
+      setUiPhase("gameover");
+    }
+    if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
+      setFinalElapsed(gs.elapsed);
+      setUiPhase("victory");
+    }
 
-  if (gs.phase === "gameover" && uiPhase === "playing") {
-    // Force-push terminal state before the loop stops on next render
-    hudSync.write({ health: 0, lives: 0 });
-    hudSync.forceFlush();
-    setFinalRow(gs.currentRow);
-    setUiPhase("gameover");
-  }
-  if (gs.phase === "victory" && uiPhase === "playing") {
-    setFinalElapsed(gs.elapsed);
-    setUiPhase("victory");
-  }
-
-    const quality: "high" | "low" = true ? "high" : "low";
+    const quality: "high" | "low" = "high";
     renderFrame(ctx, gs, assets, quality);
-  }, [uiPhase,hudSync]);
+  }, [hudSync]);
 
   useGameLoop(tick, uiPhase === "playing");
 
@@ -1335,11 +1275,10 @@ const onKey = (e: KeyboardEvent) => {
           imageRendering: "pixelated",
           width: "100%", 
           height: "100%", 
-          objectFit: "contain" // ROOT CAUSE FIX: Prevent microscopic mobile canvas
+          objectFit: "contain" 
         }}
       />
 
-      {/* ROOT CAUSE FIX: Persistent Menu button inside actual gameplay loop */}
       {onExit && (
         <button
           onClick={onExit}
@@ -1361,7 +1300,7 @@ const onKey = (e: KeyboardEvent) => {
           row={finalRow}
           total={TOTAL_ROWS}
           onRestart={restartGame}
-          onExit={onExit} // ROOT CAUSE FIX: Passed onExit prop down
+          onExit={onExit} 
         />
       )}
       {uiPhase === "victory" && (
