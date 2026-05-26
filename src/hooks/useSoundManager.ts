@@ -6,19 +6,8 @@ import { useGameStore, selectVolumes } from "../store/gameStore";
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-/**
- * useSoundManager
- *
- * Provides access to the SoundManager singleton, keeps it in sync with
- * Zustand volume/mute settings, and handles mobile unlock via the first
- * user interaction.
- *
- * Returns a stable object of helper methods — safe to call from RAF loops
- * inside useRef closures without stale closure risk.
- */
-
 export interface SoundManagerHandle {
-  play:    (id: SoundId, cooldownMs?: number, rateJitter?: number) => void;
+  play:    (id: SoundId, cooldownMs?: number, rateJitter?: number, exactRate?: number | null) => void;
   loop:    (id: SoundId) => void;
   stop:    (id: SoundId, fadeMs?: number) => void;
   stopAll: () => void;
@@ -30,13 +19,11 @@ export interface SoundManagerHandle {
 }
 
 export function useSoundManager(): SoundManagerHandle {
-  // Grab primitive numbers directly to prevent infinite re-renders
   const master = useGameStore((s) => s.settings.masterVolume);
   const sfx = useGameStore((s) => s.settings.sfxVolume);
   const music = useGameStore((s) => s.settings.musicVolume);
   const muted = master === 0;
 
-  // Initialise singleton on first render
   const smRef = useRef<SoundManager>(
     SoundManager.getInstance({
       masterVolume: master,
@@ -46,7 +33,6 @@ export function useSoundManager(): SoundManagerHandle {
     })
   );
 
-  // ── Sync Zustand volumes → SoundManager ──────────────────────────────────
   useEffect(() => {
     const sm = smRef.current;
     sm.setMasterVolume(master);
@@ -58,7 +44,6 @@ export function useSoundManager(): SoundManagerHandle {
     smRef.current.setMuted(muted);
   }, [muted]);
 
-  // ── Mobile unlock on first gesture ───────────────────────────────────────
   useEffect(() => {
     const handler = () => {
       smRef.current.unlock();
@@ -73,9 +58,8 @@ export function useSoundManager(): SoundManagerHandle {
     };
   }, []);
 
-  // ── Stable handle (object identity never changes) ─────────────────────────
   const handleRef = useRef<SoundManagerHandle>({
-    play:    (id, cdMs = 0, jitter = 0) => smRef.current.play(id, cdMs, jitter),
+    play:    (id, cdMs = 0, jitter = 0, exactRate = null) => smRef.current.play(id, cdMs, jitter, exactRate),
     loop:    (id)               => smRef.current.loop(id),
     stop:    (id, ms = 600)     => smRef.current.stopLoop(id, ms),
     stopAll: ()                 => smRef.current.stopAll(),
@@ -91,10 +75,6 @@ export function useSoundManager(): SoundManagerHandle {
 
 // ─── Convenience: useUISound ──────────────────────────────────────────────────
 
-/**
- * Lightweight hook for menu / button sounds.
- * Returns click and hover handlers ready for JSX event props.
- */
 export function useUISound() {
   const sm = useSoundManager();
 

@@ -167,14 +167,33 @@ const ON_EDGE_TOL = 26;
 const COMPLETION_WIN = 0.80;
 const SCRAPE_AUDIO_MS = 90;
 
+const GRID = 32;
+const CELL = CANDY_W / GRID;
+
 // ── State ─────────────────────────────────────────────
 let phase = 'intro'; // intro | playing | success | eliminated
 let candyIntegrity = 1.0;
-let edgeStress = 0.0;
+let edgeStress = 0.0; // Keeps the red vignette working
 let completionRatio = 0.0;
 let fracturePoints = [];
 let carvedSegments = new Set();
 let shapePath = [];
+
+// New Grid Physics State
+let edgeStressGrid = new Float32Array(GRID * GRID);
+let structuralStrength = new Float32Array(GRID * GRID).fill(1);
+let carvedCells = new Set();
+
+function cellIdx(gx, gy) { return gy * GRID + gx; }
+function worldToGrid(wx, wy) {
+  // Converts scaled screen coordinates back to grid coordinates
+  const gx = Math.floor((wx / scale - CANDY_X) / CELL);
+  const gy = Math.floor((wy / scale - CANDY_Y) / CELL);
+  return { 
+    gx: Math.max(0, Math.min(GRID - 1, gx)), 
+    gy: Math.max(0, Math.min(GRID - 1, gy)) 
+  };
+}
 let shapeId = 'triangle';
 let scale = 1;
 let cssScale = 1;
@@ -476,6 +495,9 @@ function initGame(id){
   fracturePoints = [];
   carvedSegments = new Set();
   particles = [];
+  edgeStressGrid = new Float32Array(GRID * GRID);
+  structuralStrength = new Float32Array(GRID * GRID).fill(1);
+  carvedCells = new Set();
   needleDown = false;
   needleVel = 0;
   stabCount = 0; stabHead = 0;
@@ -564,6 +586,7 @@ canvas.addEventListener('pointerup', e=>{
 canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
 
 // ── Core carving logic ────────────────────────────────
+// ── Core carving logic ────────────────────────────────
 function processCarve(){
   const pos={x:needleX, y:needleY};
   const edgeDist=distToOutline(pos, shapePath);
@@ -582,31 +605,34 @@ function processCarve(){
 
   computeStability();
 
-  // Stress delta based on velocity and stability
-  const velocityFactor=clamp(needleVel/(scale*12), 0, 1);
-  const stressDelta = BASE_STRESS + (1-stability)*INSTABILITY_MULT + velocityFactor*0.002;
-  edgeStress = clamp(edgeStress + stressDelta, 0, 1);
-  candyIntegrity = clamp(candyIntegrity - stressDelta*EDGE_TO_INTEGRITY, 0, 1);
+ // Grid-based inverse pressure model (FIXED: 0.30 instead of 30)
+  const velocityFactor = clamp(needleVel / (scale * 12), 0, 1);
+  const pressure = 0.30 * (1 + (1 - velocityFactor) * 0.5) * (1 + (1 - stability) * 0.4);
+  
+  const { gx, gy } = worldToGrid(needleX, needleY);
+  const radius = 3;
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = gx + dx, ny = gy + dy;
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+      const distCell = Math.sqrt(dx * dx + dy * dy);
+      if (distCell > radius) continue;
+      
+      const falloff = 1 - distCell / radius;
+      const stressDelta = pressure * 0.004 * falloff;
+      const idx = cellIdx(nx, ny);
+      const edgeFactor = (nx === 0 || ny === 0 || nx === GRID - 1 || ny === GRID - 1) ? 1.6 : 1.0;
+      
+      edgeStressGrid[idx] = Math.min(1, edgeStressGrid[idx] + stressDelta * edgeFactor);
+      structuralStrength[idx] = Math.max(0, structuralStrength[idx] - stressDelta * 0.3);
+      carvedCells.add(idx);
+    }
+  }
+
   completionRatio = carvedSegments.size / shapePath.length;
 
   // Emit dust
   if(Math.random()<0.4) emitDust(needleX, needleY, 2);
-
-  // Fracture generation
-  if(edgeStress>FRACTURE_THRESHOLD && Math.random()<(edgeStress-FRACTURE_THRESHOLD)*0.25){
-    const jitter=()=>(Math.random()-0.5)*28*scale;
-    const severity=clamp(edgeStress-FRACTURE_THRESHOLD+0.1, 0.1, 1);
-    fracturePoints.push({
-      x:needleX+jitter(), y:needleY+jitter(),
-      radius:4*scale, maxRadius:(8+severity*18)*scale,
-      age:0, severity,
-      spokeAngles: Array.from({length:Math.round(3+severity*5)},(_,k)=>(k/(3+severity*5))*Math.PI*2+Math.random()*0.5)
-    });
-    edgeStress=clamp(edgeStress-0.10, 0, 1);
-    emitCrackSpark(needleX,needleY,severity);
-    playMicrocrack(severity);
-    shakeIntensity=Math.max(shakeIntensity, severity*6);
-  }
 
   // Scrape audio
   const now=performance.now();
@@ -639,14 +665,7 @@ function processCarve(){
     }
   }
 
-  // Check win/lose
-  if(candyIntegrity<=0){
-    playSnap();
-    shakeIntensity=20;
-    phase='snap'; // brief snap animation then eliminate
-    setTimeout(()=>setPhase('eliminated'), 800);
-    return;
-  }
+  // Check win condition
   if(completionRatio>=COMPLETION_WIN){
     playTick(880,0.3,0.3);
     setTimeout(()=>playTick(1100,0.3,0.3),200);
@@ -760,7 +779,33 @@ function render(){
     ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
     ctx.closePath(); ctx.fill();
   }
+// ── Grid Stress Heatmap ─────────────────────────────
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const idx = cellIdx(gx, gy);
+      const s = edgeStressGrid[idx];
+      if (s < 0.04) continue;
+      
+      const wx = (CANDY_X + gx * CELL) * scale;
+      const wy = (CANDY_Y + gy * CELL) * scale;
+      const cellSize = CELL * scale;
+      
+      const alpha = s * 0.55;
+      const red = Math.floor(s * 200);
+      ctx.fillStyle = `rgba(${red + 55}, 0, 0, ${alpha})`;
+      ctx.fillRect(wx, wy, cellSize, cellSize);
+    }
+  }
 
+  // ── Carved Path Cells (Yellow overlay) ──────────────
+  ctx.fillStyle = 'rgba(255, 200, 60, 0.22)';
+  carvedCells.forEach(idx => {
+    const gx = idx % GRID;
+    const gy = Math.floor(idx / GRID);
+    const wx = (CANDY_X + gx * CELL) * scale;
+    const wy = (CANDY_Y + gy * CELL) * scale;
+    ctx.fillRect(wx + 1, wy + 1, CELL * scale - 2, CELL * scale - 2);
+  });
   // ── Shape outline ───────────────────────────────────
   if(shapePath.length>1){
     // Ghost outline (dashed)
@@ -978,9 +1023,71 @@ function loop(ts){
 
   if(phase==='playing'||phase==='snap'){
     updateParticles();
-    // Stress slow decay when not carving
-    if(!needleDown && edgeStress>0){
-      edgeStress=Math.max(0,edgeStress-0.0008);
+    
+    // 1. Diffuse Grid Stress so it spreads outwardly
+    if (frame % 3 === 0) {
+      const next = new Float32Array(edgeStressGrid);
+      for (let gy = 1; gy < GRID - 1; gy++) {
+        for (let gx = 1; gx < GRID - 1; gx++) {
+          const idx = cellIdx(gx, gy);
+          const cur = edgeStressGrid[idx];
+          if (cur < 0.01) continue;
+          const avg = (
+            edgeStressGrid[cellIdx(gx + 1, gy)] +
+            edgeStressGrid[cellIdx(gx - 1, gy)] +
+            edgeStressGrid[cellIdx(gx, gy + 1)] +
+            edgeStressGrid[cellIdx(gx, gy - 1)]
+          ) / 4;
+          next[idx] = Math.max(0, cur * 0.97 + (avg - cur) * 0.08);
+        }
+      }
+      edgeStressGrid = next;
+    }
+
+    // 2. Check the grid for structural failure
+    let totalWeak = 0;
+    let maxStress = 0;
+    for (let gy = 1; gy < GRID - 1; gy++) {
+      for (let gx = 1; gx < GRID - 1; gx++) {
+        const idx = cellIdx(gx, gy);
+        const s = edgeStressGrid[idx];
+        const strength = structuralStrength[idx];
+        
+        maxStress = Math.max(maxStress, s);
+        totalWeak += (1 - strength);
+        
+        const threshold = 0.55 - (1 - strength) * 0.2;
+        if (s > threshold && Math.random() < (s - threshold) * 0.06 && phase === 'playing') {
+          const severity = Math.min(1, (s - threshold) * 2.5);
+          const wx = (CANDY_X + gx * CELL + CELL / 2) * scale;
+          const wy = (CANDY_Y + gy * CELL + CELL / 2) * scale;
+          
+          fracturePoints.push({
+            x: wx, y: wy,
+            radius: 4 * scale, maxRadius: (8 + severity * 18) * scale,
+            age: 0, severity,
+            spokeAngles: Array.from({length: Math.round(3 + severity * 5)}, (_, k) => (k / (3 + severity * 5)) * Math.PI * 2 + Math.random() * 0.5)
+          });
+          
+          structuralStrength[idx] *= 0.7; // permanently weaken the broken cell
+          edgeStressGrid[idx] *= 0.5;     // release local tension from the snap
+          
+          emitCrackSpark(wx, wy, severity);
+          playMicrocrack(severity);
+          shakeIntensity = Math.max(shakeIntensity, severity * 6);
+        }
+      }
+    }
+    
+    // 3. Update global UI variables & check if the whole candy died
+    edgeStress = maxStress;
+    candyIntegrity = Math.max(0, 1 - totalWeak / (GRID * GRID * 0.6));
+
+    if (candyIntegrity <= 0 && phase === 'playing') {
+      playSnap();
+      shakeIntensity = 20;
+      phase = 'snap';
+      setTimeout(() => setPhase('eliminated'), 800);
     }
   }
 

@@ -16,6 +16,7 @@ import { useSceneCleanup } from "@/hooks/useSceneCleanup";
 import MobileTouchControls from "@/components/touch/MobileTouchControls";
 import CanvasWrapper, { type CanvasWrapperHandle, type CanvasSize } from "../canvas/CanvasWrapper";
 import { useGameAudio } from "../../hooks/useAmbientAudio";
+import { SoundManager } from "@/managers/SoundManager";
 import { drawMinecraftCharacter } from "@/lib/render/drawMinecraftCharacter";
 
 // ─── Design Constants ─────────────────────────────────────────────────────────
@@ -42,8 +43,8 @@ const SAFE_VELOCITY_THRESHOLD = 18;
 const GRACE_PERIOD_MS         = 380;
 const FAKE_OUT_TURN_BACK_MS   = 260;
 
-const GREEN_BASE     = 3.8;
-const RED_BASE       = 2.2;
+const GREEN_BASE     = 4.25;
+const RED_BASE       = 3.0;
 const TURN_DUR       = 0.42;
 const WARNING_DUR    = 0.55;
 
@@ -558,6 +559,7 @@ function drawEnvironmentLighting(ctx: CanvasRenderingContext2D, gs: GameState): 
   ctx.fillRect(0, 0, DW, DH);
 
   if (lp === "red") {
+    // 1. Red pulsing vignette
     const pulse = 0.5 + Math.sin(Date.now() * 0.004) * 0.5;
     const redV  = ctx.createRadialGradient(DW, DH / 2, 0, DW, DH / 2, DW * 0.9);
     redV.addColorStop(0,   `rgba(239,68,68,${0.08 * pulse})`);
@@ -565,6 +567,22 @@ function drawEnvironmentLighting(ctx: CanvasRenderingContext2D, gs: GameState): 
     redV.addColorStop(1,   "rgba(0,0,0,0)");
     ctx.fillStyle = redV;
     ctx.fillRect(0, 0, DW, DH);
+
+    // 2. NEW: Terrifying Scanner Laser Sweep
+    const sweepPct = (Date.now() % 1200) / 1200; // Sweeps across every 1.2 seconds
+    const laserX = DW - (DW * sweepPct); // Sweeps right to left toward the player
+    
+    // Core laser line
+    ctx.fillStyle = "rgba(255, 30, 30, 0.9)";
+    ctx.fillRect(laserX, 0, 4, DH);
+    
+    // Laser glow
+    const lg = ctx.createLinearGradient(laserX - 60, 0, laserX + 60, 0);
+    lg.addColorStop(0, "rgba(255,0,0,0)");
+    lg.addColorStop(0.5, "rgba(255,0,0,0.25)");
+    lg.addColorStop(1, "rgba(255,0,0,0)");
+    ctx.fillStyle = lg;
+    ctx.fillRect(laserX - 60, 0, 120, DH);
   }
 }
 
@@ -689,30 +707,17 @@ function updateLightStateMachine(gs: GameState, dt: number): void {
   }
 
   if (doll.stateTimer <= 0) {
-    switch (doll.phase) {
+switch (doll.phase) {
       case "green": {
-        const doFake = Math.random() < gs.fakeOutProb;
-        if (doFake) {
-          doll.phase       = "fake_out";
-          doll.fakeOutTimer = FAKE_OUT_TURN_BACK_MS / 1000;
-          doll.targetAngle = Math.PI * 0.5;
-          doll.stateTimer  = FAKE_OUT_TURN_BACK_MS / 1000;
-          gs.lightPhase    = "warning";
-          gs.audioEvents.add("doll_turn");
-        } else {
-          doll.phase       = "warning";
-          doll.stateTimer  = WARNING_DUR / gs.difficulty;
-          gs.lightPhase    = "warning";
-          gs.audioEvents.add("warning");
-        }
+        // Audio finishes exactly as this timer hits 0. Trigger warning immediately.
+        doll.phase       = "warning";
+        doll.stateTimer  = WARNING_DUR / gs.difficulty;
+        gs.lightPhase    = "warning";
+        gs.audioEvents.add("warning");
         break;
       }
       case "fake_out": {
-        doll.phase       = "green";
-        doll.targetAngle = 0;
-        doll.stateTimer  = GREEN_BASE / gs.difficulty * (0.6 + Math.random() * 0.7);
-        gs.lightPhase    = "green";
-        gs.audioEvents.add("green_light");
+        // Unused in perfect-sync mode, but kept for state safety
         break;
       }
       case "warning": {
@@ -725,17 +730,19 @@ function updateLightStateMachine(gs: GameState, dt: number): void {
       }
       case "turning": {
         doll.phase       = "red";
-        doll.stateTimer  = RED_BASE / gs.difficulty * (0.7 + Math.random() * 0.5);
+        doll.stateTimer  = RED_BASE / gs.difficulty; 
         gs.lightPhase    = "red";
         gs.audioEvents.add("red_light");
+        gs.audioEvents.add("heartbeat_start"); // NEW: Start pumping heartbeat
         break;
       }
       case "red": {
         doll.phase       = "green";
         doll.targetAngle = 0;
-        doll.stateTimer  = GREEN_BASE / gs.difficulty * (0.5 + Math.random() * 0.8);
+        doll.stateTimer  = GREEN_BASE / gs.difficulty; 
         gs.lightPhase    = "green";
         gs.audioEvents.add("green_light");
+        gs.audioEvents.add("heartbeat_stop"); // NEW: Instant relief silence
         break;
       }
     }
@@ -872,6 +879,24 @@ function checkEliminationForPlayer(p: Player, gs: GameState, isHuman: boolean): 
       gs.camera.shakeTimer = 0.55;
       gs.slowMoMult        = 1;
       gs.audioEvents.add("eliminated");
+    } else {
+      // NEW: Proximity Terror
+      const human = gs.players[0];
+      const dist = Math.abs(p.wx - human.wx);
+      
+      // If the NPC dies within 150 pixels of the human player
+      if (human.status === "alive" && dist < 150) {
+        // Flinch camera shake
+        gs.camera.shake      = Math.max(gs.camera.shake, 14);
+        gs.camera.shakeTimer = Math.max(gs.camera.shakeTimer, 0.4);
+        
+        // Extra blood splatter exploding near the human
+        spawnBlood(gs, human.wx + (Math.random() - 0.5) * 80, human.wy - 20); 
+        spawnBlood(gs, human.wx + (Math.random() - 0.5) * 80, human.wy);
+        
+        // Trigger gasp
+        gs.audioEvents.add("crowd_gasp");
+      }
     }
   }
 
@@ -1227,13 +1252,30 @@ hudSync.write({
       for (const ev of gs.audioEvents) {
         switch (ev) {
           case "green_light":
-            audio.onGreenLight();
+            // Play the song and speed it up exactly matching the game difficulty
+            SoundManager.getInstance().play("doll_song", 0, gs.difficulty);
             audioEventBus.emit('greenLightActivated');
             break;
-          case "warning":     audio.onDollTurn();      break;
-          case "doll_turn":   audio.onDollTurn();      break;
+          case "warning":     
+            audio.onDollTurn();      
+            break;
+          case "doll_turn":   
+            audio.onDollTurn();      
+            break;
+            // Add these right below case "red_light":
+          case "heartbeat_start": 
+            SoundManager.getInstance().setHeartbeatIntensity(1.0); 
+            break;
+          case "heartbeat_stop":  
+            SoundManager.getInstance().setHeartbeatIntensity(0.0); 
+            break;
+          case "crowd_gasp":      
+            SoundManager.getInstance().play("crowd_gasp", 0, 0, 1); 
+            break;
           case "red_light":
-            audio.onRedLight();
+            // Stop the song if it happens to trail off, and play the red light stinger
+            SoundManager.getInstance().stopLoop("doll_song", 0);
+            SoundManager.getInstance().play("red_light_stinger", 0, 1);
             audioEventBus.emit('redLightActivated');
             break;
           case "step":        audio.onStep();          break;
