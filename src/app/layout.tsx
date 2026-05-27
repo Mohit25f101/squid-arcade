@@ -1,6 +1,28 @@
 import type { Metadata, Viewport } from "next";
-import { Rajdhani, JetBrains_Mono } from "next/font/google";
+import { Bebas_Neue, Space_Mono, Noto_Sans_KR, Rajdhani, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import "./squid-menu.css";
+
+const bebasNeue = Bebas_Neue({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-bebas",
+  display: "swap",
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-mono-sq",
+  display: "swap",
+});
+
+const notoSansKR = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-korean",
+  display: "swap",
+});
 
 const rajdhani = Rajdhani({
   subsets: ["latin"],
@@ -16,7 +38,6 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-// ROOT CAUSE FIX: Locks mobile rendering scale
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -28,22 +49,20 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "NexGame",
-    template: "%s | NexGame",
+    default: "SQUID GAME",
+    template: "%s | SQUID GAME",
   },
-  description: "A high-performance browser game built with Next.js 14.",
-  icons: {
-    icon: "/favicon.ico",
-  },
+  description: "Squid Game Arcade — Survive. Or don't.",
+  icons: { icon: "/favicon.ico" },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${rajdhani.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${bebasNeue.variable} ${spaceMono.variable} ${notoSansKR.variable} ${rajdhani.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="bg-black text-white antialiased overflow-hidden">
         {children}
       </body>
