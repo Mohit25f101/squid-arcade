@@ -29,7 +29,7 @@ import { subscribeWithSelector } from "zustand/middleware";
  * Add new games here as the arcade grows.
  */
 
-export type GameId = "menu" | "glass-bridge" | "red-light-green-light" | "dalgona";
+export type GameId = "red-light-green-light" | "glass-breaker" | "dalgona" | "menu" | null;
 
 /**
  * The global runtime phase observable by ALL systems (audio engine, shell
