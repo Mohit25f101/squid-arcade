@@ -4,17 +4,17 @@
  * THE CANONICAL GAME STORE — Phase 1 Consolidation
  *
  * Migration notes:
- *  - Replaces the broken `useGameStore.ts` (wrong path) and the missing
- *    `store/gameStore.ts` that GameRouter was trying to import.
- *  - All original actions/selectors are preserved verbatim.
- *  - NEW (additive only, never breaking):
- *      · GameId union type + activeGame / setActiveGame
- *      · RuntimePhase union type + runtimePhase / setRuntimePhase
- *      · Elimination pipeline: triggerElimination / clearElimination / eliminationPayload
- *      · Viewport state: viewportState / setViewportState (written by GameShell)
+ * - Replaces the broken `useGameStore.ts` (wrong path) and the missing
+ * `store/gameStore.ts` that GameRouter was trying to import.
+ * - All original actions/selectors are preserved verbatim.
+ * - NEW (additive only, never breaking):
+ * · GameId union type + activeGame / setActiveGame
+ * · RuntimePhase union type + runtimePhase / setRuntimePhase
+ * · Elimination pipeline: triggerElimination / clearElimination / eliminationPayload
+ * · Viewport state: viewportState / setViewportState (written by GameShell)
  *
  * Import path (add to tsconfig paths if not already present):
- *   "@/store/gameStore" → "src/store/gameStore.ts"
+ * "@/store/gameStore" → "src/store/gameStore.ts"
  */
 
 import { create } from "zustand";
@@ -28,8 +28,7 @@ import { subscribeWithSelector } from "zustand/middleware";
  * Every routable destination in the arcade.
  * Add new games here as the arcade grows.
  */
-
-export type GameId = "menu" | "glass-bridge" | "red-light-green-light" | "dalgona";
+export type GameId = "red-light-green-light" | "dalgona" | "glass-breaker" | "glass-bridge" | "menu";
 
 /**
  * The global runtime phase observable by ALL systems (audio engine, shell
@@ -74,9 +73,48 @@ export type Difficulty = "easy" | "normal" | "hard";
 export type Platform = "mobile" | "tablet" | "desktop";
 export type Orientation = "portrait" | "landscape";
 
+export type Breakpoint =
+  | "desktop-landscape"
+  | "tablet-landscape"
+  | "tablet-portrait"
+  | "mobile-landscape"
+  | "mobile-portrait";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 2 — PAYLOAD & SUB-STATE TYPES
 // ─────────────────────────────────────────────────────────────────────────────
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface GameRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Written by GameShell's ResizeObserver.
+ * Consumed by any component that needs to know the true canvas dimensions
+ * without drilling props (e.g. DalgonaCandy, input overlays).
+ */
+export interface ViewportState {
+  containerW: number;
+  containerH: number;
+  scale: number;
+  dpr: number;
+  breakpoint: Breakpoint;
+  orientation: Orientation;
+  safeArea: SafeAreaInsets;
+  gameRect: GameRect;
+  isTouch: boolean;
+  isResizing: boolean;
+}
 
 /**
  * Payload attached to every elimination event.
@@ -120,29 +158,6 @@ export interface HUDState {
   time: number;
 }
 
-/**
- * Written by GameShell's ResizeObserver.
- * Consumed by any component that needs to know the true canvas dimensions
- * without drilling props (e.g. DalgonaCandy, input overlays).
- */
-export interface ViewportState {
-  /** Container element's client width in CSS pixels */
-  
-  containerW: number;
-  /** Container element's client height in CSS pixels */
-  containerH: number;
-  /**
-   * Scale factor applied to the logical world canvas.
-   * scale = Math.min(containerW / WORLD_W, containerH / WORLD_H)
-   */
-  scale: number;
-  /**
-   * Device pixel ratio clamped to 2, written once on mount.
-   * Games use this to set canvas.width = WORLD_W * dpr.
-   */
-  dpr: number;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 3 — FULL STORE STATE INTERFACE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,11 +167,11 @@ export interface GameStoreState {
   orientation: Orientation;
   setPlatform: (platform: Platform) => void;
   setOrientation: (orientation: Orientation) => void;
+  
   // ── Routing ────────────────────────────────────────────────────────────────
   /** Which game (or menu) is currently mounted by GameRouter. */
   activeGame: GameId;
   setActiveGame: (id: GameId) => void;
-  
 
   // ── Runtime Phase ──────────────────────────────────────────────────────────
   /**
@@ -166,7 +181,6 @@ export interface GameStoreState {
    */
   runtimePhase: RuntimePhase;
   setRuntimePhase: (phase: RuntimePhase) => void;
-  
 
   // ── Elimination Pipeline ───────────────────────────────────────────────────
   /**
@@ -623,37 +637,3 @@ export const selectIsVictory = (s: GameStoreState) =>
 
 /** Viewport dimensions + scale — written by GameShell, read by games */
 export const selectViewport = (s: GameStoreState) => s.viewportState;
-// Put this near the top of the file, outside of any functions!
-export type Breakpoint =
-  | "desktop-landscape"
-  | "tablet-landscape"
-  | "tablet-portrait"
-  | "mobile-landscape"
-  | "mobile-portrait";
-
-export interface SafeAreaInsets {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-export interface GameRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface ViewportState {
-  containerW: number;
-  containerH: number;
-  scale: number;
-  dpr: number;
-  breakpoint: Breakpoint;
-  orientation: "portrait" | "landscape";
-  safeArea: SafeAreaInsets;
-  gameRect: GameRect;
-  isTouch: boolean;
-  isResizing: boolean;
-}

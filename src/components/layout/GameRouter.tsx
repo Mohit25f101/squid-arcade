@@ -51,8 +51,8 @@ export default function GameRouter() {
           <GameMenu onLaunch={(id: GameId) => setActiveGame(id)} />
         )}
 
-        {activeGame === "glass-bridge" && (
-          <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
+        {activeGame === "glass-breaker" && (
+          <SceneWrapper key="glass-breaker" transition={transitionState} showGlobalHUD={false}>
             <GlassBridge onExit={handleExit} />
           </SceneWrapper>
         )}

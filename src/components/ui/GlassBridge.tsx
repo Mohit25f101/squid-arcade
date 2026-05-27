@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameShellBridge } from "@/components/GameShell";
 import { useHUDSync } from "@/components/hud/useHUDSync";
+import ResultScreen from "@/components/ui/ResultScreen";
+import { useMenuAudio } from "@/hooks/useMenuAudio";
 
 interface GameProps {
   onExit?: () => void;
@@ -1070,185 +1072,132 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-const GameOverScreen: React.FC<{ row: number; total: number; onRestart: () => void; onExit?: () => void }> = ({
-  row, total, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,2,8,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(255,80,80,0.95)", fontSize: "clamp(32px, 6vw, 56px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 16, textShadow: "0 0 60px rgba(255,60,60,0.5)" }}>
-      ELIMINATED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(140,180,220,0.7)", fontSize: 14, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`PANEL ${row} of ${total}`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1628", background: "rgba(80,160,255,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Try Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,160,255,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
 
-const VictoryScreen: React.FC<{ elapsed: number; onRestart: () => void; onExit?: () => void }> = ({
-  elapsed, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,4,10,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(80,220,160,0.98)", fontSize: "clamp(28px, 5vw, 48px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 12, textShadow: "0 0 60px rgba(60,200,140,0.5)" }}>
-      SURVIVED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(120,200,160,0.65)", fontSize: 13, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`TIME: ${Math.floor(elapsed)}s`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1a0f", background: "rgba(80,200,140,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Play Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,200,140,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
+// ─── Main component ───────────────────────────────────────────────────────────
 
-// ============================================================
-// 26. MAIN REACT COMPONENT
-// ============================================================
+const GlassBridge: React.FC<{ onExit?: () => void; onMenu?: () => void }> = ({
+  onExit,
+  onMenu,
+}) => {
+  // Support both prop names so nothing breaks if GameShell still passes onExit
+  const handleMenu = onMenu ?? onExit;
 
-const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gsRef = useRef<GameState | null>(null);
-  const assetsRef = useRef<BakedAssets | null>(null);
-  const inputRef = useRef<TouchState>({ left: false, right: false });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const gsRef         = useRef<GameState | null>(null);
+  const assetsRef     = useRef<BakedAssets | null>(null);
+  const inputRef      = useRef<TouchState>({ left: false, right: false });
+  const containerRef  = useRef<HTMLDivElement>(null);
 
-  const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
-  const [finalRow, setFinalRow] = useState(0);
+  const [uiPhase, setUiPhase]         = useState<"intro" | "playing" | "gameover" | "victory">("intro");
+  const [finalRow, setFinalRow]       = useState(0);
   const [finalElapsed, setFinalElapsed] = useState(0);
 
-  // Sync reference guard configuration prevents closures from leaking stale metadata states
   const uiPhaseRef = useRef(uiPhase);
-  useEffect(() => {
-    uiPhaseRef.current = uiPhase;
-  }, [uiPhase]);
+  useEffect(() => { uiPhaseRef.current = uiPhase; }, [uiPhase]);
 
-  // Memory Hygiene: Explicit particle system teardown prevent memory leaks across sessions
+  // Audio hook — plays sounds on result mount via onMount callback
+  const audio = useMenuAudio();
+
+  // Particle cleanup
   useEffect(() => {
-    return () => {
-      particlePool = null;
-    };
+    return () => { particlePool = null; };
   }, []);
 
   useGameShellBridge({
     uiPhase,
     sourceGame: "glass-breaker",
-    progressMarker: finalRow,
-    progressTotal: TOTAL_ROWS,
+    progressMarker:  finalRow,
+    progressTotal:   TOTAL_ROWS,
   });
 
-  const hudSync = useHUDSync({ flushInterval: 100 });
+  const hudSync      = useHUDSync({ flushInterval: 100 });
   const isTouchDevice =
     typeof window !== "undefined" &&
     (window.matchMedia("(pointer: coarse)").matches ||
       /android|iphone|ipad|ipod/i.test(navigator.userAgent));
 
+  // Canvas sizing
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas    = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
-
     const resize = () => {
-      const cw = container.clientWidth;
-      const ch = container.clientHeight;
-      const scale = Math.min(cw / WORLD_W, ch / WORLD_H);
-      canvas.style.width = `${WORLD_W * scale}px`;
+      const scale = Math.min(
+        container.clientWidth  / WORLD_W,
+        container.clientHeight / WORLD_H
+      );
+      canvas.style.width  = `${WORLD_W * scale}px`;
       canvas.style.height = `${WORLD_H * scale}px`;
     };
-
-    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
-    canvas.width = WORLD_W * dpr;
+    const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
+    canvas.width  = WORLD_W * dpr;
     canvas.height = WORLD_H * dpr;
-    const ctx = canvas.getContext("2d");
-    if (ctx) ctx.scale(dpr, dpr);
-
+    const ctx2d = canvas.getContext("2d");
+    if (ctx2d) ctx2d.scale(dpr, dpr);
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
     return () => ro.disconnect();
   }, []);
 
+  // Keyboard input
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-        if (!e.repeat) inputRef.current.left = true;
-      }
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
-        if (!e.repeat) inputRef.current.right = true;
-      }
-      if (e.key === "Escape" && onExit) {
-        onExit();
-      }
+      if (e.key === "ArrowLeft"  || e.key === "a" || e.key === "A") { if (!e.repeat) inputRef.current.left  = true; }
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { if (!e.repeat) inputRef.current.right = true; }
+      if (e.key === "Escape" && handleMenu) handleMenu();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onExit]);
+  }, [handleMenu]);
 
   const startGame = useCallback(() => {
     const seed = Date.now() ^ (Math.random() * 0xffffffff);
     gsRef.current = createGameState(seed >>> 0);
-    if (!assetsRef.current) {
-      assetsRef.current = initBakedAssets();
-    }
+    if (!assetsRef.current) assetsRef.current = initBakedAssets();
     setUiPhase("playing");
-  }, []);
+    audio.startBg();
+  }, [audio]);
 
   const restartGame = useCallback(() => {
+    audio.play("transition");
     startGame();
-  }, [startGame]);
+  }, [audio, startGame]);
 
   const tick = useCallback((dt: number) => {
-    const gs = gsRef.current;
+    const gs     = gsRef.current;
     const assets = assetsRef.current;
     const canvas = canvasRef.current;
     if (!gs || !assets || !canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
 
     gameTick(gs, dt, inputRef);
 
     const playerAlive = gs.player.status === "alive";
     hudSync.write({
-      score:    gs.currentRow,
-      lives:    playerAlive ? 1 : 0,
-      time:     Math.ceil(Math.max(0, gs.timeLeft)),
-      health:   playerAlive ? 100 : 0,
-      maxHealth: 100,
-      level:    gs.currentRow,
+      score: gs.currentRow, lives: playerAlive ? 1 : 0,
+      time: Math.ceil(Math.max(0, gs.timeLeft)),
+      health: playerAlive ? 100 : 0, maxHealth: 100,
+      level: gs.currentRow,
     });
-    
-    // Explicit frame cycle sync tick flush instruction prevents telemetry interface lag
-    hudSync.tick(performance.now());   
+    hudSync.tick(performance.now());
 
     if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
       hudSync.write({ health: 0, lives: 0 });
       hudSync.forceFlush();
       setFinalRow(gs.currentRow);
       setUiPhase("gameover");
+      audio.stopBg();
     }
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
       setFinalElapsed(gs.elapsed);
       setUiPhase("victory");
+      audio.stopBg();
     }
 
-    const quality: "high" | "low" = "high";
-    renderFrame(ctx, gs, assets, quality);
-  }, [hudSync]);
+    renderFrame(ctx2d, gs, assets, "high");
+  }, [hudSync, audio]);
 
   useGameLoop(tick, uiPhase === "playing");
 
@@ -1256,57 +1205,63 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     <div
       ref={containerRef}
       style={{
-        position: "relative",
-        width: "100%",
-        height: "100%",
-        minHeight: 400,
+        position: "relative", width: "100%", height: "100%", minHeight: 400,
         background: VOID_COLOR,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        fontFamily: "'Courier New', monospace",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        overflow: "hidden", fontFamily: "'Courier New', monospace",
       }}
     >
       <canvas
         ref={canvasRef}
-        style={{
-          display: "block",
-          imageRendering: "pixelated",
-          width: "100%", 
-          height: "100%", 
-          objectFit: "contain" 
-        }}
+        style={{ display: "block", imageRendering: "pixelated",
+          width: "100%", height: "100%", objectFit: "contain" }}
       />
 
-      {onExit && (
+      {/* ── Escape hatch (always visible during play) ── */}
+      {handleMenu && (
         <button
-          onClick={onExit}
+          onClick={handleMenu}
           style={{
-            position: "absolute", top: 16, left: 16, zIndex: 250, padding: "10px 18px",
-            background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.3)",
-            borderRadius: 4, color: "#fff", fontFamily: "monospace", fontSize: 12,
-            letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer",
-            backdropFilter: "blur(6px)",
+            position: "absolute", top: 16, left: 16, zIndex: 250,
+            padding: "10px 18px",
+            background: "rgba(0,0,0,0.65)",
+            border: "1px solid rgba(255,255,255,0.3)",
+            borderRadius: 4, color: "#fff",
+            fontFamily: "monospace", fontSize: 12,
+            letterSpacing: "0.14em", textTransform: "uppercase",
+            cursor: "pointer", backdropFilter: "blur(6px)",
           }}
         >
           ← MENU (ESC)
         </button>
       )}
 
+      {/* ── Intro ── */}
       {uiPhase === "intro" && <IntroScreen onStart={startGame} />}
+
+      {/* ── Game over (eliminated) ── */}
       {uiPhase === "gameover" && (
-        <GameOverScreen
-          row={finalRow}
-          total={TOTAL_ROWS}
-          onRestart={restartGame}
-          onExit={onExit} 
+        <ResultScreen
+          outcome="eliminated"
+          statLine={`PANEL ${finalRow} OF ${TOTAL_ROWS}`}
+          onTryAgain={restartGame}
+          onMenu={handleMenu ?? (() => {})}
+          onMount={() => audio.play("exit")}
         />
       )}
+
+      {/* ── Victory (survived) ── */}
       {uiPhase === "victory" && (
-        <VictoryScreen elapsed={finalElapsed} onRestart={restartGame} onExit={onExit} />
+        <ResultScreen
+          outcome="victory"
+          statLine={`TIME: ${Math.floor(finalElapsed)}s`}
+          onTryAgain={restartGame}
+          onMenu={handleMenu ?? (() => {})}
+          onMount={() => audio.play("open")}
+        />
       )}
 
+      {/* ── Touch controls ── */}
       {uiPhase === "playing" && (
         <MobileTouchControls visible={isTouchDevice} inputRef={inputRef} />
       )}
