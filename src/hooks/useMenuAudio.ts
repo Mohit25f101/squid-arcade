@@ -37,7 +37,7 @@ export function useMenuAudio(): MenuAudioController {
     import("howler").then(({ Howl }) => {
       // Background ambient loop — music-box doll theme
       bgRef.current = new Howl({
-        src:    ["/audio/melodic/music-box-theme.webm"],
+        src:    ["/audio/melodic/Back Song.mp3"],
         loop:   true,
         volume: settings.musicVolume * settings.masterVolume * 0.55,
         preload: true,
