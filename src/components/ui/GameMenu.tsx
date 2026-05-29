@@ -6,16 +6,16 @@
  * Part 1 Refactor — Navigation & UI
  *
  * Changes from original:
- *  - "select" MenuState removed; clicking a game icon launches immediately.
- *  - SelectCard component removed.
- *  - handleShowSelect / handleBackToMain removed.
- *  - Nav list (PLAY GAME / SETTINGS / EXIT) replaced by ControlsHUD
- *    (fixed bottom-right ⚙ gear + ↩ exit icon buttons).
- *  - SettingsOverlay dynamic import replaced by inline SettingsPanel that
- *    reads and writes gameStore directly — settings now persist correctly.
- *  - handleExitConfirm: window.close() replaced with resetHUD() +
- *    setActiveGame("menu"), which atomically resets runtimePhase → "idle"
- *    and clears eliminationPayload.
+ * - "select" MenuState removed; clicking a game icon launches immediately.
+ * - SelectCard component removed.
+ * - handleShowSelect / handleBackToMain removed.
+ * - Nav list (PLAY GAME / SETTINGS / EXIT) replaced by ControlsHUD
+ * (fixed bottom-right ⚙ gear + ↩ exit icon buttons).
+ * - SettingsOverlay dynamic import replaced by inline SettingsPanel that
+ * reads and writes gameStore directly — settings now persist correctly.
+ * - handleExitConfirm: window.close() replaced with resetHUD() +
+ * setActiveGame("menu"), which atomically resets runtimePhase → "idle"
+ * and clears eliminationPayload.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -435,7 +435,7 @@ function ExitConfirm({
       className="sq-overlay-backdrop"
       onPointerDown={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="sq-overlay-panel" style={{ textAlign:"center", maxWidth:380 }}>
+      <div className="sq-overlay-panel" style={{ textAlign:"center", maxWidth:380, width: "min(380px, 90vw)" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:"1rem" }}>
           <SymbolTrio size={18} gap={10} />
         </div>
@@ -545,12 +545,12 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
       <div className="sq-scanline-sweep" aria-hidden />
 
       {/* Ambient glow shapes */}
-      <div className="sq-ambient-shape pink" aria-hidden style={{ width:600, height:600, top:"-15%",  left:"-10%" }} />
-      <div className="sq-ambient-shape teal" aria-hidden style={{ width:400, height:400, bottom:"-10%", right:"-8%", animationDelay:"3s" }} />
+      <div className="sq-ambient-shape pink" aria-hidden style={{ width:"80vmin", height:"80vmin", top:"-15%",  left:"-10%" }} />
+      <div className="sq-ambient-shape teal" aria-hidden style={{ width:"60vmin", height:"60vmin", bottom:"-10%", right:"-8%", animationDelay:"3s" }} />
 
       {/* Geometric rings */}
-      <div className="sq-geo-circle spin" aria-hidden style={{ width:500, height:500, top:"-120px",  right:"-120px", borderColor:"rgba(255,0,102,0.08)" }} />
-      <div className="sq-geo-circle"      aria-hidden style={{ width:700, height:700, bottom:"-220px", left:"-220px", borderColor:"rgba(0,255,178,0.04)", animation:"sq-spin-slow 40s linear reverse infinite" }} />
+      <div className="sq-geo-circle spin" aria-hidden style={{ width:"70vmin", height:"70vmin", top:"-15vmin",  right:"-15vmin", borderColor:"rgba(255,0,102,0.08)" }} />
+      <div className="sq-geo-circle"      aria-hidden style={{ width:"90vmin", height:"90vmin", bottom:"-25vmin", left:"-25vmin", borderColor:"rgba(0,255,178,0.04)", animation:"sq-spin-slow 40s linear reverse infinite" }} />
 
       {/* Decorative symbols */}
       <CircleSymbol   size={70} color="#FF0066" glow animate style={{ position:"absolute", top:"12%",    left:"6%",   opacity:0.15 }} />
