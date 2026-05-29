@@ -434,3 +434,48 @@ body {
   outline: 2px solid var(--color-safe);
   outline-offset: 3px;
 }
+
+/* ── ROOT CAUSE FIXES: MOBILE & FOLDABLES RESPONSIVENESS ── */
+.sq-menu-root {
+  width: 100vw !important;
+  height: 100dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+.sq-menu-content {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: space-evenly !important; /* Distributes vertical space evenly, preventing cropping */
+  padding: calc(env(safe-area-inset-top) + 1rem) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 1rem) env(safe-area-inset-left) !important;
+}
+
+.sq-main-title {
+  font-size: clamp(2.5rem, 12vw, 8rem) !important; /* Scalable title ensuring Fold screen safety */
+}
+
+.sq-icons-row {
+  display: flex !important;
+  flex-wrap: wrap !important; /* Allows cards to wrap vertically on narrow devices */
+  justify-content: center !important;
+  gap: clamp(1rem, 3vw, 2rem) !important;
+  width: 100% !important;
+  padding: 0 1rem !important;
+}
+
+.sq-icon-card {
+  flex: 1 1 clamp(130px, 25%, 300px) !important;
+  max-width: 300px !important;
+}
+
+.sq-status-pill {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+}
