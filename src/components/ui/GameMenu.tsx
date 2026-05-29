@@ -52,8 +52,8 @@ interface GameMode {
 
 const GAME_MODES: GameMode[] = [
   { id: "red-light-green-light", icon: "/RedLightGreenLight.ico", label: "RED LIGHT\nGREEN LIGHT", sub: "RED LIGHT GREEN LIGHT", color: "#FF0066", badge: "GAME 01", episode: 1, desc: "Run. Freeze. Survive 60 seconds. One false move ends everything.", difficulty: 3 },
-  { id: "glass-breaker",         icon: "/GlassBridge.ico",        label: "GLASS\nBREAKER",          sub: "GLASS BREAKER",         color: "#00FFB2", badge: "GAME 04", episode: 5, desc: "Two panes. One safe. Sixteen rows to cross. No second chances.",   difficulty: 4 },
-  { id: "dalgona",               icon: "/DalgonaCandy.ico",        label: "DALGONA",                 sub: "DALGONA",               color: "#FFD700", badge: "GAME 02", episode: 3, desc: "Carve the shape without breaking the candy. Steady hands survive.", difficulty: 3 },
+  { id: "glass-breaker",         icon: "/GlassBridge.ico",        label: "GLASS\nBREAKER",          sub: "GLASS BREAKER",         color: "#00FFB2", badge: "GAME 02", episode: 2, desc: "Two panes. One safe. Sixteen rows to cross. No second chances.",   difficulty: 4 },
+  { id: "dalgona",               icon: "/DalgonaCandy.ico",        label: "DALGONA",                 sub: "DALGONA",               color: "#FFD700", badge: "GAME 03", episode: 3, desc: "Carve the shape without breaking the candy. Steady hands survive.", difficulty: 3 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
