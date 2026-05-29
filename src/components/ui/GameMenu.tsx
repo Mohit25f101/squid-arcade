@@ -154,7 +154,7 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
       <div className="sq-menu-content" style={{ opacity: menuState === "intro" ? 0 : 1, transition: "opacity 0.5s ease" }}>
         <div className="sq-title-block">
           <span className="sq-korean-label sq-font-korean">스피드 게임</span>
-          <h1 className="sq-main-title sq-font-bebas">SPEED GAME</h1>
+          <h1 className="sq-main-title sq-font-bebas">SQUID GAME</h1>
           <div className="sq-title-divider">
             <div className="sq-title-divider-line pink-right" /><CircleSymbol size={7} color="#FF0066" glow /><TriangleSymbol size={7} color="#00FFB2" glow /><SquareSymbol size={7} color="#FF0066" glow /><div className="sq-title-divider-line pink-left" />
           </div>
