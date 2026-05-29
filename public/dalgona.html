@@ -139,7 +139,7 @@
   <div class="guide-line">— slowly</div>
 </div>
 
-<button id="back-btn" onclick="history.back()">◀ MENU</button>
+<button id="back-btn">◀ MENU</button>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -164,7 +164,7 @@ const EDGE_TO_INTEGRITY = 0.30;
 const FRACTURE_THRESHOLD = 0.52;
 const CARVE_RADIUS = 16;
 const ON_EDGE_TOL = 26;
-const COMPLETION_WIN = 0.80;
+const COMPLETION_WIN = 0.95;
 const SCRAPE_AUDIO_MS = 90;
 
 const GRID = 32;
@@ -204,6 +204,11 @@ let needleX = 0, needleY = 0;
 let needlePrevX = 0, needlePrevY = 0;
 let needleVel = 0;
 let lastScrapeAudio = 0;
+
+// Bug 4: Sequential carving tracker
+let lastCarvedSegment = -1;
+// postMessage bridge guard (send result exactly once per round)
+let messageSent = false;
 
 // Stability (rolling variance of velocity)
 const STAB_BUF_SIZE = 48;
@@ -505,6 +510,8 @@ function initGame(id){
   shakeIntensity = 0;
   vignetteRed = 0;
   frame = 0;
+  lastCarvedSegment = -1; // Bug 4: reset sequential tracker
+  messageSent = false;    // reset postMessage bridge guard
   rebuildOffscreens();
 }
 
@@ -532,8 +539,10 @@ function setPhase(p){
     document.getElementById('screen-success').classList.add('active');
     document.getElementById('success-sub').textContent=
       `Shape preserved · Integrity ${Math.round(candyIntegrity*100)}%`;
+    sendGameResult({ type: 'DALGONA_SUCCESS' });
   } else if(p==='eliminated'){
     document.getElementById('screen-eliminated').classList.add('active');
+    sendGameResult({ type: 'DALGONA_ELIMINATED', reason: 'candy-snapped' });
   }
 }
 
@@ -564,6 +573,19 @@ canvas.addEventListener('pointerdown', e=>{
   needleVel=0;
   if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
   getAudio(); // unlock
+
+  // Bug 1+3: Validate the initial press too — clicking off-path is a fail
+  if(phase==='playing'){
+    const worldX=needleX/scale, worldY=needleY/scale;
+    const inSlab=(
+      worldX>=CANDY_X-6 && worldX<=CANDY_X+CANDY_W+6 &&
+      worldY>=CANDY_Y-6 && worldY<=CANDY_Y+CANDY_H+6
+    );
+    if(!inSlab){ triggerInstantFail('initial-click-outside-slab'); return; }
+    if(distToOutline(pos,shapePath)>=ON_EDGE_TOL*scale){
+      triggerInstantFail('initial-click-off-path'); return;
+    }
+  }
 }, {passive:false});
 
 canvas.addEventListener('pointermove', e=>{
@@ -585,21 +607,104 @@ canvas.addEventListener('pointerup', e=>{
 });
 canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
 
-// ── Core carving logic ────────────────────────────────
+// ── postMessage bridge helpers ─────────────────────────
+// sendBridgeMessage: always fires (back button uses this)
+function sendBridgeMessage(msg){
+  try{ window.parent.postMessage(msg,'*'); }catch(e){}
+}
+// sendGameResult: fires at most once per round (eliminated / success)
+function sendGameResult(msg){
+  if(messageSent) return;
+  messageSent=true;
+  sendBridgeMessage(msg);
+}
+
+// ── Instant failure (Bug 1 + Bug 3) ───────────────────
+// Called any time the needle goes off-path or off-slab while active.
+// Saturates the grid at the needle position for visual drama, then
+// transitions to eliminated.
+function triggerInstantFail(reason){
+  if(phase!=='playing') return;
+  playSnap();
+  shakeIntensity=22;
+  // Burst sparks at needle position
+  for(let i=0;i<3;i++) emitCrackSpark(needleX,needleY,1.0);
+  // Saturate grid cells near needle so the heatmap shows the rupture point
+  const {gx,gy}=worldToGrid(needleX,needleY);
+  const blastR=5;
+  for(let dy=-blastR;dy<=blastR;dy++){
+    for(let dx=-blastR;dx<=blastR;dx++){
+      const nx=gx+dx, ny=gy+dy;
+      if(nx<0||ny<0||nx>=GRID||ny>=GRID) continue;
+      if(Math.sqrt(dx*dx+dy*dy)>blastR) continue;
+      const idx=cellIdx(nx,ny);
+      edgeStressGrid[idx]=1.0;
+      structuralStrength[idx]=0;
+      fracturePoints.push({
+        x:(CANDY_X+nx*CELL+CELL/2)*scale,
+        y:(CANDY_Y+ny*CELL+CELL/2)*scale,
+        radius:4*scale, maxRadius:(14+10)*scale,
+        age:0, severity:1.0,
+        spokeAngles:Array.from({length:8},(_,k)=>(k/8)*Math.PI*2+Math.random()*0.5)
+      });
+    }
+  }
+  phase='snap';
+  // sendGameResult deferred so it fires alongside setPhase('eliminated')
+  setTimeout(()=>setPhase('eliminated'), 800);
+}
+
+// ── Sequential-arc win validation (Bug 4) ─────────────
+// Requires:
+//   1. carvedSegments.size ≥ COMPLETION_WIN fraction of total
+//   2. Those segments form a *contiguous* arc on the closed polygon
+//      (no teleporting to the opposite side of the shape)
+function checkWin(){
+  const total=shapePath.length;
+  if(carvedSegments.size<total*COMPLETION_WIN) return false;
+
+  // Build boolean array and find the longest contiguous true-run
+  // with wrap-around (handles shapes where the arc spans index 0).
+  const carved=new Array(total).fill(false);
+  for(const idx of carvedSegments) carved[idx]=true;
+
+  let best=0, run=0;
+  for(let i=0;i<total*2;i++){
+    if(carved[i%total]){ run++; best=Math.max(best,run); }
+    else { run=0; }
+  }
+  best=Math.min(best,total); // cap so we never exceed 100%
+  return best/total>=COMPLETION_WIN;
+}
+
+// ── Core carving logic (all four bugs fixed) ──────────
 // ── Core carving logic ────────────────────────────────
 function processCarve(){
   const pos={x:needleX, y:needleY};
-  const edgeDist=distToOutline(pos, shapePath);
-  const onEdge=edgeDist < ON_EDGE_TOL*scale;
 
-  if(!onEdge || needleVel < 0.3) return;
+  // ── Bug 3: Needle outside candy slab = instant fail ──
+  const worldX=needleX/scale, worldY=needleY/scale;
+  const SLAB_MARGIN=6;
+  const inSlab=(
+    worldX>=CANDY_X-SLAB_MARGIN && worldX<=CANDY_X+CANDY_W+SLAB_MARGIN &&
+    worldY>=CANDY_Y-SLAB_MARGIN && worldY<=CANDY_Y+CANDY_H+SLAB_MARGIN
+  );
+  if(!inSlab){ triggerInstantFail('needle-left-slab'); return; }
 
-  // Mark carved segments
+  // ── Bug 1: Off-path = instant fail (no silent early exit) ──
+  const edgeDist=distToOutline(pos,shapePath);
+  const onEdge=edgeDist<ON_EDGE_TOL*scale;
+  if(!onEdge){ triggerInstantFail('off-path'); return; }
+
+  // On-path but needle barely moving: no carve, no penalty
+  if(needleVel<0.3) return;
+
+  // ── Bug 2: Segment proximity (not midpoint proximity) ──
   for(let i=0;i<shapePath.length;i++){
     const a=shapePath[i], b=shapePath[(i+1)%shapePath.length];
-    const mid={x:(a.x+b.x)/2, y:(a.y+b.y)/2};
-    if(dist(pos,mid)<CARVE_RADIUS*scale*1.6){
+    if(distToSegment(pos,a,b)<CARVE_RADIUS*scale){
       carvedSegments.add(i);
+      lastCarvedSegment=i;
     }
   }
 
@@ -629,7 +734,14 @@ function processCarve(){
     }
   }
 
-  completionRatio = carvedSegments.size / shapePath.length;
+  // ── Bug 4: Contiguous-arc win check (replaces raw ratio check) ──
+  completionRatio=carvedSegments.size/shapePath.length;
+  if(checkWin()){
+    playTick(880,0.3,0.3);
+    setTimeout(()=>playTick(1100,0.3,0.3),200);
+    setPhase('success');
+    return;
+  }
 
   // Emit dust
   if(Math.random()<0.4) emitDust(needleX, needleY, 2);
@@ -663,14 +775,6 @@ function processCarve(){
     } else {
       warnEl.style.opacity=0;
     }
-  }
-
-  // Check win condition
-  if(completionRatio>=COMPLETION_WIN){
-    playTick(880,0.3,0.3);
-    setTimeout(()=>playTick(1100,0.3,0.3),200);
-    setPhase('success');
-    return;
   }
 }
 
@@ -1107,6 +1211,11 @@ rafId=requestAnimationFrame(loop);
 
 // Expose for buttons
 window.restartGame = restartGame;
+
+// Back button → DALGONA_MENU (never uses history.back)
+document.getElementById('back-btn').addEventListener('click',function(){
+  sendBridgeMessage({ type: 'DALGONA_MENU' });
+});
 </script>
 </body>
 </html>

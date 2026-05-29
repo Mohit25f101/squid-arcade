@@ -52,8 +52,8 @@ interface GameMode {
 
 const GAME_MODES: GameMode[] = [
   { id: "red-light-green-light", icon: "/RedLightGreenLight.ico", label: "RED LIGHT\nGREEN LIGHT", sub: "RED LIGHT GREEN LIGHT", color: "#FF0066", badge: "GAME 01", episode: 1, desc: "Run. Freeze. Survive 60 seconds. One false move ends everything.", difficulty: 3 },
-  { id: "glass-breaker",         icon: "/GlassBridge.ico",        label: "GLASS\nBREAKER",          sub: "GLASS BREAKER",         color: "#00FFB2", badge: "GAME 04", episode: 5, desc: "Two panes. One safe. Sixteen rows to cross. No second chances.",   difficulty: 4 },
-  { id: "dalgona",               icon: "/DalgonaCandy.ico",        label: "DALGONA",                 sub: "DALGONA",               color: "#FFD700", badge: "GAME 02", episode: 3, desc: "Carve the shape without breaking the candy. Steady hands survive.", difficulty: 3 },
+  { id: "glass-breaker",         icon: "/GlassBridge.ico",        label: "GLASS\nBREAKER",          sub: "GLASS BREAKER",         color: "#00FFB2", badge: "GAME 02", episode: 2, desc: "Two panes. One safe. Sixteen rows to cross. No second chances.",   difficulty: 4 },
+  { id: "dalgona",               icon: "/DalgonaCandy.ico",        label: "DALGONA",                 sub: "DALGONA",               color: "#FFD700", badge: "GAME 03", episode: 3, desc: "Carve the shape without breaking the candy. Steady hands survive.", difficulty: 3 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -481,6 +481,8 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
   const setActiveGame = useGameStore(s => s.setActiveGame);
   const resetHUD      = useGameStore(s => s.resetHUD);
   const audio         = useMenuAudio();
+  const settings       = useGameStore(s => s.settings);
+  const updateSettings = useGameStore(s => s.updateSettings);
 
   // ── Intro sequence ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -635,7 +637,60 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
         />
       )}
 
-      {/* ── Overlays ────────────────────────────────────────────────────── */}
+      {/* ── NEW: Custom Play/Pause Music Toggle ─────────── */}
+      {menuState === "main" && (
+        <button
+          aria-label="Toggle Music"
+          onClick={(e) => {
+            e.stopPropagation(); // Prevents clicks from triggering anything behind it
+            handleClick(); // Plays your UI click sound
+            // Toggle the global music volume between 1 (100%) and 0 (Muted)
+            updateSettings({ musicVolume: settings.musicVolume > 0 ? 0 : 1 });
+          }}
+          onMouseEnter={(e) => {
+            handleHover();
+            e.currentTarget.style.borderColor = "#00FFB280";
+            e.currentTarget.style.background = "#00FFB218";
+            e.currentTarget.style.color = "#00FFB2";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+            e.currentTarget.style.background = "rgba(8,8,14,0.78)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.55)";
+          }}
+          style={{
+            position: "absolute",
+            left: "max(20px, calc(env(safe-area-inset-left, 0px) + 16px))",
+            bottom: "max(20px, calc(env(safe-area-inset-bottom, 0px) + 16px))",
+            width: 44, height: 44, minWidth: 44, minHeight: 44,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(8,8,14,0.78)",
+            border: "1px solid rgba(255,255,255,0.14)",
+            borderRadius: 4,
+            cursor: "pointer",
+            color: "rgba(255,255,255,0.55)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            transition: "border-color 140ms, background 140ms, color 140ms",
+            zIndex: 50,
+          }}
+        >
+          {settings.musicVolume > 0 ? (
+            /* Playing Icon (Speaker with waves) */
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </svg>
+          ) : (
+            /* Muted Icon (Speaker with an X) */
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          )}
+        </button>
+      )}
       {menuState === "settings" && (
         <SettingsPanel
           onClose={handleCloseSettings}
