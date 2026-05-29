@@ -292,11 +292,11 @@ function SettingsPanel({
   return (
     <div
       className="sq-overlay-backdrop"
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+      onPointerDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         className="sq-overlay-panel"
-        style={{ maxWidth: 420, width: "min(420px, 90vw)", maxHeight: "85vh", overflowY: "auto" }}
+        style={{ maxWidth: 420, width: "min(420px, 90vw)", maxHeight: "85dvh", overflowY: "auto", overscrollBehavior: "contain" }}
       >
         <div style={{ display:"flex", justifyContent:"center", marginBottom:"0.9rem" }}>
           <SymbolTrio size={14} gap={10} />
@@ -433,7 +433,7 @@ function ExitConfirm({
   return (
     <div
       className="sq-overlay-backdrop"
-      onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}
+      onPointerDown={e => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div className="sq-overlay-panel" style={{ textAlign:"center", maxWidth:380 }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:"1rem" }}>
