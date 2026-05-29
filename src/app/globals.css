@@ -3,12 +3,12 @@
  * app/globals.css
  *
  * Architecture decisions:
- *   - All dimensions use clamp() or CSS variables — zero hardcoded px layouts
- *   - dvh (dynamic viewport height) prevents mobile browser chrome from clipping the game
- *   - Safe-area-inset-* handles iPhone notch, Dynamic Island, Android cutouts
- *   - Tailwind handles breakpoints; this file handles the cross-cutting concerns
- *     that Tailwind can't express cleanly (container queries, game canvas scaling)
- *   - Canvas fills its container via object-fit:contain logic reproduced in CSS
+ * - All dimensions use clamp() or CSS variables — zero hardcoded px layouts
+ * - dvh (dynamic viewport height) prevents mobile browser chrome from clipping the game
+ * - Safe-area-inset-* handles iPhone notch, Dynamic Island, Android cutouts
+ * - Tailwind handles breakpoints; this file handles the cross-cutting concerns
+ * that Tailwind can't express cleanly (container queries, game canvas scaling)
+ * - Canvas fills its container via object-fit:contain logic reproduced in CSS
  */
 
 /* ── Reset & base ─────────────────────────────────────────────────────── */
@@ -48,28 +48,28 @@ body {
 }
 
 /* ── Design tokens ────────────────────────────────────────────────────── */
-/* src/app/globals.css — only the :root token block changes */
-/* Replace your existing :root { ... } with this: */
-
 :root {
-  /* Squid Arcade color palette — aligned to roadmap spec */
-  --color-neon-green:   #00ff88;
-  --color-neon-red:     #ff2d2d;   /* was #ff2d55 → roadmap blood red */
-  --color-neon-yellow:  #ffd60a;
-  --color-neon-blue:    #0a84ff;
-  --color-pink:         #ff4fa3;   /* new — roadmap neon pink */
-  --color-charcoal:     #111111;   /* new — roadmap charcoal */
-  --color-bg:           #060608;
-  --color-surface:      #0d0d12;
-  --color-surface-2:    #14141d;
+  /* Cinematic Dystopian Palette */
+  --color-brand-pink:   #ed1b76;
+  --color-brand-teal:   #038779;
+  
+  --color-danger:       #d80027;
+  --color-danger-glow:  rgba(216, 0, 39, 0.4);
+  --color-safe:         #00f5c4;
+  --color-safe-glow:    rgba(0, 245, 196, 0.4);
+  --color-amber:        #d9772b;
+  
+  --color-bg-core:      #050507;
+  --color-surface:      #0e0f14;
+  --color-surface-2:    #181a24;
   --color-border:       rgba(255 255 255 / 0.08);
-  --color-text:         #f5f5f5;   /* was #f0ece0 (warm) → cold white */
-  --color-muted:        rgba(245 245 245 / 0.45);
+  --color-text:         #e2e2e5;
+  --color-muted:        rgba(226 226 229 / 0.45);
 
   /* Typography */
-  --font-display: "Barlow Condensed", "Impact", sans-serif;
-  --font-body:    "DM Mono", "JetBrains Mono", monospace;
-  --font-hud:     "Barlow Condensed", sans-serif;
+  --font-display: "Rajdhani", "Barlow Condensed", sans-serif;
+  --font-body:    "JetBrains Mono", monospace;
+  --font-hud:     "Rajdhani", sans-serif;
 
   /* Spacing */
   --space-xs:   clamp(0.25rem, 0.5vw, 0.5rem);
@@ -104,7 +104,7 @@ body {
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--color-bg-core);
 }
 
 /* ── Transition curtain ───────────────────────────────────────────────── */
@@ -157,7 +157,7 @@ body {
   z-index: 100;
 }
 
-/* ── Canvas area: fills remaining space ──────────────────────────────── */
+/* ── Canvas area: Ambient Bleed Fix ──────────────────────────────── */
 .shell-canvas {
   flex: 1 1 0;
   min-height: 0;         /* critical: flex shrink below content size */
@@ -166,26 +166,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg);
+  background: radial-gradient(circle at center, var(--color-surface), var(--color-bg-core));
 }
-
-/*
- * CANVAS SCALING STRATEGY:
- * The game canvas is always rendered at a fixed internal resolution
- * (e.g. 1920×1080 or 1280×720) and then scaled to fit the container.
- *
- * Two approaches:
- *
- * A) CSS-only scaling (simpler):
- *    Set canvas width/height in JS to the fixed resolution.
- *    Then let CSS scale it to fit the container.
- *    This avoids canvas re-initialization on resize.
- *
- * B) ResizeObserver (recommended for high-DPI):
- *    Observe the container element, then set canvas pixel dimensions
- *    to container × devicePixelRatio, and use CSS to keep it at
- *    container size. Produces crisp pixels on retina displays.
- */
 
 /* Approach A: CSS scaling wrapper */
 .canvas-scale-wrapper {
@@ -200,12 +182,14 @@ body {
   /*
    * contain: fit the canvas inside the shell-canvas area
    * while preserving the 16:9 aspect ratio.
-   * This is the CSS equivalent of object-fit:contain on an <img>.
+   * We maintain the logical 16:9 for gameplay mechanics, 
+   * but allow visual elements (via CSS box-shadows/filters) to blend into the shell 
    */
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: var(--game-aspect);
   display: block;
+  box-shadow: 0 0 120px rgba(0,0,0,0.9);
 }
 
 /* ── HUD overlay ──────────────────────────────────────────────────────── */
@@ -280,13 +264,13 @@ body {
 .speed-meter-fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--color-neon-green), var(--color-neon-yellow));
+  background: linear-gradient(90deg, var(--color-safe), var(--color-amber));
   transition: width 80ms linear, background 300ms;
   transform-origin: left;
 }
 
 .speed-meter-fill[data-danger="true"] {
-  background: linear-gradient(90deg, var(--color-neon-yellow), var(--color-neon-red));
+  background: linear-gradient(90deg, var(--color-amber), var(--color-danger));
 }
 
 /* ── Touch controls ───────────────────────────────────────────────────── */
@@ -335,14 +319,14 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--space-md);
-  background: var(--color-bg);
+  background: var(--color-bg-core);
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
   border: 2px solid rgba(255 255 255 / 0.1);
-  border-top-color: var(--color-neon-green);
+  border-top-color: var(--color-safe);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -418,7 +402,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 99999;
-  background: var(--color-bg);
+  background: var(--color-bg-core);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -447,6 +431,6 @@ body {
 
 /* ── Focus ring for keyboard navigation ──────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--color-neon-green);
+  outline: 2px solid var(--color-safe);
   outline-offset: 3px;
 }

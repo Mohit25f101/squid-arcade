@@ -74,15 +74,37 @@ export default function DalgonaCandy({ onExit }: DalgonaCandyProps) {
   }, [triggerElimination, setRuntimePhase, handleMenuExit]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/*
-        The iframe's own ◀ MENU button now sends DALGONA_MENU via postMessage,
-        so no React overlay button is needed. The bridge above handles routing.
+    <div style={{ 
+      position: "relative", 
+      width: "100%", 
+      height: "100%",
+      /* Cinematic Wrapper: Warm amber spotlight effect */
+      background: "radial-gradient(circle at 50% 40%, #2a1608 0%, #050507 80%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }}>
+      {/* Vignette overlay directly on top of the iframe to simulate realistic 
+        camera lens shadowing and blend the iframe edges seamlessly.
       */}
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        boxShadow: "inset 0 0 150px rgba(0,0,0,0.95)",
+        zIndex: 10
+      }} />
       <iframe
         ref={iframeRef}
         src="/dalgona.html"
-        style={{ width: "100%", height: "100vh", border: "none", display: "block" }}
+        style={{ 
+          width: "100%", 
+          height: "100dvh", 
+          border: "none", 
+          display: "block",
+          /* Add a subtle sepia/contrast filter to unify the iframe's colors */
+          filter: "contrast(1.1) sepia(0.2) saturate(1.2)"
+        }}
         title="Dalgona Candy Game"
         allow="autoplay"
       />
