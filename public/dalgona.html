@@ -4,122 +4,513 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Dalgona Candy — Survival Physics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; background: #060404; overflow: hidden; font-family: 'Courier New', monospace; }
-  #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; touch-action: none; cursor: crosshair; }
-  #ui-overlay {
-    position: fixed; inset: 0; pointer-events: none; z-index: 10;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-  }
-  .phase-screen {
-    display: none; flex-direction: column; align-items: center; gap: 20px;
-    background: rgba(0,0,0,0.85); border: 1px solid rgba(255,200,60,0.3);
-    padding: 40px 50px; backdrop-filter: blur(8px);
-    pointer-events: auto;
-  }
-  .phase-screen.active { display: flex; }
-  .title-big {
-    font-size: clamp(36px, 6vw, 72px); font-weight: 900;
-    letter-spacing: 0.15em; text-transform: uppercase; line-height: 1;
-  }
-  .subtitle { font-size: clamp(12px, 2vw, 16px); letter-spacing: 0.25em; color: rgba(255,220,140,0.6); text-transform: uppercase; }
-  .shape-badge {
-    font-size: clamp(48px, 10vw, 96px); color: #ffd93d;
-    text-shadow: 0 0 40px rgba(255,210,60,0.8); line-height: 1;
-  }
-  .countdown-num {
-    font-size: clamp(80px, 18vw, 160px); font-weight: 900;
-    color: #fff; text-shadow: 0 0 60px rgba(255,255,255,0.5); line-height: 1;
-  }
-  .btn {
-    font-family: 'Courier New', monospace; font-size: 14px; font-weight: 900;
-    letter-spacing: 0.2em; text-transform: uppercase;
-    padding: 14px 36px; cursor: pointer; border: none;
-    border: 3px solid #000; box-shadow: 4px 4px 0 #000;
-    transition: transform 0.08s, box-shadow 0.08s;
-  }
-  .btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 #000; }
-  .btn-green { background: #037a76; color: #fff; }
-  .btn-pink { background: #ed1b76; color: #fff; }
-  .result-title { font-size: clamp(42px, 8vw, 88px); font-weight: 900; letter-spacing: 0.12em; text-shadow: 0 0 40px currentColor; }
-  .result-sub { font-size: 14px; color: rgba(255,220,140,0.65); letter-spacing: 0.1em; }
-  .integrity-warning {
-    position: fixed; bottom: 22%; left: 50%; transform: translateX(-50%);
-    font-size: clamp(11px, 2vw, 15px); font-weight: 700; letter-spacing: 0.12em;
-    color: #ff6b35; text-shadow: 0 0 14px rgba(255,80,0,0.6);
-    pointer-events: none; white-space: nowrap; opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .hud-bar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 24px; background: rgba(0,0,0,0.7);
-    border-top: 1px solid rgba(255,200,60,0.15); pointer-events: none;
-  }
-  .hud-item { display: flex; flex-direction: column; gap: 4px; }
-  .hud-label { font-size: 9px; letter-spacing: 0.2em; color: rgba(255,220,140,0.5); text-transform: uppercase; }
-  .hud-value { font-size: 16px; font-weight: 700; color: #fff; }
-  .progress-track { width: 160px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 3px; background: #ffd93d; transition: width 0.15s; }
-  .needle-guide {
-    position: fixed; top: 50%; right: 24px; transform: translateY(-50%);
-    display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
-    pointer-events: none; opacity: 0; transition: opacity 0.5s;
-  }
-  .guide-line { font-size: 10px; letter-spacing: 0.1em; color: rgba(255,200,60,0.5); text-align: right; }
-  #vignette {
-    position: fixed; inset: 0; pointer-events: none; z-index: 5;
-    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0,0,0,0) 100%);
-    transition: background 0.3s;
-  }
-  #back-btn {
-    position: fixed; top: 14px; left: 14px; z-index: 20;
-    font-family: 'Courier New', monospace; font-size: 12px; font-weight: 900;
-    letter-spacing: 0.15em; text-transform: uppercase;
-    color: #fff; background: #ed1b76; border: 3px solid #000;
-    box-shadow: 3px 3px 0 #000; padding: 8px 14px; cursor: pointer;
-  }
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+  --amber-light:    #f5c842;
+  --amber:          #e8a428;
+  --amber-dark:     #c07318;
+  --caramel:        #a0520c;
+  --burnt:          #6b2e06;
+  --cream:          rgba(255,248,210,0.9);
+  --bg-deep:        #080401;
+  --bg-warm:        #120800;
+  --glow-amber:     rgba(200,120,20,0.35);
+  --danger:         #ff4444;
+  --success-color:  #ffd93d;
+  --pink:           #ed1b76;
+  --pink-shadow:    #9e0050;
+  --teal:           #037a76;
+  --teal-shadow:    #024a46;
+  --font-display:   'Barlow Condensed', 'Impact', sans-serif;
+  --font-mono:      'DM Mono', 'Courier New', monospace;
+  --ease-snap:      cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Foundation ─────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background: var(--bg-deep);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ── Canvas root ─────────────────────────────────────────────── */
+#root {
+  width: 100%; height: 100%; height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 55%,
+      rgba(120,55,8,0.18) 0%,
+      rgba(60,25,3,0.10) 45%,
+      transparent 75%),
+    var(--bg-deep);
+}
+
+canvas { display: block; touch-action: none; cursor: crosshair; }
+
+/* ── Film grain overlay ──────────────────────────────────────── */
+#grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 6;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  mix-blend-mode: overlay;
+}
+
+/* ── UI overlay ───────────────────────────────────────────────── */
+#ui-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 10;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+
+/* ── Phase screens ────────────────────────────────────────────── */
+.phase-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  width: clamp(280px, 88vw, 460px);
+}
+
+.phase-screen.active {
+  display: flex;
+  animation: screenIn 0.4s var(--ease-snap) both;
+}
+
+@keyframes screenIn {
+  from { opacity: 0; transform: scale(0.92) translateY(16px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+/* ── Screen card ─────────────────────────────────────────────── */
+.screen-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 2vh, 18px);
+  padding: clamp(24px, 4.5vh, 44px) clamp(24px, 5vw, 48px);
+  background:
+    linear-gradient(170deg,
+      rgba(28,13,2,0.97) 0%,
+      rgba(14,6,1,0.98) 60%,
+      rgba(8,4,1,0.99) 100%);
+  border: 1px solid rgba(220,145,30,0.18);
+  border-top: 2px solid rgba(245,200,66,0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ambient glow behind card */
+.screen-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 90% 60% at 50% 0%,
+    rgba(200,120,20,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Top amber shimmer line */
+.screen-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 15%; right: 15%; height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%, rgba(245,200,66,0.55) 40%,
+    rgba(245,200,66,0.55) 60%, transparent 100%);
+}
+
+/* Corner tick marks */
+.corner-tick {
+  position: absolute;
+  width: 10px; height: 10px;
+  border-color: rgba(200,130,30,0.3);
+  border-style: solid;
+}
+.corner-tick.tl { top: 6px; left: 6px;  border-width: 1px 0 0 1px; }
+.corner-tick.tr { top: 6px; right: 6px; border-width: 1px 1px 0 0; }
+.corner-tick.bl { bottom: 6px; left: 6px;  border-width: 0 0 1px 1px; }
+.corner-tick.br { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
+
+/* ── Episode badge ──────────────────────────────────────────── */
+.episode-badge {
+  font-family: var(--font-mono);
+  font-size: clamp(8px, 1.4vw, 10px);
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(245,200,66,0.42);
+  padding: 3px 10px;
+  border: 1px solid rgba(245,200,66,0.16);
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Shape badge ──────────────────────────────────────────────── */
+.shape-badge {
+  font-size: clamp(52px, 13vw, 100px);
+  color: var(--amber);
+  text-shadow:
+    0 0 30px rgba(245,200,66,0.55),
+    0 0 70px rgba(220,140,20,0.25);
+  line-height: 1;
+  filter: drop-shadow(0 3px 10px rgba(160,80,10,0.5));
+  position: relative;
+  z-index: 1;
+  animation: amberPulse 3s ease-in-out infinite;
+}
+
+@keyframes amberPulse {
+  0%,100% { text-shadow: 0 0 30px rgba(245,200,66,0.55), 0 0 70px rgba(220,140,20,0.25); }
+  50%     { text-shadow: 0 0 42px rgba(245,200,66,0.72), 0 0 90px rgba(220,140,20,0.35); }
+}
+
+/* ── Title ────────────────────────────────────────────────────── */
+.title-big {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 9vw, 76px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--amber);
+  text-shadow:
+    0 2px 0 var(--caramel),
+    0 0 40px rgba(245,200,66,0.22);
+  position: relative; z-index: 1;
+}
+
+/* ── Divider ──────────────────────────────────────────────────── */
+.divider {
+  width: 55%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%, rgba(200,130,30,0.35) 50%, transparent 100%);
+  margin: clamp(2px, 0.8vh, 6px) 0;
+  position: relative; z-index: 1;
+}
+
+/* ── Subtitle ─────────────────────────────────────────────────── */
+.subtitle {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1.7vw, 12px);
+  font-weight: 300;
+  letter-spacing: 0.22em;
+  color: rgba(245,220,140,0.5);
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.8;
+  position: relative; z-index: 1;
+}
+
+/* ── Countdown ────────────────────────────────────────────────── */
+.countdown-num {
+  font-family: var(--font-display);
+  font-size: clamp(68px, 20vw, 148px);
+  font-weight: 900;
+  color: #fff;
+  text-shadow:
+    0 0 50px rgba(255,255,255,0.45),
+    0 4px 0 rgba(0,0,0,0.5);
+  line-height: 1;
+  min-width: 2ch;
+  text-align: center;
+  position: relative; z-index: 1;
+  transition: transform 0.1s;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+.btn-row {
+  display: flex;
+  gap: clamp(8px, 2vw, 16px);
+  margin-top: clamp(4px, 1vh, 12px);
+  position: relative; z-index: 1;
+}
+
+.btn {
+  font-family: var(--font-display);
+  font-size: clamp(12px, 2.2vw, 15px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: clamp(12px, 2vh, 16px) clamp(24px, 5vw, 42px);
+  cursor: pointer;
+  border: none;
+  position: relative;
+  overflow: hidden;
+  transition: filter 0.12s, transform 0.1s, box-shadow 0.1s;
+}
+
+/* Gloss sheen */
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 45%;
+  background: rgba(255,255,255,0.13);
+  pointer-events: none;
+}
+
+.btn:hover  { filter: brightness(1.18); }
+.btn:active { transform: translateY(2px); filter: brightness(0.92); }
+
+.btn-green {
+  background: var(--teal);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--teal-shadow), 0 6px 22px rgba(3,122,118,0.35);
+}
+.btn-green:active { box-shadow: 0 1px 0 var(--teal-shadow), 0 2px 8px rgba(3,122,118,0.2); }
+
+.btn-pink {
+  background: var(--pink);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--pink-shadow), 0 6px 22px rgba(237,27,118,0.35);
+}
+.btn-pink:active { box-shadow: 0 1px 0 var(--pink-shadow), 0 2px 8px rgba(237,27,118,0.2); }
+
+/* ── Result title ─────────────────────────────────────────────── */
+.result-title {
+  font-family: var(--font-display);
+  font-size: clamp(44px, 11vw, 92px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 50px currentColor, 0 3px 0 rgba(0,0,0,0.5);
+  line-height: 1;
+  position: relative; z-index: 1;
+}
+
+.result-sub {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1.6vw, 12px);
+  font-weight: 300;
+  color: rgba(245,220,140,0.6);
+  letter-spacing: 0.14em;
+  text-align: center;
+  position: relative; z-index: 1;
+}
+
+/* ── HUD bar ──────────────────────────────────────────────────── */
+.hud-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding:
+    10px
+    max(clamp(14px, 3vw, 28px), env(safe-area-inset-right, 0px))
+    calc(10px + env(safe-area-inset-bottom, 0px))
+    max(clamp(14px, 3vw, 28px), env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg,
+    rgba(8,4,0,0) 0%,
+    rgba(8,4,0,0.82) 40%,
+    rgba(6,3,0,0.92) 100%);
+  border-top: 1px solid rgba(200,130,30,0.10);
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud-label {
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 1.1vw, 9px);
+  letter-spacing: 0.28em;
+  color: rgba(245,200,66,0.38);
+  text-transform: uppercase;
+}
+
+.hud-value {
+  font-family: var(--font-display);
+  font-size: clamp(14px, 2.8vw, 19px);
+  font-weight: 700;
+  color: rgba(255,248,220,0.95);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+/* ── Integrity track ──────────────────────────────────────────── */
+.progress-track {
+  width: clamp(90px, 16vw, 150px);
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--amber);
+  transition: width 0.15s linear, background 0.35s;
+  box-shadow: 0 0 7px rgba(245,200,66,0.45);
+}
+
+/* ── Warning text ─────────────────────────────────────────────── */
+.integrity-warning {
+  position: fixed;
+  bottom: 22%;
+  left: 50%; transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: clamp(11px, 2.4vw, 17px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: #ff7040;
+  text-shadow: 0 0 16px rgba(255,80,0,0.75);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.28s;
+  text-transform: uppercase;
+}
+
+/* ── Needle guide ─────────────────────────────────────────────── */
+.needle-guide {
+  position: fixed;
+  top: 50%;
+  right: max(14px, env(safe-area-inset-right, 14px));
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.guide-line {
+  font-family: var(--font-mono);
+  font-size: clamp(8px, 1.1vw, 10px);
+  letter-spacing: 0.12em;
+  color: rgba(245,200,66,0.38);
+  text-align: right;
+  font-weight: 300;
+}
+
+/* ── Vignette ─────────────────────────────────────────────────── */
+#vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0,0,0,0) 100%);
+  transition: background 0.3s;
+}
+
+/* ── Back button ──────────────────────────────────────────────── */
+#back-btn {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 12px));
+  left: max(12px, env(safe-area-inset-left, 12px));
+  z-index: 20;
+  font-family: var(--font-display);
+  font-size: clamp(10px, 1.8vw, 12px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(220,20,100,0.88);
+  border: none;
+  padding: 9px 16px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 3px 0 var(--pink-shadow), 0 4px 16px rgba(237,27,118,0.28);
+  transition: filter 0.12s, transform 0.1s, box-shadow 0.1s;
+}
+
+#back-btn:hover { filter: brightness(1.18); }
+#back-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--pink-shadow), 0 2px 6px rgba(237,27,118,0.15);
+}
 </style>
 </head>
 <body>
 <div id="root"><canvas id="c"></canvas></div>
 <div id="vignette"></div>
+<div id="grain"></div>
 
-<!-- INTRO -->
+<!-- INTRO ─────────────────────────────────────────────────────── -->
 <div id="screen-intro" class="phase-screen">
-  <div class="subtitle">Episode 03 — Dalgona Candy</div>
-  <div id="shape-icon" class="shape-badge">▲</div>
-  <div class="title-big" style="color:#ffd93d;" id="shape-name-title">TRIANGLE</div>
-  <div class="subtitle" style="margin-top:8px;">Carve the shape. Don't break the candy.</div>
-  <div class="subtitle" style="color:rgba(255,220,140,0.4); margin-top:4px;">Move your needle slowly along the dotted line</div>
-  <div id="countdown-display" class="countdown-num" style="margin-top:16px;">3</div>
+  <div class="screen-card">
+    <span class="corner-tick tl"></span>
+    <span class="corner-tick tr"></span>
+    <span class="corner-tick bl"></span>
+    <span class="corner-tick br"></span>
+    <div class="episode-badge">Episode 03 — Dalgona Candy</div>
+    <div id="shape-icon" class="shape-badge">▲</div>
+    <div class="title-big" id="shape-name-title">TRIANGLE</div>
+    <div class="divider"></div>
+    <div class="subtitle">Carve the shape. Don't break the candy.</div>
+    <div class="subtitle" style="color:rgba(245,220,140,0.3);font-size:clamp(8px,1.3vw,10px);">
+      Trace the dotted outline — move slowly
+    </div>
+    <div id="countdown-display" class="countdown-num" style="margin-top:clamp(6px,1.8vh,14px);">3</div>
+  </div>
 </div>
 
-<!-- SUCCESS -->
+<!-- SUCCESS ─────────────────────────────────────────────────────── -->
 <div id="screen-success" class="phase-screen">
-  <div class="result-title" style="color:#ffd93d;">SUCCESS</div>
-  <div class="result-sub" id="success-sub">Shape preserved · Integrity 100%</div>
-  <div style="display:flex;gap:16px;margin-top:8px;">
-    <button class="btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
+  <div class="screen-card">
+    <span class="corner-tick tl"></span>
+    <span class="corner-tick tr"></span>
+    <span class="corner-tick bl"></span>
+    <span class="corner-tick br"></span>
+    <div class="episode-badge">Episode 03 — Dalgona Candy</div>
+    <div class="result-title" style="color:var(--amber);">SUCCESS</div>
+    <div class="divider"></div>
+    <div class="result-sub" id="success-sub">Shape preserved · Integrity 100%</div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="restartGame()">PLAY AGAIN</button>
+    </div>
   </div>
 </div>
 
-<!-- ELIMINATED -->
+<!-- ELIMINATED ──────────────────────────────────────────────────── -->
 <div id="screen-eliminated" class="phase-screen">
-  <div class="result-title" style="color:#ff4444;">ELIMINATED</div>
-  <div class="result-sub">The candy snapped.</div>
-  <div style="display:flex;gap:16px;margin-top:8px;">
-    <button class="btn btn-green" onclick="restartGame()">TRY AGAIN</button>
+  <div class="screen-card">
+    <span class="corner-tick tl"></span>
+    <span class="corner-tick tr"></span>
+    <span class="corner-tick bl"></span>
+    <span class="corner-tick br"></span>
+    <div class="episode-badge">Episode 03 — Dalgona Candy</div>
+    <div class="result-title" style="color:var(--danger);">ELIMINATED</div>
+    <div class="divider"></div>
+    <div class="result-sub">The candy snapped.</div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="restartGame()">TRY AGAIN</button>
+    </div>
   </div>
 </div>
 
-<!-- HUD (playing) -->
+<!-- HUD (playing) ───────────────────────────────────────────────── -->
 <div class="hud-bar" id="hud" style="display:none;">
   <div class="hud-item">
     <div class="hud-label">Integrity</div>
-    <div class="progress-track"><div class="progress-fill" id="integrity-bar" style="width:100%;background:#ffd93d;"></div></div>
+    <div class="progress-track">
+      <div class="progress-fill" id="integrity-bar" style="width:100%;"></div>
+    </div>
   </div>
   <div class="hud-item" style="align-items:center;">
     <div class="hud-label">Shape</div>
@@ -144,6 +535,8 @@
 <script>
 // ═══════════════════════════════════════════════════════
 // DALGONA CANDY — CINEMATIC PHYSICS SYSTEM
+// Visual redesign: enhanced rendering only. All gameplay
+// logic, physics, and Zustand integration preserved.
 // ═══════════════════════════════════════════════════════
 
 const canvas = document.getElementById('c');
@@ -171,84 +564,75 @@ const GRID = 32;
 const CELL = CANDY_W / GRID;
 
 // ── State ─────────────────────────────────────────────
-let phase = 'intro'; // intro | playing | success | eliminated
+let phase = 'intro';
 let candyIntegrity = 1.0;
-let edgeStress = 0.0; // Keeps the red vignette working
+let edgeStress = 0.0;
 let completionRatio = 0.0;
 let fracturePoints = [];
 let carvedSegments = new Set();
 let shapePath = [];
 
-// New Grid Physics State
 let edgeStressGrid = new Float32Array(GRID * GRID);
 let structuralStrength = new Float32Array(GRID * GRID).fill(1);
 let carvedCells = new Set();
 
 function cellIdx(gx, gy) { return gy * GRID + gx; }
 function worldToGrid(wx, wy) {
-  // Converts scaled screen coordinates back to grid coordinates
   const gx = Math.floor((wx / scale - CANDY_X) / CELL);
   const gy = Math.floor((wy / scale - CANDY_Y) / CELL);
-  return { 
-    gx: Math.max(0, Math.min(GRID - 1, gx)), 
-    gy: Math.max(0, Math.min(GRID - 1, gy)) 
+  return {
+    gx: Math.max(0, Math.min(GRID - 1, gx)),
+    gy: Math.max(0, Math.min(GRID - 1, gy))
   };
 }
 let shapeId = 'triangle';
 let scale = 1;
 let cssScale = 1;
 
-// Needle / scrape state
 let needleDown = false;
 let needleX = 0, needleY = 0;
 let needlePrevX = 0, needlePrevY = 0;
 let needleVel = 0;
 let lastScrapeAudio = 0;
-
-// Bug 4: Sequential carving tracker
 let lastCarvedSegment = -1;
-// postMessage bridge guard (send result exactly once per round)
 let messageSent = false;
 
-// Stability (rolling variance of velocity)
 const STAB_BUF_SIZE = 48;
 let stabBuf = new Float32Array(STAB_BUF_SIZE);
 let stabHead = 0, stabCount = 0;
 let stability = 1.0;
 
-// Particles
 let particles = [];
-
-// Camera shake
 let shakeX = 0, shakeY = 0, shakeIntensity = 0;
-
-// Countdown
 let countdownVal = 3;
 let countdownTimer = 0;
-
-// Vignette / tension
 let vignetteRed = 0;
-
-// Heartbeat pulse
 let heartbeatPhase = 0;
-
-// Offscreen candy surface (for carving)
 let candyOffscreen = null;
 let crackOffscreen = null;
-
-// Frame counter
 let frame = 0;
 let rafId = null;
 
-// ── Audio (Web Audio API) ─────────────────────────────
-let audioCtx = null;
-function getAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  return audioCtx;
+// Ambient dust moats for atmosphere
+let atmosphericDust = [];
+for (let i = 0; i < 40; i++) {
+  atmosphericDust.push({
+    x: Math.random() * WORLD_W,
+    y: Math.random() * WORLD_H,
+    r: Math.random() * 1.2 + 0.3,
+    vx: (Math.random() - 0.5) * 0.18,
+    vy: -Math.random() * 0.12 - 0.04,
+    alpha: Math.random() * 0.22 + 0.04,
+    phase: Math.random() * Math.PI * 2,
+  });
 }
 
+// ── Audio ──────────────────────────────────────────────
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
 function playTick(freq, dur = 0.05, vol = 0.15) {
   try {
     const ac = getAudio();
@@ -261,7 +645,6 @@ function playTick(freq, dur = 0.05, vol = 0.15) {
     osc.start(); osc.stop(ac.currentTime + dur);
   } catch(e){}
 }
-
 function playScrape(intensity) {
   try {
     const ac = getAudio();
@@ -280,11 +663,9 @@ function playScrape(intensity) {
     src.start(); src.stop(ac.currentTime + 0.08);
   } catch(e){}
 }
-
 function playMicrocrack(severity) {
   try {
     const ac = getAudio();
-    // Sharp metallic crack
     const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) {
@@ -300,7 +681,6 @@ function playMicrocrack(severity) {
     src.start();
   } catch(e){}
 }
-
 function playSnap() {
   try {
     const ac = getAudio();
@@ -317,7 +697,7 @@ function playSnap() {
   } catch(e){}
 }
 
-// ── Shape definitions (normalised [0,1] coords) ───────
+// ── Shape definitions ─────────────────────────────────
 const SHAPES = {
   triangle: () => [
     {nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}
@@ -384,7 +764,7 @@ function distToOutline(p, path){
   return minD;
 }
 
-// ── Stability calculation ─────────────────────────────
+// ── Stability ─────────────────────────────────────────
 function pushStab(mag){
   stabBuf[stabHead]=mag;
   stabHead=(stabHead+1)%STAB_BUF_SIZE;
@@ -415,13 +795,11 @@ function resize(){
   scale=fitScale*dpr;
   canvas.width=Math.round(WORLD_W*scale);
   canvas.height=Math.round(WORLD_H*scale);
-  // Rebuild shape path for new scale
   if(shapeId) shapePath=buildShapePath(shapeId);
   rebuildOffscreens();
 }
 
 function rebuildOffscreens(){
-  // Candy surface offscreen
   candyOffscreen = document.createElement('canvas');
   candyOffscreen.width = Math.round(CANDY_W*scale);
   candyOffscreen.height = Math.round(CANDY_H*scale);
@@ -433,27 +811,78 @@ function rebuildOffscreens(){
   crackOffscreen.height = canvas.height;
 }
 
-// ── Draw candy base to offscreen ─────────────────────
+// ── ENHANCED: Draw candy base ─────────────────────────
 function drawCandyBase(c2d, W, H){
-  // Amber gradient
-  const grad = c2d.createLinearGradient(0,0,W,H);
-  grad.addColorStop(0,'#e8a428');
-  grad.addColorStop(0.5,'#d4841a');
-  grad.addColorStop(1,'#b86010');
-  c2d.fillStyle=grad; c2d.fillRect(0,0,W,H);
+  // Layer 1: Rich multi-stop caramel gradient
+  const grad = c2d.createLinearGradient(W*0.08, H*0.02, W*0.92, H*0.98);
+  grad.addColorStop(0,    '#f0c040');   // top-left warm highlight
+  grad.addColorStop(0.15, '#e8a428');   // main amber
+  grad.addColorStop(0.38, '#d08418');   // deep amber
+  grad.addColorStop(0.62, '#b86414');   // caramel core
+  grad.addColorStop(0.82, '#a05210');   // burnt caramel
+  grad.addColorStop(1,    '#804008');   // dark edge
+  c2d.fillStyle = grad;
+  c2d.fillRect(0, 0, W, H);
 
-  // Gloss highlight
-  const gloss=c2d.createLinearGradient(0,0,0,H*0.5);
-  gloss.addColorStop(0,'rgba(255,255,220,0.25)');
-  gloss.addColorStop(1,'rgba(255,255,220,0)');
-  c2d.fillStyle=gloss; c2d.fillRect(0,0,W,H*0.5);
+  // Layer 2: Specular oval (top-left quadrant)
+  const spec = c2d.createRadialGradient(W*0.3, H*0.22, 0, W*0.3, H*0.25, W*0.42);
+  spec.addColorStop(0,   'rgba(255,252,200,0.38)');
+  spec.addColorStop(0.35,'rgba(255,245,170,0.18)');
+  spec.addColorStop(0.7, 'rgba(255,235,140,0.06)');
+  spec.addColorStop(1,   'rgba(255,220,100,0)');
+  c2d.fillStyle = spec;
+  c2d.fillRect(0, 0, W, H);
 
-  // Sugar texture (fine noise)
-  for(let i=0;i<300;i++){
-    const tx=Math.random()*W, ty=Math.random()*H;
-    const ts=Math.random()*2+0.5;
-    c2d.fillStyle=`rgba(255,220,120,${Math.random()*0.08})`;
-    c2d.fillRect(tx,ty,ts,ts);
+  // Layer 3: Secondary warm glow (bottom-right)
+  const warmGlow = c2d.createRadialGradient(W*0.74, H*0.76, 0, W*0.74, H*0.76, W*0.38);
+  warmGlow.addColorStop(0,   'rgba(255,190,60,0.14)');
+  warmGlow.addColorStop(0.5, 'rgba(255,160,30,0.07)');
+  warmGlow.addColorStop(1,   'rgba(0,0,0,0)');
+  c2d.fillStyle = warmGlow;
+  c2d.fillRect(0, 0, W, H);
+
+  // Layer 4: Edge depth shadow
+  const edgeGrad = c2d.createRadialGradient(W/2, H/2, W*0.22, W/2, H/2, W*0.74);
+  edgeGrad.addColorStop(0,   'rgba(0,0,0,0)');
+  edgeGrad.addColorStop(0.65,'rgba(0,0,0,0)');
+  edgeGrad.addColorStop(1,   'rgba(40,12,0,0.28)');
+  c2d.fillStyle = edgeGrad;
+  c2d.fillRect(0, 0, W, H);
+
+  // Layer 5: Fine sugar grain texture
+  for (let i = 0; i < 700; i++) {
+    const tx = Math.random() * W;
+    const ty = Math.random() * H;
+    const ts = Math.random() * 1.8 + 0.3;
+    const alpha = Math.random() * 0.10 + 0.01;
+    // Vary between bright sparkle and dark crystal
+    if (Math.random() > 0.55) {
+      c2d.fillStyle = `rgba(255,248,180,${alpha})`;
+    } else {
+      c2d.fillStyle = `rgba(80,40,5,${alpha * 0.6})`;
+    }
+    c2d.fillRect(tx, ty, ts, ts);
+  }
+
+  // Layer 6: Fine surface scratches
+  for (let i = 0; i < 18; i++) {
+    const x1 = Math.random() * W;
+    const y1 = Math.random() * H;
+    const angle = Math.random() * Math.PI;
+    const len = 6 + Math.random() * 30;
+    c2d.beginPath();
+    c2d.moveTo(x1, y1);
+    c2d.lineTo(x1 + Math.cos(angle)*len, y1 + Math.sin(angle)*len);
+    c2d.strokeStyle = `rgba(180,140,40,${Math.random()*0.055 + 0.01})`;
+    c2d.lineWidth = 0.5;
+    c2d.stroke();
+  }
+
+  // Layer 7: Subtle horizontal banding (sugar layering artifact)
+  for (let i = 0; i < 5; i++) {
+    const bandY = H * (0.15 + i * 0.17);
+    c2d.fillStyle = `rgba(255,220,100,${0.025 + Math.random()*0.015})`;
+    c2d.fillRect(0, bandY, W, 1 + Math.random() * 1.5);
   }
 }
 
@@ -510,8 +939,8 @@ function initGame(id){
   shakeIntensity = 0;
   vignetteRed = 0;
   frame = 0;
-  lastCarvedSegment = -1; // Bug 4: reset sequential tracker
-  messageSent = false;    // reset postMessage bridge guard
+  lastCarvedSegment = -1;
+  messageSent = false;
   rebuildOffscreens();
 }
 
@@ -572,9 +1001,8 @@ canvas.addEventListener('pointerdown', e=>{
   needlePrevX=pos.x; needlePrevY=pos.y;
   needleVel=0;
   if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
-  getAudio(); // unlock
+  getAudio();
 
-  // Bug 1+3: Validate the initial press too — clicking off-path is a fail
   if(phase==='playing'){
     const worldX=needleX/scale, worldY=needleY/scale;
     const inSlab=(
@@ -601,35 +1029,25 @@ canvas.addEventListener('pointermove', e=>{
   if(needleDown && phase==='playing') processCarve();
 }, {passive:false});
 
-canvas.addEventListener('pointerup', e=>{
-  needleDown=false;
-  needleVel=0;
-});
+canvas.addEventListener('pointerup', e=>{ needleDown=false; needleVel=0; });
 canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
 
 // ── postMessage bridge helpers ─────────────────────────
-// sendBridgeMessage: always fires (back button uses this)
 function sendBridgeMessage(msg){
   try{ window.parent.postMessage(msg,'*'); }catch(e){}
 }
-// sendGameResult: fires at most once per round (eliminated / success)
 function sendGameResult(msg){
   if(messageSent) return;
   messageSent=true;
   sendBridgeMessage(msg);
 }
 
-// ── Instant failure (Bug 1 + Bug 3) ───────────────────
-// Called any time the needle goes off-path or off-slab while active.
-// Saturates the grid at the needle position for visual drama, then
-// transitions to eliminated.
+// ── Instant failure ───────────────────────────────────
 function triggerInstantFail(reason){
   if(phase!=='playing') return;
   playSnap();
   shakeIntensity=22;
-  // Burst sparks at needle position
   for(let i=0;i<3;i++) emitCrackSpark(needleX,needleY,1.0);
-  // Saturate grid cells near needle so the heatmap shows the rupture point
   const {gx,gy}=worldToGrid(needleX,needleY);
   const blastR=5;
   for(let dy=-blastR;dy<=blastR;dy++){
@@ -650,39 +1068,27 @@ function triggerInstantFail(reason){
     }
   }
   phase='snap';
-  // sendGameResult deferred so it fires alongside setPhase('eliminated')
   setTimeout(()=>setPhase('eliminated'), 800);
 }
 
-// ── Sequential-arc win validation (Bug 4) ─────────────
-// Requires:
-//   1. carvedSegments.size ≥ COMPLETION_WIN fraction of total
-//   2. Those segments form a *contiguous* arc on the closed polygon
-//      (no teleporting to the opposite side of the shape)
+// ── Sequential-arc win validation ─────────────────────
 function checkWin(){
   const total=shapePath.length;
   if(carvedSegments.size<total*COMPLETION_WIN) return false;
-
-  // Build boolean array and find the longest contiguous true-run
-  // with wrap-around (handles shapes where the arc spans index 0).
   const carved=new Array(total).fill(false);
   for(const idx of carvedSegments) carved[idx]=true;
-
   let best=0, run=0;
   for(let i=0;i<total*2;i++){
     if(carved[i%total]){ run++; best=Math.max(best,run); }
     else { run=0; }
   }
-  best=Math.min(best,total); // cap so we never exceed 100%
+  best=Math.min(best,total);
   return best/total>=COMPLETION_WIN;
 }
 
-// ── Core carving logic (all four bugs fixed) ──────────
 // ── Core carving logic ────────────────────────────────
 function processCarve(){
   const pos={x:needleX, y:needleY};
-
-  // ── Bug 3: Needle outside candy slab = instant fail ──
   const worldX=needleX/scale, worldY=needleY/scale;
   const SLAB_MARGIN=6;
   const inSlab=(
@@ -691,15 +1097,12 @@ function processCarve(){
   );
   if(!inSlab){ triggerInstantFail('needle-left-slab'); return; }
 
-  // ── Bug 1: Off-path = instant fail (no silent early exit) ──
   const edgeDist=distToOutline(pos,shapePath);
   const onEdge=edgeDist<ON_EDGE_TOL*scale;
   if(!onEdge){ triggerInstantFail('off-path'); return; }
 
-  // On-path but needle barely moving: no carve, no penalty
   if(needleVel<0.3) return;
 
-  // ── Bug 2: Segment proximity (not midpoint proximity) ──
   for(let i=0;i<shapePath.length;i++){
     const a=shapePath[i], b=shapePath[(i+1)%shapePath.length];
     if(distToSegment(pos,a,b)<CARVE_RADIUS*scale){
@@ -710,10 +1113,9 @@ function processCarve(){
 
   computeStability();
 
- // Grid-based inverse pressure model (FIXED: 0.30 instead of 30)
   const velocityFactor = clamp(needleVel / (scale * 12), 0, 1);
   const pressure = 0.30 * (1 + (1 - velocityFactor) * 0.5) * (1 + (1 - stability) * 0.4);
-  
+
   const { gx, gy } = worldToGrid(needleX, needleY);
   const radius = 3;
   for (let dy = -radius; dy <= radius; dy++) {
@@ -722,19 +1124,16 @@ function processCarve(){
       if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
       const distCell = Math.sqrt(dx * dx + dy * dy);
       if (distCell > radius) continue;
-      
       const falloff = 1 - distCell / radius;
       const stressDelta = pressure * 0.004 * falloff;
       const idx = cellIdx(nx, ny);
       const edgeFactor = (nx === 0 || ny === 0 || nx === GRID - 1 || ny === GRID - 1) ? 1.6 : 1.0;
-      
       edgeStressGrid[idx] = Math.min(1, edgeStressGrid[idx] + stressDelta * edgeFactor);
       structuralStrength[idx] = Math.max(0, structuralStrength[idx] - stressDelta * 0.3);
       carvedCells.add(idx);
     }
   }
 
-  // ── Bug 4: Contiguous-arc win check (replaces raw ratio check) ──
   completionRatio=carvedSegments.size/shapePath.length;
   if(checkWin()){
     playTick(880,0.3,0.3);
@@ -743,17 +1142,15 @@ function processCarve(){
     return;
   }
 
-  // Emit dust
   if(Math.random()<0.4) emitDust(needleX, needleY, 2);
 
-  // Scrape audio
   const now=performance.now();
   if(now-lastScrapeAudio>SCRAPE_AUDIO_MS){
     lastScrapeAudio=now;
     playScrape(clamp(needleVel/(scale*10),0,1));
   }
 
-  // HUD
+  // HUD update
   const pct=Math.round(candyIntegrity*100);
   const bar=document.getElementById('integrity-bar');
   if(bar){
@@ -765,7 +1162,6 @@ function processCarve(){
   const carvedEl=document.getElementById('hud-carved');
   if(carvedEl) carvedEl.textContent=Math.round(completionRatio*100)+'%';
 
-  // Warning overlay
   const warnEl=document.getElementById('warning-text');
   if(warnEl){
     const stressWarn=edgeStress-0.4;
@@ -789,7 +1185,7 @@ function updateParticles(){
   }
 }
 
-// ── Main render ───────────────────────────────────────
+// ── ENHANCED: Main render ──────────────────────────────
 function render(){
   frame++;
 
@@ -808,21 +1204,78 @@ function render(){
   ctx.save();
   ctx.translate(shakeX, shakeY);
 
-  // ── Background ──────────────────────────────────────
-  const bg=ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,canvas.width*0.8);
-  bg.addColorStop(0,'#1e0e00'); bg.addColorStop(1,'#080300');
-  ctx.fillStyle=bg; ctx.fillRect(0,0,canvas.width,canvas.height);
+  // ── ENHANCED Background ──────────────────────────────
+  // Base: very dark warm brown
+  ctx.fillStyle='#060300';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Atmospheric warm center glow
+  const atmGlow = ctx.createRadialGradient(
+    canvas.width/2, canvas.height*0.48, 0,
+    canvas.width/2, canvas.height*0.48, canvas.width*0.62
+  );
+  atmGlow.addColorStop(0,   `rgba(130,60,8,${0.22 + tension*0.08})`);
+  atmGlow.addColorStop(0.4, `rgba(70,28,4,${0.12 + tension*0.04})`);
+  atmGlow.addColorStop(0.8, 'rgba(25,8,1,0.05)');
+  atmGlow.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = atmGlow;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Outer darkness vignette
+  const vigBg = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, canvas.width*0.18,
+    canvas.width/2, canvas.height/2, canvas.width*0.88
+  );
+  vigBg.addColorStop(0, 'rgba(0,0,0,0)');
+  vigBg.addColorStop(0.7,'rgba(0,0,0,0.28)');
+  vigBg.addColorStop(1,  'rgba(0,0,0,0.72)');
+  ctx.fillStyle = vigBg;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Subtle grain noise
+  if(frame % 2 === 0) {
+    for(let gi=0; gi<140; gi++){
+      const gx = Math.random() * canvas.width;
+      const gy = Math.random() * canvas.height;
+      ctx.fillStyle = `rgba(255,190,60,${Math.random()*0.016})`;
+      ctx.fillRect(gx,gy,1,1);
+    }
+  }
+
+  // ── Atmospheric ambient dust ─────────────────────────
+  for (const d of atmosphericDust) {
+    d.x += d.vx;
+    d.y += d.vy;
+    d.phase += 0.01;
+    if (d.y < -4) d.y = WORLD_H * scale + 4;
+    if (d.x < -4) d.x = WORLD_W * scale + 4;
+    if (d.x > WORLD_W * scale + 4) d.x = -4;
+
+    const flicker = d.alpha * (0.75 + Math.sin(d.phase)*0.25);
+    ctx.beginPath();
+    ctx.arc(d.x * scale / cssScale, d.y * scale / cssScale, d.r * scale, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(220,170,60,${flicker * 0.45})`;
+    ctx.fill();
+  }
 
   // ── Candy slab ──────────────────────────────────────
   const cx=CANDY_X*scale, cy=CANDY_Y*scale;
   const cw=CANDY_W*scale, ch=CANDY_H*scale;
 
-  // Drop shadow + glow
-  const glowAlpha=0.15+tension*0.25;
-  ctx.shadowColor=`rgba(200,100,0,${glowAlpha})`;
-  ctx.shadowBlur=40*scale;
+  // Warm glow halo behind candy
+  const candyHalo = ctx.createRadialGradient(cx+cw/2,cy+ch/2, 0, cx+cw/2,cy+ch/2, cw*0.82);
+  candyHalo.addColorStop(0,   `rgba(180,100,15,${0.18 + tension*0.14})`);
+  candyHalo.addColorStop(0.55,`rgba(100,50,8,${0.08 + tension*0.06})`);
+  candyHalo.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = candyHalo;
+  ctx.fillRect(cx-cw*0.35, cy-ch*0.35, cw*1.7, ch*1.7);
 
-  // Draw candy body
+  // Drop shadow
+  const glowAlpha=0.18+tension*0.28;
+  ctx.shadowColor=`rgba(160,80,5,${glowAlpha})`;
+  ctx.shadowBlur=50*scale;
+
+  // Draw candy body gradient
   const integ=candyIntegrity;
   const r=Math.round(lerp(180,220,integ)), g2=Math.round(lerp(100,145,integ)), b=Math.round(lerp(20,35,integ));
   const bodyGrad=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
@@ -830,7 +1283,7 @@ function render(){
   bodyGrad.addColorStop(0.5,`rgb(${r},${g2},${b})`);
   bodyGrad.addColorStop(1,`rgb(${r-20},${g2-14},${b-4})`);
 
-  // Draw rounded candy
+  // Rounded candy rect
   ctx.fillStyle=bodyGrad;
   ctx.beginPath();
   const rad=10*scale;
@@ -845,7 +1298,7 @@ function render(){
   // Candy offscreen texture
   if(candyOffscreen){
     ctx.save();
-    ctx.globalAlpha=0.85;
+    ctx.globalAlpha=0.88;
     ctx.beginPath();
     ctx.moveTo(cx+rad,cy);
     ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
@@ -857,10 +1310,11 @@ function render(){
     ctx.restore();
   }
 
-  // Gloss
+  // Gloss layer
   const gloss=ctx.createLinearGradient(cx,cy,cx,cy+ch*0.5);
-  gloss.addColorStop(0,'rgba(255,255,220,0.20)');
-  gloss.addColorStop(1,'rgba(255,255,220,0)');
+  gloss.addColorStop(0,'rgba(255,255,220,0.22)');
+  gloss.addColorStop(0.4,'rgba(255,248,200,0.08)');
+  gloss.addColorStop(1,'rgba(255,240,180,0)');
   ctx.fillStyle=gloss;
   ctx.beginPath();
   ctx.moveTo(cx+rad,cy);
@@ -869,10 +1323,21 @@ function render(){
   ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
   ctx.closePath(); ctx.fill();
 
+  // Candy edge rim light
+  ctx.strokeStyle='rgba(240,200,80,0.12)';
+  ctx.lineWidth=2*scale;
+  ctx.beginPath();
+  ctx.moveTo(cx+rad,cy);
+  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
+  ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
+  ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
+  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
+  ctx.closePath(); ctx.stroke();
+
   // Stress crack discoloration
-  if(tension>0.1){
-    const stressGrad=ctx.createRadialGradient(cx+cw/2,cy+ch/2,0,cx+cw/2,cy+ch/2,cw*0.6);
-    stressGrad.addColorStop(0,`rgba(80,30,0,${tension*0.35})`);
+  if(tension>0.08){
+    const stressGrad=ctx.createRadialGradient(cx+cw/2,cy+ch/2,0,cx+cw/2,cy+ch/2,cw*0.62);
+    stressGrad.addColorStop(0,`rgba(80,30,0,${tension*0.38})`);
     stressGrad.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=stressGrad;
     ctx.beginPath();
@@ -883,17 +1348,16 @@ function render(){
     ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
     ctx.closePath(); ctx.fill();
   }
-// ── Grid Stress Heatmap ─────────────────────────────
+
+  // ── Grid Stress Heatmap ─────────────────────────────
   for (let gy = 0; gy < GRID; gy++) {
     for (let gx = 0; gx < GRID; gx++) {
       const idx = cellIdx(gx, gy);
       const s = edgeStressGrid[idx];
       if (s < 0.04) continue;
-      
       const wx = (CANDY_X + gx * CELL) * scale;
       const wy = (CANDY_Y + gy * CELL) * scale;
       const cellSize = CELL * scale;
-      
       const alpha = s * 0.55;
       const red = Math.floor(s * 200);
       ctx.fillStyle = `rgba(${red + 55}, 0, 0, ${alpha})`;
@@ -901,7 +1365,7 @@ function render(){
     }
   }
 
-  // ── Carved Path Cells (Yellow overlay) ──────────────
+  // ── Carved Path Cells ──────────────────────────────
   ctx.fillStyle = 'rgba(255, 200, 60, 0.22)';
   carvedCells.forEach(idx => {
     const gx = idx % GRID;
@@ -910,34 +1374,42 @@ function render(){
     const wy = (CANDY_Y + gy * CELL) * scale;
     ctx.fillRect(wx + 1, wy + 1, CELL * scale - 2, CELL * scale - 2);
   });
-  // ── Shape outline ───────────────────────────────────
+
+  // ── ENHANCED: Shape outline ─────────────────────────
   if(shapePath.length>1){
-    // Ghost outline (dashed)
-    ctx.setLineDash([7*scale, 5*scale]);
+    // Outer glow halo of the dotted path
+    ctx.setLineDash([6*scale, 5*scale]);
     ctx.beginPath();
     ctx.moveTo(shapePath[0].x, shapePath[0].y);
     for(let i=1;i<shapePath.length;i++) ctx.lineTo(shapePath[i].x, shapePath[i].y);
     ctx.closePath();
-    // Shimmer on the line
-    const shimmerAlpha=0.15+Math.sin(frame*0.04)*0.06;
+    ctx.strokeStyle=`rgba(255,200,60,0.07)`;
+    ctx.lineWidth=6*scale;
+    ctx.stroke();
+
+    // Dotted guide line
+    const shimmerAlpha=0.18+Math.sin(frame*0.04)*0.07;
     ctx.strokeStyle=`rgba(255,220,100,${shimmerAlpha})`;
     ctx.lineWidth=2.5*scale;
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Carved segments (bright amber glow)
-    ctx.lineWidth=4*scale;
+    // Carved segments — bright amber glow trail
     ctx.lineCap='round';
     for(const idx of carvedSegments){
       const a=shapePath[idx], b=shapePath[(idx+1)%shapePath.length];
-      // Glow layer
+      // Outer glow
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle='rgba(255,210,60,0.2)';
-      ctx.lineWidth=8*scale; ctx.stroke();
-      // Core
+      ctx.strokeStyle='rgba(255,200,60,0.18)';
+      ctx.lineWidth=10*scale; ctx.stroke();
+      // Mid glow
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle='rgba(255,200,55,0.9)';
-      ctx.lineWidth=3.5*scale; ctx.stroke();
+      ctx.strokeStyle='rgba(255,215,70,0.38)';
+      ctx.lineWidth=5*scale; ctx.stroke();
+      // Core line
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle='rgba(255,230,80,0.92)';
+      ctx.lineWidth=2.5*scale; ctx.stroke();
     }
     ctx.lineCap='butt'; ctx.lineWidth=1;
   }
@@ -947,38 +1419,30 @@ function render(){
     fp.age++;
     fp.radius=Math.min(fp.radius+0.35*scale, fp.maxRadius);
     const a=clamp(0.5+fp.severity*0.4,0,0.9);
-
-    // Crack halo
     ctx.beginPath();
     ctx.arc(fp.x,fp.y,fp.radius,0,Math.PI*2);
     ctx.strokeStyle=`rgba(60,25,0,${a})`;
     ctx.lineWidth=1.5*scale; ctx.stroke();
-
-    // Spokes with organic wobble
     for(let k=0;k<fp.spokeAngles.length;k++){
       const angle=fp.spokeAngles[k]+fp.age*0.008;
       const len=fp.radius*(1.5+Math.sin(fp.age*0.06+k*1.3)*0.4);
-      // Secondary hairline
       const bAngle=angle+(Math.random()-0.5)*0.4;
       ctx.beginPath();
       ctx.moveTo(fp.x,fp.y);
       ctx.lineTo(fp.x+Math.cos(bAngle)*len*0.6, fp.y+Math.sin(bAngle)*len*0.6);
       ctx.strokeStyle=`rgba(40,15,0,${a*0.5})`;
       ctx.lineWidth=0.6*scale; ctx.stroke();
-
       ctx.beginPath();
       ctx.moveTo(fp.x,fp.y);
       ctx.lineTo(fp.x+Math.cos(angle)*len, fp.y+Math.sin(angle)*len);
       ctx.strokeStyle=`rgba(50,20,0,${a*0.8})`;
       ctx.lineWidth=0.9*scale; ctx.stroke();
     }
-
-    // Stress glow if near-critical
     if(fp.severity>0.6){
       ctx.beginPath();
       ctx.arc(fp.x,fp.y,fp.radius*1.5,0,Math.PI*2);
       const g=ctx.createRadialGradient(fp.x,fp.y,0,fp.x,fp.y,fp.radius*1.5);
-      g.addColorStop(0,`rgba(255,80,0,${0.12*fp.severity})`);
+      g.addColorStop(0,`rgba(255,80,0,${0.14*fp.severity})`);
       g.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=g; ctx.fill();
     }
@@ -993,44 +1457,52 @@ function render(){
     ctx.fill();
   }
 
-  // ── Needle cursor (when playing) ─────────────────────
+  // ── ENHANCED: Needle cursor ──────────────────────────
   if((phase==='playing'||phase==='snap') && needleDown){
     const nx=needleX, ny=needleY;
-    // Outer ring
+    // Outer glow ring
+    ctx.beginPath();
+    ctx.arc(nx,ny,CARVE_RADIUS*scale*1.6,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,240,180,0.08)';
+    ctx.lineWidth=4*scale; ctx.stroke();
+    // Main ring
     ctx.beginPath();
     ctx.arc(nx,ny,CARVE_RADIUS*scale,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,240,180,0.5)';
+    ctx.strokeStyle='rgba(255,240,180,0.55)';
     ctx.lineWidth=1.5*scale; ctx.stroke();
-
     // Needle body
     ctx.beginPath();
     ctx.moveTo(nx, ny-CARVE_RADIUS*scale*0.5);
     ctx.lineTo(nx, ny+CARVE_RADIUS*scale*2.5);
-    ctx.strokeStyle='rgba(200,200,200,0.7)';
+    ctx.strokeStyle='rgba(220,210,190,0.75)';
     ctx.lineWidth=1.5*scale; ctx.stroke();
-
+    // Gleam on needle
+    ctx.beginPath();
+    ctx.moveTo(nx-0.5*scale, ny-CARVE_RADIUS*scale*0.4);
+    ctx.lineTo(nx-0.5*scale, ny+CARVE_RADIUS*scale*0.8);
+    ctx.strokeStyle='rgba(255,255,240,0.4)';
+    ctx.lineWidth=1*scale; ctx.stroke();
     // Contact dot
     ctx.beginPath();
     ctx.arc(nx,ny,3*scale,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,240,180,0.95)';
+    ctx.fillStyle='rgba(255,248,200,0.95)';
     ctx.fill();
-
     // Velocity trail
     if(needleVel>1){
       const dxt=needleX-needlePrevX, dyt=needleY-needlePrevY;
       ctx.beginPath();
       ctx.moveTo(needlePrevX,needlePrevY);
       ctx.lineTo(needleX,needleY);
-      ctx.strokeStyle=`rgba(255,200,80,${clamp(needleVel/(scale*8),0,0.4)})`;
+      ctx.strokeStyle=`rgba(255,210,80,${clamp(needleVel/(scale*8),0,0.45)})`;
       ctx.lineWidth=2*scale; ctx.stroke();
     }
   }
 
-  // ── Integrity arc (bottom of candy) ──────────────────
+  // ── ENHANCED: Integrity arc ──────────────────────────
   if(phase==='playing'){
     const arcCX=canvas.width/2;
-    const arcCY=(CANDY_Y+CANDY_H+52)*scale;
-    const arcR=24*scale;
+    const arcCY=(CANDY_Y+CANDY_H+55)*scale;
+    const arcR=26*scale;
 
     // Track
     ctx.beginPath();
@@ -1038,12 +1510,16 @@ function render(){
     ctx.strokeStyle='rgba(255,255,255,0.06)';
     ctx.lineWidth=5*scale; ctx.stroke();
 
-    // Fill
+    // Colored fill
     const arcColor=integ>0.5?'#ffd93d':integ>0.25?'#ff9900':'#ff4444';
     ctx.beginPath();
     ctx.arc(arcCX,arcCY,arcR,-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
     ctx.strokeStyle=arcColor;
-    ctx.lineWidth=4*scale; ctx.stroke();
+    ctx.lineWidth=5*scale;
+    ctx.shadowColor=arcColor;
+    ctx.shadowBlur=8*scale;
+    ctx.stroke();
+    ctx.shadowBlur=0;
 
     // Heartbeat pulse on arc
     if(integ<0.4){
@@ -1051,42 +1527,47 @@ function render(){
       const pulse=Math.sin(heartbeatPhase*3)*0.5+0.5;
       ctx.beginPath();
       ctx.arc(arcCX,arcCY,arcR+(pulse*4*scale),-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
-      ctx.strokeStyle=`rgba(255,60,60,${pulse*0.3})`;
-      ctx.lineWidth=8*scale; ctx.stroke();
+      ctx.strokeStyle=`rgba(255,60,60,${pulse*0.32})`;
+      ctx.lineWidth=9*scale; ctx.stroke();
     }
 
     // Center text
-    ctx.fillStyle='rgba(255,220,140,0.75)';
-    ctx.font=`bold ${Math.round(9*scale)}px 'Courier New',monospace`;
+    ctx.fillStyle='rgba(255,230,150,0.78)';
+    ctx.font=`bold ${Math.round(10*scale)}px 'Barlow Condensed', sans-serif`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`${Math.round(integ*100)}%`,arcCX,arcCY);
   }
 
-  // ── Completion ring (top-right indicator) ─────────────
+  // ── Completion ring ──────────────────────────────────
   if(phase==='playing'){
-    const rx=(CANDY_X+CANDY_W+26)*scale;
-    const ry=(CANDY_Y+20)*scale;
-    const rr=16*scale;
+    const rx=(CANDY_X+CANDY_W+28)*scale;
+    const ry=(CANDY_Y+22)*scale;
+    const rr=17*scale;
     ctx.beginPath();
     ctx.arc(rx,ry,rr,-Math.PI/2,Math.PI*2-Math.PI/2);
-    ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=3*scale; ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=3*scale; ctx.stroke();
     ctx.beginPath();
     ctx.arc(rx,ry,rr,-Math.PI/2,-Math.PI/2+completionRatio*Math.PI*2);
-    ctx.strokeStyle='rgba(255,200,55,0.8)'; ctx.lineWidth=3*scale; ctx.stroke();
-    ctx.fillStyle='rgba(255,220,120,0.65)';
-    ctx.font=`${Math.round(7*scale)}px 'Courier New',monospace`;
+    ctx.strokeStyle='rgba(255,210,60,0.82)';
+    ctx.lineWidth=3*scale;
+    ctx.shadowColor='rgba(255,200,50,0.6)';
+    ctx.shadowBlur=5*scale;
+    ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,228,120,0.68)';
+    ctx.font=`${Math.round(8*scale)}px 'DM Mono', monospace`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(`${Math.round(completionRatio*100)}%`,rx,ry);
   }
 
-  // ── Snap flash ─────────────────────────────────────
+  // ── Snap flash ──────────────────────────────────────
   if(phase==='snap'){
-    const flashA=clamp(1-(frame%20)/20,0,0.7);
+    const flashA=clamp(1-(frame%20)/20,0,0.72);
     ctx.fillStyle=`rgba(180,0,0,${flashA})`;
     ctx.fillRect(0,0,canvas.width,canvas.height);
   }
 
-  // ── Vignette (tension) ──────────────────────────────
+  // ── Tension vignette ────────────────────────────────
   if(vignetteRed>0.02){
     const vig=ctx.createRadialGradient(
       canvas.width/2,canvas.height/2, canvas.height*0.1,
@@ -1099,10 +1580,10 @@ function render(){
 
   ctx.restore();
 
-  // ── Vignette element update ─────────────────────────
+  // DOM vignette element
   const vEl=document.getElementById('vignette');
   if(vEl && phase==='playing' && edgeStress>0.3){
-    const vs=clamp((edgeStress-0.3)/0.7,0,0.5);
+    const vs=clamp((edgeStress-0.3)/0.7,0,0.52);
     vEl.style.background=`radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, rgba(80,0,0,${vs}) 100%)`;
   } else if(vEl){ vEl.style.background='none'; }
 }
@@ -1113,7 +1594,6 @@ function loop(ts){
   const dt=Math.min((ts-lastTime)/1000, 0.05);
   lastTime=ts;
 
-  // Countdown phase
   if(phase==='intro'){
     countdownTimer+=dt;
     if(countdownTimer>=1){
@@ -1127,8 +1607,7 @@ function loop(ts){
 
   if(phase==='playing'||phase==='snap'){
     updateParticles();
-    
-    // 1. Diffuse Grid Stress so it spreads outwardly
+
     if (frame % 3 === 0) {
       const next = new Float32Array(edgeStressGrid);
       for (let gy = 1; gy < GRID - 1; gy++) {
@@ -1148,7 +1627,6 @@ function loop(ts){
       edgeStressGrid = next;
     }
 
-    // 2. Check the grid for structural failure
     let totalWeak = 0;
     let maxStress = 0;
     for (let gy = 1; gy < GRID - 1; gy++) {
@@ -1156,34 +1634,28 @@ function loop(ts){
         const idx = cellIdx(gx, gy);
         const s = edgeStressGrid[idx];
         const strength = structuralStrength[idx];
-        
         maxStress = Math.max(maxStress, s);
         totalWeak += (1 - strength);
-        
         const threshold = 0.55 - (1 - strength) * 0.2;
         if (s > threshold && Math.random() < (s - threshold) * 0.06 && phase === 'playing') {
           const severity = Math.min(1, (s - threshold) * 2.5);
           const wx = (CANDY_X + gx * CELL + CELL / 2) * scale;
           const wy = (CANDY_Y + gy * CELL + CELL / 2) * scale;
-          
           fracturePoints.push({
             x: wx, y: wy,
             radius: 4 * scale, maxRadius: (8 + severity * 18) * scale,
             age: 0, severity,
             spokeAngles: Array.from({length: Math.round(3 + severity * 5)}, (_, k) => (k / (3 + severity * 5)) * Math.PI * 2 + Math.random() * 0.5)
           });
-          
-          structuralStrength[idx] *= 0.7; // permanently weaken the broken cell
-          edgeStressGrid[idx] *= 0.5;     // release local tension from the snap
-          
+          structuralStrength[idx] *= 0.7;
+          edgeStressGrid[idx] *= 0.5;
           emitCrackSpark(wx, wy, severity);
           playMicrocrack(severity);
           shakeIntensity = Math.max(shakeIntensity, severity * 6);
         }
       }
     }
-    
-    // 3. Update global UI variables & check if the whole candy died
+
     edgeStress = maxStress;
     candyIntegrity = Math.max(0, 1 - totalWeak / (GRID * GRID * 0.6));
 
@@ -1202,17 +1674,12 @@ function loop(ts){
 // ── Boot ──────────────────────────────────────────────
 window.addEventListener('resize', resize);
 resize();
-
 initGame(pickShape());
 setPhase('intro');
-
 lastTime=performance.now();
 rafId=requestAnimationFrame(loop);
-
-// Expose for buttons
 window.restartGame = restartGame;
 
-// Back button → DALGONA_MENU (never uses history.back)
 document.getElementById('back-btn').addEventListener('click',function(){
   sendBridgeMessage({ type: 'DALGONA_MENU' });
 });

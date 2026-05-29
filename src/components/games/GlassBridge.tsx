@@ -36,8 +36,8 @@ const SHAKE_DECAY_RATE = 0.88;
 const PLAYER_W = 52;
 const PLAYER_H = 76;
 
-const SAFE_BLUE: [number, number, number] = [130, 200, 255];
-const FRAGILE_BLUE: [number, number, number] = [148, 190, 168];
+const SAFE_BLUE: [number, number, number] = [3, 135, 121]; // Clinical Teal
+const FRAGILE_BLUE: [number, number, number] = [180, 210, 220]; // Thin, cheap glass
 const VOID_COLOR = "#050810";
 
 const CAMERA_LERP = 5;
@@ -283,29 +283,32 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
+  // Deep, terrifying abyss gradient
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#010408");
-  grad.addColorStop(0.3, "#020912");
-  grad.addColorStop(0.7, "#030d1a");
-  grad.addColorStop(1, "#050f20");
+  grad.addColorStop(0, "#02070d"); // Near ceiling
+  grad.addColorStop(0.4, "#030d1a"); // Bridge level
+  grad.addColorStop(0.8, "#010308"); // Deep fall
+  grad.addColorStop(1, "#000000");   // Abyss
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  for (let i = 0; i < 3; i++) {
-    const yPos = h * (0.2 + i * 0.3);
-    const bandGrad = ctx.createRadialGradient(w / 2, yPos, 0, w / 2, yPos, w * 0.6);
-    bandGrad.addColorStop(0, "rgba(30,80,160,0.04)");
+  // Volumetric Fog Layers (Cinematic Depth)
+  for (let i = 0; i < 4; i++) {
+    const yPos = h * (0.3 + i * 0.25);
+    const bandGrad = ctx.createRadialGradient(w / 2, yPos, 0, w / 2, yPos, w * 0.8);
+    bandGrad.addColorStop(0, `rgba(3, 135, 121, ${0.06 - i * 0.01})`); // Brand Teal Fog
     bandGrad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = bandGrad;
     ctx.fillRect(0, 0, w, h);
   }
 
-  ctx.strokeStyle = "rgba(40,100,200,0.04)";
-  ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 80) {
+  // Suspended structural cables in the deep background
+  ctx.strokeStyle = "rgba(255,255,255,0.02)";
+  ctx.lineWidth = 2;
+  for (let x = 0; x < w; x += 120) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
+    ctx.lineTo(x + (Math.random() * 40 - 20), h);
     ctx.stroke();
   }
 

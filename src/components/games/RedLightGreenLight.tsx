@@ -242,34 +242,36 @@ function makeGameState(diffNum: number): GameState {
 // ─── Draw Helpers ─────────────────────────────────────────────────────────────
 
 function drawBackground(ctx: CanvasRenderingContext2D, camX: number, gs: GameState): void {
+  // Eerie, over-exposed synthetic sky
   const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  const danger = gs.lightPhase === "red" ? 0.22 : gs.lightPhase === "warning" ? 0.12 : 0;
-  const dangerR = Math.floor(lerp(5,  40, danger));
-  const dangerG = Math.floor(lerp(8,   5, danger));
-  sky.addColorStop(0, `rgb(${dangerR},${dangerG},16)`);
-  sky.addColorStop(1, `rgb(${dangerR + 6},${dangerG + 8},32)`);
+  const danger = gs.lightPhase === "red" ? 1 : gs.lightPhase === "warning" ? 0.5 : 0;
+  
+  // Base sky: Surreal bright blue to dusty horizon
+  const rT = Math.floor(lerp(120, 230, danger));
+  const gT = Math.floor(lerp(180, 50, danger));
+  const bT = Math.floor(lerp(255, 50, danger));
+  
+  sky.addColorStop(0, `rgb(${rT}, ${gT}, ${bT})`);
+  sky.addColorStop(1, `rgb(${rT + 60}, ${gT + 60}, ${bT + 40})`); // Dusty horizon
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, DW, GROUND_Y);
 
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  for (let i = 0; i < 70; i++) {
-    const sx = ((i * 79.3 + camX * 0.04) % DW + DW) % DW;
-    const sy = (i * 43.7) % (GROUND_Y * 0.8);
-    const r  = 0.4 + (i % 4) * 0.4;
-    ctx.globalAlpha = 0.2 + (i % 5) * 0.12;
+  // Stylized Clouds (Geometric/Synthetic feel)
+  ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+  for (let i = 0; i < 12; i++) {
+    const cx = ((i * 320 - camX * 0.05) % (DW + 400) + DW + 400) % (DW + 400) - 200;
+    const cy = 40 + (i * 30 % 150);
     ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.roundRect(cx, cy, 180 + (i % 3) * 60, 40, 20);
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = "rgba(15,22,40,0.9)";
-  for (let i = 0; i < 18; i++) {
-    const bx = ((i * 157 - camX * 0.06) % (DW + 120) + DW + 120) % (DW + 120) - 60;
-    const bh = 60 + (i * 37 % 80);
-    const bw = 28 + (i * 13 % 30);
-    ctx.fillRect(bx, GROUND_Y - bh, bw, bh);
-  }
+  // Painted playground walls in the deep distance
+  const wallGrad = ctx.createLinearGradient(0, GROUND_Y - 120, 0, GROUND_Y);
+  wallGrad.addColorStop(0, "rgba(237, 27, 118, 0.15)"); // Brand Pink bounce light
+  wallGrad.addColorStop(1, "rgba(0, 0, 0, 0.4)");
+  ctx.fillStyle = wallGrad;
+  ctx.fillRect(0, GROUND_Y - 120, DW, 120);
 }
 
 function drawGround(ctx: CanvasRenderingContext2D, camX: number): void {
