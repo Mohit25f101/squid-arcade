@@ -343,7 +343,6 @@ export function ResultScreen({
     "red-light-green-light": "Red Light, Green Light",
     "glass-bridge": "Glass Bridge",
     "dalgona": "Dalgona Candy",
-    "glass-breaker": "Glass Breaker",
     "menu": "Menu"
   };
 

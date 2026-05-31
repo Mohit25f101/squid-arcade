@@ -16,7 +16,7 @@ export interface BriefingData {
   dangerNote: string;
 }
 
-// FIX: Used Partial<> to prevent typescript from complaining about missing 'menu' or 'glass-breaker'
+// Partial<> used because "menu" has no briefing screen
 const BRIEFING_DATA: Partial<Record<GameId, BriefingData>> = {
   "red-light-green-light": {
     title: "Red Light, Green Light",
@@ -29,9 +29,20 @@ const BRIEFING_DATA: Partial<Record<GameId, BriefingData>> = {
     symbol: "▲",
     dangerNote: "Movement during Red Light results in immediate elimination."
   },
+  "glass-bridge": {
+    title: "Glass Bridge",
+    episode: "02",
+    tagline: "Step carefully.",
+    description: "Memorize the safe panels and cross the bridge. Tempered glass will hold your weight, regular glass will shatter.",
+    objective: "Reach the other side.",
+    controls: [{ key: "LEFT / RIGHT", action: "Jump to panel" }],
+    accentColor: "#00FFB2",
+    symbol: "○",
+    dangerNote: "Stepping on regular glass results in immediate elimination."
+  },
   "dalgona": {
     title: "Dalgona Candy",
-    episode: "02",
+    episode: "03",
     tagline: "Carve the shape.",
     description: "Carefully carve out the shape from the honeycomb candy without breaking it.",
     objective: "Extract the shape intact.",
@@ -40,17 +51,6 @@ const BRIEFING_DATA: Partial<Record<GameId, BriefingData>> = {
     symbol: "□",
     dangerNote: "Breaking the shape results in immediate elimination."
   },
-  "glass-bridge": {
-    title: "Glass Bridge",
-    episode: "03",
-    tagline: "Step carefully.",
-    description: "Memorize the safe panels and cross the bridge. Tempered glass will hold your weight, regular glass will shatter.",
-    objective: "Reach the other side.",
-    controls: [{ key: "LEFT / RIGHT", action: "Jump to panel" }],
-    accentColor: "#00FFB2",
-    symbol: "○",
-    dangerNote: "Stepping on regular glass results in immediate elimination."
-  }
 };
 
 interface GameBriefingProps {

@@ -20,8 +20,8 @@ const DalgonaCandy = dynamic(() => import("@/components/games/DalgonaCandy"), { 
 
 const GAME_ORDER: GameId[] = [
   "red-light-green-light",
-  "dalgona",
   "glass-bridge",
+  "dalgona",
 ];
 
 function getNextGame(current: GameId): GameId | null {

@@ -5,7 +5,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 // SECTION 1 — UNION TYPES (all exported for use across the codebase)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type GameId = "red-light-green-light" | "dalgona" | "glass-breaker" | "glass-bridge" | "menu";
+export type GameId = "red-light-green-light" | "dalgona" | "glass-bridge" | "menu";
 
 export type RuntimePhase =
   | "idle"
@@ -236,7 +236,6 @@ const BEST_SCORES_KEY = "squid_best_scores_v1";
 const VALID_GAME_IDS = new Set<string>([
   "red-light-green-light",
   "dalgona",
-  "glass-breaker",
   "glass-bridge",
   "menu",
 ]);
