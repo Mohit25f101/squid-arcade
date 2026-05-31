@@ -5,6 +5,9 @@ import { Howl, Howler } from "howler";
 export type SoundId =
   | "green_light"
   | "red_light"
+  | "red_light_stinger"
+  | "doll_song"
+  | "crowd_gasp"
   | "player_step"
   | "player_jump"
   | "player_land"
@@ -20,7 +23,6 @@ export type SoundId =
   | "doll_turn"
   | "crowd_gasp"
   | "crowd_cheer"
-  | "ambient_bg"
   | "heartbeat"
   | "crowd_murmur"
   | "room_tone"
@@ -36,9 +38,12 @@ export type SoundId =
   | "scan_tone"
   | "doll_theme_full"
   | "doll_theme_2note"
-  | "heartbeat_loop"
   | "doll_song"
-  | "red_light_stinger";
+  // ── Menu background (FIX 3.1: registered here so all audio goes through one system) ──
+  | "menu_bg"
+  // ── GlassBridge sounds ────────────────────────────────────────────────────
+  | "glass_shatter"
+  | "glass_victory";
 
 export type SoundCategory = "sfx" | "music" | "ambient" | "ui";
 
@@ -53,7 +58,6 @@ interface SoundDefinition {
   pool?:    number;
 }
 
-// RESTORED: Missing interfaces causing your errors
 interface ActiveSound {
   howl:       Howl;
   instanceId: number | null;
@@ -71,42 +75,51 @@ interface SoundManagerOptions {
 // ─── Sound Definitions ────────────────────────────────────────────────────────
 
 const SOUND_DEFS: Record<SoundId, SoundDefinition> = {
+  // ── SFX ──────────────────────────────────────────────────────────────────
   green_light:       { src: ["/audio/sfx/green_light.mp3"],    category: "sfx",     volume: 0.7  },
   red_light:         { src: ["/audio/sfx/red_light.mp3"],      category: "sfx",     volume: 0.85 },
+  red_light_stinger: { src: ["/audio/stingers/red-light-stinger.mp3"], category: "sfx", volume: 0.9 },
   player_step:       { src: ["/audio/sfx/step.mp3"],           category: "sfx",     volume: 0.25, pool: 4 },
   player_jump:       { src: ["/audio/sfx/jump.mp3"],           category: "sfx",     volume: 0.45, pool: 2 },
   player_land:       { src: ["/audio/sfx/land.mp3"],           category: "sfx",     volume: 0.35, pool: 2 },
-  player_eliminated: { src: ["/audio/sfx/eliminated.mp3"],     category: "sfx",     volume: 0.9  },
+  player_eliminated: { src: ["/audio/sfx/elimination.mp3"],    category: "sfx",     volume: 0.9  },
   player_victory:    { src: ["/audio/sfx/victory.mp3"],        category: "sfx",     volume: 0.9  },
-  countdown_beep:    { src: ["/audio/sfx/beep.mp3"],           category: "sfx",     volume: 0.6,  pool: 1 },
-  countdown_go:      { src: ["/audio/sfx/go.mp3"],             category: "sfx",     volume: 0.85 },
-  combo_hit:         { src: ["/audio/sfx/combo.mp3"],          category: "sfx",     volume: 0.5,  pool: 3 },
-  doll_turn:         { src: ["/audio/sfx/doll_turn.mp3"],      category: "sfx",     volume: 0.75 },
-  crowd_gasp:        { src: ["/audio/sfx/gasp.mp3"],           category: "sfx",     volume: 0.6,  pool: 1 },
-  crowd_cheer:       { src: ["/audio/sfx/cheer.mp3"],          category: "sfx",     volume: 0.7  },
-  ui_click:          { src: ["/audio/ui/click.mp3"],           category: "ui",      volume: 0.4,  pool: 3 },
-  ui_hover:          { src: ["/audio/ui/hover.mp3"],           category: "ui",      volume: 0.2,  pool: 2 },
-  ui_confirm:        { src: ["/audio/ui/confirm.mp3"],         category: "ui",      volume: 0.55 },
-  ui_back:           { src: ["/audio/ui/back.mp3"],            category: "ui",      volume: 0.4  },
-  ambient_bg:        { src: ["/audio/ambient/room-tone-loop.mp3"], category: "ambient", volume: 0.35, loop: true, html5: true },
-  heartbeat:         { src: ["/audio/stingers/heartbeat-loop.mp3"], category: "ambient", volume: 0.0,  loop: true },
-  crowd_murmur:      { src: ["/audio/ambient/crowd-murmur-loop.mp3"],   category: "ambient", volume: 0.28, loop: true, html5: true },
-  room_tone:         { src: ["/audio/ambient/room-tone-loop.mp3"],       category: "ambient", volume: 0.30, loop: true, html5: true },
-  sub_rumble:        { src: ["/audio/ambient/sub-rumble-loop.mp3"],      category: "ambient", volume: 0.22, loop: true, html5: true },
-  drone_root:        { src: ["/audio/drone/drone-root-loop.mp3"],        category: "ambient", volume: 0.30, loop: true, html5: true },
-  drone_overtone:    { src: ["/audio/drone/drone-overtone-loop.mp3"],    category: "ambient", volume: 0.18, loop: true, html5: true },
-  music_box:         { src: ["/audio/melodic/music-box-theme.mp3"],      category: "music",   volume: 0.40, html5: true },
-  ostinato:          { src: ["/audio/melodic/ostinato-7-8-loop.mp3"],    category: "music",   volume: 0.32, loop: true, html5: true },
-  metallic_sparse:   { src: ["/audio/percussion/metallic-sparse-loop.mp3"],  category: "ambient", volume: 0.20, loop: true },
-  metallic_dense:    { src: ["/audio/percussion/metallic-dense-loop.mp3"],   category: "ambient", volume: 0.25, loop: true },
-  riser_standard:    { src: ["/audio/tension/riser-standard.mp3"],       category: "sfx",     volume: 0.60 },
-  riser_micro:       { src: ["/audio/tension/riser-micro.mp3"],          category: "sfx",     volume: 0.45 },
-  scan_tone:         { src: ["/audio/tension/scan-tone-loop.mp3"],       category: "ambient", volume: 0.22, loop: true },
-  doll_theme_full:   { src: ["/audio/stingers/doll-theme-full.mp3"],     category: "sfx",     volume: 0.70 },
-  doll_theme_2note:  { src: ["/audio/stingers/doll-theme-2note.mp3"],    category: "sfx",     volume: 0.65 },
-  heartbeat_loop:    { src: ["/audio/stingers/heartbeat-loop.mp3"],      category: "ambient", volume: 0.0,  loop: true },
-  doll_song:         { src: ["/audio/sfx/doll_song.mp3"],                category: "sfx",     volume: 1.0 },
-  red_light_stinger: { src: ["/audio/sfx/red_light.mp3"],                category: "sfx",     volume: 0.85 },
+  countdown_beep:    { src: ["/audio/percussion/countdown-clicks-loop.mp3"], category: "sfx", volume: 0.6, pool: 1 },
+  countdown_go:      { src: ["/audio/sfx/alarm.mp3"],          category: "sfx",     volume: 0.45 },
+  combo_hit:         { src: ["/audio/stingers/sub-hit.mp3"],   category: "sfx",     volume: 0.5,  pool: 3 },
+  doll_turn:         { src: ["/audio/stingers/doll-theme-2note.mp3"], category: "sfx", volume: 0.65 },
+  crowd_gasp:        { src: ["/audio/sfx/heartbeat.mp3"],      category: "sfx",     volume: 0.6,  pool: 1 },
+  crowd_cheer:       { src: ["/audio/sfx/victory.mp3"],        category: "sfx",     volume: 0.6  },
+  // ── UI ───────────────────────────────────────────────────────────────────
+  ui_click:          { src: ["/audio/stingers/servo-click.mp3"],   category: "ui",  volume: 0.4,  pool: 3 },
+  ui_hover:          { src: ["/audio/stingers/gear-cycle.mp3"],    category: "ui",  volume: 0.2,  pool: 2 },
+  ui_confirm:        { src: ["/audio/stingers/sub-hit.mp3"],       category: "ui",  volume: 0.25 },
+  ui_back:           { src: ["/audio/stingers/piano-cluster.mp3"], category: "ui",  volume: 0.4  },
+  // ── Ambient loops ────────────────────────────────────────────────────────
+  heartbeat:         { src: ["/audio/stingers/heartbeat-loop.mp3"],   category: "ambient", volume: 0.0,  loop: true },
+  crowd_murmur:      { src: ["/audio/ambient/crowd-murmur-loop.mp3"], category: "ambient", volume: 0.28, loop: true, html5: true },
+  room_tone:         { src: ["/audio/ambient/room-tone-loop.mp3"],    category: "ambient", volume: 0.30, loop: true, html5: true },
+  sub_rumble:        { src: ["/audio/ambient/sub-rumble-loop.mp3"],   category: "ambient", volume: 0.22, loop: true, html5: true },
+  drone_root:        { src: ["/audio/drone/drone-root-loop.mp3"],     category: "ambient", volume: 0.30, loop: true, html5: true },
+  drone_overtone:    { src: ["/audio/drone/drone-overtone-loop.mp3"], category: "ambient", volume: 0.18, loop: true, html5: true },
+  // ── Melodic / music ───────────────────────────────────────────────────────
+  music_box:         { src: ["/audio/melodic/reverse-piano-loop.mp3"],    category: "music", volume: 0.40, loop: true, html5: true },
+  ostinato:          { src: ["/audio/melodic/ostinato-7-8-loop.mp3"],     category: "music", volume: 0.32, loop: true, html5: true },
+  // ── Menu background (FIX 3.1) ────────────────────────────────────────────
+  menu_bg:           { src: ["/audio/melodic/Back Song.mp3"],             category: "music", volume: 0.55, loop: true, html5: true },
+  // ── Percussion ───────────────────────────────────────────────────────────
+  metallic_sparse:   { src: ["/audio/percussion/metallic-sparse-loop.mp3"], category: "ambient", volume: 0.20, loop: true },
+  metallic_dense:    { src: ["/audio/percussion/metallic-dense-loop.mp3"],  category: "ambient", volume: 0.25, loop: true },
+  // ── Tension / stingers ───────────────────────────────────────────────────
+  riser_standard:    { src: ["/audio/tension/riser-standard.mp3"],    category: "sfx",     volume: 0.60 },
+  riser_micro:       { src: ["/audio/tension/riser-micro.mp3"],       category: "sfx",     volume: 0.45 },
+  scan_tone:         { src: ["/audio/tension/scan-tone-loop.mp3"],    category: "ambient", volume: 0.22, loop: true },
+  doll_theme_full:   { src: ["/audio/stingers/doll-theme-full.mp3"],  category: "sfx",     volume: 0.70 },
+  doll_theme_2note:  { src: ["/audio/stingers/doll-theme-2note.mp3"], category: "sfx",     volume: 0.20 },
+  doll_song:         { src: ["/audio/sfx/doll_song.mp3"],             category: "sfx",     volume: 1.0,  loop: true },
+  // ── GlassBridge sounds ────────────────────────────────────────────────────
+  glass_shatter:     { src: ["/audio/sfx/elimination.mp3"],           category: "sfx",     volume: 0.85, pool: 2 },
+  glass_victory:     { src: ["/audio/sfx/victory.mp3"],               category: "sfx",     volume: 0.9  },
 };
 
 // ─── SoundManager Class ───────────────────────────────────────────────────────
@@ -120,10 +133,10 @@ export class SoundManager {
   private _muted:        boolean;
   private _unlocked:     boolean;
 
-  private _sounds:       Map<SoundId, Howl>          = new Map();
-  private _active:       Map<SoundId, ActiveSound>   = new Map();
-  private _cooldowns:    Map<SoundId, number>        = new Map();
-  private _pendingQueue: Array<() => void>           = [];
+  private _sounds:       Map<SoundId, Howl>        = new Map();
+  private _active:       Map<SoundId, ActiveSound> = new Map();
+  private _cooldowns:    Map<SoundId, number>      = new Map();
+  private _pendingQueue: Array<() => void>         = [];
 
   private constructor(opts: SoundManagerOptions = {}) {
     this._masterVolume = opts.masterVolume ?? 0.8;
@@ -134,7 +147,6 @@ export class SoundManager {
 
     Howler.autoUnlock    = true;
     Howler.html5PoolSize = 10;
-    this._applyGlobalVolume();
   }
 
   static getInstance(opts?: SoundManagerOptions): SoundManager {
@@ -192,7 +204,7 @@ export class SoundManager {
   }
 
   private _applyGlobalVolume(): void {
-    Howler.volume(this._muted ? 0 : this._masterVolume);
+    this._rebalanceActive();
   }
 
   private _onCooldown(id: SoundId, cooldownMs: number): boolean {
@@ -265,8 +277,12 @@ export class SoundManager {
   }
 
   setHeartbeatIntensity(level: number): void {
+    if (level <= 0.05) {
+      this.stopLoop("heartbeat", 400);
+      return;
+    }
     if (!this._active.has("heartbeat")) {
-      if (level > 0.1) this.loop("heartbeat");
+      this.loop("heartbeat");
       return;
     }
     const def       = SOUND_DEFS["heartbeat"];
@@ -277,22 +293,29 @@ export class SoundManager {
   }
 
   stopAll(): void {
-    for (const id of this._active.keys()) this.stopLoop(id, 0);
+    this._active.clear();
     Howler.stop();
+  }
+
+  stopCategory(cat: SoundCategory, fadeMs = 600): void {
+    for (const [id, active] of this._active) {
+      if (active.category === cat) {
+        this.stopLoop(id, fadeMs);
+      }
+    }
   }
 
   setMuted(muted: boolean): void {
     this._muted = muted;
-    this._applyGlobalVolume();
     for (const [id, active] of this._active) {
       const vol = this._computeVolume(id, active.baseVolume);
       const { howl, instanceId } = active;
-      if (instanceId !== null) howl.volume(muted ? 0 : vol, instanceId);
-      else howl.volume(muted ? 0 : vol);
+      if (instanceId !== null) howl.volume(vol, instanceId);
+      else howl.volume(vol);
     }
   }
 
-  setMasterVolume(v: number): void { this._masterVolume = clamp(v, 0, 1); this._applyGlobalVolume(); this._rebalanceActive(); }
+  setMasterVolume(v: number): void { this._masterVolume = clamp(v, 0, 1); this._applyGlobalVolume(); }
   setSFXVolume(v: number):    void { this._sfxVolume    = clamp(v, 0, 1); this._rebalanceActive(); }
   setMusicVolume(v: number):  void { this._musicVolume  = clamp(v, 0, 1); this._rebalanceActive(); }
 
@@ -320,10 +343,10 @@ export class SoundManager {
   }
 
   destroy(): void {
-    this.stopAll();
+    this._active.clear();
+    Howler.stop();
     for (const howl of this._sounds.values()) howl.unload();
     this._sounds.clear();
-    this._active.clear();
     this._cooldowns.clear();
     this._pendingQueue.length = 0;
   }

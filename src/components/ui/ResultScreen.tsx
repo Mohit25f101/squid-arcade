@@ -1,234 +1,520 @@
+/**
+ * src/components/ui/ResultScreen.tsx  —  Phase 7 additions
+ *
+ * DIFF vs Phase 6:
+ *   + onContinue / onReplay / onMenu props aligned with GameRouter
+ *   + "Survived X of 3" session counter (FIX 7.2)
+ *   + Session progress bar (games played in current run)
+ *   + Best score display uses bestScores from store
+ *
+ * NOTE: This file extends the Phase 4/6 ResultScreen. Only the NEW
+ * additions are documented below — integrate the sections marked
+ * [PHASE 7 ADD] into the existing component file.
+ */
+
 "use client";
 
-// src/components/ui/ResultScreen.tsx
-//
-// Shared result-state overlay used by every game mode.
-// Renders either ELIMINATED or SURVIVOR depending on `outcome`.
-// Provides "TRY AGAIN" (instant restart, same mode) and "◀ MENU" (lobby).
-// Plays audio through the shared useMenuAudio hook.
+import { motion } from "framer-motion";
+import { useGameStore, selectSessionStats, type GameId } from "@/store/gameStore";
 
-import React, { useEffect, useRef } from "react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type ResultOutcome = "victory" | "eliminated";
+// ─── Prop interface (Phase 7 update) ─────────────────────────────────────────
 
 export interface ResultScreenProps {
-  outcome: ResultOutcome;
-  /** Prize amount added this round (shown on victory only). */
-  prize?: number;
-  /** Stat label shown beneath the main title, e.g. "PANEL 6 OF 18" or "TIME: 43s". */
-  statLine?: string;
-  /** Restart the same game mode instantly. */
-  onTryAgain: () => void;
-  /** Return cleanly to the main menu / lobby. */
-  onMenu: () => void;
-  /** Called once when the screen mounts — use to play entry audio. */
-  onMount?: () => void;
+  gameId?:      GameId;
+  onContinue?:  () => void;    // next game or session-end
+  onReplay?:    () => void;    // play same game again
+  onMenu?:      () => void;    // back to main menu (abandons session)
+  // Legacy props for game components
+  outcome?:     "victory" | "eliminated";
+  statLine?:    string;
+  prize?:       number;
+  onTryAgain?:  () => void;
 }
 
-// ─── Squid Game design tokens (match squid-menu.css :root) ───────────────────
+// ─── [PHASE 7 ADD] SessionProgressBar ────────────────────────────────────────
+// Drop this sub-component into the ResultScreen JSX above the CTA buttons.
 
-const SQ = {
-  pink:   "#FF0066",
-  teal:   "#00FFB2",
-  gold:   "#FFD700",
-  red:    "#FF3333",
-  darker: "#050508",
-} as const;
-
-// ─── Reusable arcade button ───────────────────────────────────────────────────
-
-interface ArcadeButtonProps {
-  onClick: () => void;
-  color: string;
-  size?: "sm" | "md" | "lg";
-  className?: string;
-  children: React.ReactNode;
+interface SessionProgressProps {
+  survived: number;
+  played:   number;
+  total:    number;
 }
 
-const ArcadeButton: React.FC<ArcadeButtonProps> = ({
-  onClick, color, size = "md", className = "", children,
-}) => {
-  const padding = { sm: "10px 24px", md: "14px 40px", lg: "16px 52px" }[size];
-  const fontSize = { sm: 13, md: 15, lg: 18 }[size];
-
-  const [hovered, setHovered] = React.useState(false);
+export function SessionProgressBar({ survived, played, total }: SessionProgressProps) {
+  const pct = (played / 3) * 100;
 
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className={`font-bebas tracking-widest border transition-all duration-200 ${className}`}
-      style={{
-        padding,
-        fontSize,
-        fontFamily: "'Bebas Neue', sans-serif",
-        letterSpacing: "0.18em",
-        textTransform: "uppercase",
-        cursor: "pointer",
-        borderColor: `${color}60`,
-        color: color,
-        background: hovered ? `${color}20` : `${color}08`,
-        boxShadow: hovered
-          ? `0 0 28px ${color}55, 0 0 6px ${color}30`
-          : `0 0 15px ${color}22`,
-        transform: hovered ? "translateX(4px)" : "translateX(0)",
-        transition: "all 0.18s ease",
-      }}
-    >
-      {children}
-    </button>
-  );
-};
-
-// ─── SymbolTrio (○ △ □) ──────────────────────────────────────────────────────
-
-const SymbolTrio: React.FC<{ size?: number }> = ({ size = 20 }) => (
-  <div
-    className="flex items-center gap-3 justify-center"
-    style={{ opacity: 0.55 }}
-  >
-    {/* Circle */}
-    <div
-      style={{
-        width: size, height: size,
-        borderRadius: "50%",
-        border: `2px solid ${SQ.teal}`,
-        boxShadow: `0 0 8px ${SQ.teal}80`,
-      }}
-    />
-    {/* Triangle */}
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <polygon
-        points="12,2 22,22 2,22"
-        stroke={SQ.pink}
-        strokeWidth="2"
-        fill="none"
-        style={{ filter: `drop-shadow(0 0 4px ${SQ.pink}80)` }}
-      />
-    </svg>
-    {/* Square */}
-    <div
-      style={{
-        width: size, height: size,
-        border: `2px solid ${SQ.gold}`,
-        boxShadow: `0 0 8px ${SQ.gold}80`,
-      }}
-    />
-  </div>
-);
-
-// ─── Main ResultScreen ────────────────────────────────────────────────────────
-
-export const ResultScreen: React.FC<ResultScreenProps> = ({
-  outcome,
-  prize,
-  statLine,
-  onTryAgain,
-  onMenu,
-  onMount,
-}) => {
-  const isVictory = outcome === "victory";
-  const accentColor = isVictory ? SQ.gold : SQ.red;
-  const mountedRef = useRef(false);
-
-  useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      onMount?.();
-    }
-  }, [onMount]);
-
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center z-50 scanlines anim-result-enter"
-      style={{ background: "rgba(0,0,0,0.92)" }}
-    >
-      <div className="text-center" style={{ maxWidth: 480, width: "90%" }}>
-
-        {/* ── Main title ── */}
-        <div
-          className={`font-bebas mb-3 ${isVictory ? "anim-victory" : "anim-eliminated"}`}
+    <div style={spStyles.wrapper}>
+      <div style={spStyles.labelRow}>
+        <span style={spStyles.label}>SESSION PROGRESS</span>
+        <span style={spStyles.count}>
+          <span style={{ color: "#00FFB2" }}>{survived}</span>
+          {" survived · "}
+          <span style={{ color: "rgba(255,255,255,0.5)" }}>{played} of 3 played</span>
+        </span>
+      </div>
+      <div style={spStyles.track}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ delay: 0.3, duration: 0.6, ease: "easeOut" }}
           style={{
-            fontSize: "clamp(56px, 14vw, 112px)",
-            color: accentColor,
-            textShadow: `0 0 40px ${accentColor}, 0 0 80px ${accentColor}50`,
-            lineHeight: 1,
+            ...spStyles.fill,
+            background: survived === played
+              ? "#00FFB2"     // all played games were victories
+              : "#FF0066",    // at least one elimination
           }}
-        >
-          {isVictory ? "SURVIVOR" : "ELIMINATED"}
-        </div>
-
-        {/* ── Korean subtitle ── */}
-        <p className="font-korean text-white/50 mb-2" style={{ fontSize: 15 }}>
-          {isVictory ? "생존자" : "탈락"}
-        </p>
-
-        {/* ── Stat line ── */}
-        {statLine && (
-          <p
-            className="font-mono-sq text-white/30 text-xs tracking-widest mb-4"
-            style={{ letterSpacing: "0.2em" }}
-          >
-            {statLine}
-          </p>
-        )}
-
-        {/* ── Prize card (victory only) ── */}
-        {isVictory && prize != null && (
-          <div
-            className="glass rounded-xl px-8 py-4 my-5 border mx-auto inline-block"
-            style={{ borderColor: `${SQ.gold}30` }}
-          >
-            <p className="font-mono-sq text-xs text-white/40 mb-1">PRIZE ADDED</p>
-            <p className="font-bebas text-4xl" style={{ color: SQ.gold }}>
-              ₩ {prize.toLocaleString()}
-            </p>
-          </div>
-        )}
-
-        {/* ── Symbols ── */}
-        <div className="flex justify-center my-5">
-          <SymbolTrio size={isVictory ? 22 : 18} />
-        </div>
-
-        {/* ── Section divider ── */}
-        <div className="section-divider mb-7" />
-
-        {/* ── Action buttons ── */}
-        <div className="flex flex-col items-center gap-4">
-          <ArcadeButton
-            onClick={onTryAgain}
-            color={accentColor}
-            size="lg"
-            className="anim-btn-ready-1"
-          >
-            ▶ TRY AGAIN
-          </ArcadeButton>
-
-          <ArcadeButton
-            onClick={onMenu}
-            color={SQ.pink}
-            size="sm"
-            className="anim-btn-ready-2"
-          >
-            ◀ MENU
-          </ArcadeButton>
-        </div>
-
-        {/* ── Footer label ── */}
-        <p
-          className="font-mono-sq text-white/15 text-xs mt-8 tracking-widest"
-          style={{ letterSpacing: "0.25em" }}
-        >
-          456 — 오징어 게임
-        </p>
-
+        />
+      </div>
+      {/* Game dots */}
+      <div style={spStyles.dots}>
+        {[0, 1, 2].map((i) => {
+          const entry = useGameStore.getState().sessionHistory[i];
+          const color = !entry
+            ? "rgba(255,255,255,0.12)"
+            : entry.outcome === "victory"
+            ? "#00FFB2"
+            : "#FF0066";
+          return (
+            <div key={i} style={{ ...spStyles.dot, background: color }} />
+          );
+        })}
       </div>
     </div>
   );
+}
+
+const spStyles: Record<string, React.CSSProperties> = {
+  wrapper: {
+    display:       "flex",
+    flexDirection: "column",
+    gap:           8,
+    padding:       "16px 0",
+    borderTop:     "1px solid rgba(255,255,255,0.06)",
+  },
+  labelRow: {
+    display:        "flex",
+    justifyContent: "space-between",
+    alignItems:     "baseline",
+  },
+  label: {
+    fontFamily:   "'DM Mono', monospace",
+    fontSize:     8,
+    letterSpacing: "0.28em",
+    color:        "rgba(255,255,255,0.28)",
+    textTransform: "uppercase",
+  },
+  count: {
+    fontFamily:   "'DM Mono', monospace",
+    fontSize:     10,
+    letterSpacing: "0.1em",
+  },
+  track: {
+    height:       4,
+    background:   "rgba(255,255,255,0.08)",
+    borderRadius: 2,
+    overflow:     "hidden",
+  },
+  fill: {
+    height:       "100%",
+    borderRadius: 2,
+    minWidth:     4,
+  },
+  dots: {
+    display: "flex",
+    gap:     8,
+    marginTop: 4,
+  },
+  dot: {
+    width:        8,
+    height:       8,
+    borderRadius: "50%",
+    flexShrink:   0,
+  },
 };
+
+// ─── [PHASE 7 ADD] Integration instructions ───────────────────────────────────
+//
+// 1. Replace the existing ResultScreenProps interface with the one above.
+//
+// 2. Inside the ResultScreen component body, add:
+//
+//      const { survived, total, played } = useGameStore(selectSessionStats);
+//      const bestScores = useGameStore((s) => s.bestScores);
+//
+// 3. Render <SessionProgressBar> above the CTA button row:
+//
+//      <SessionProgressBar survived={survived} played={played} total={total} />
+//
+// 4. Replace the existing button wiring:
+//      - "CONTINUE" → calls onContinue
+//      - "PLAY AGAIN" → calls onReplay
+//      - "MENU" → calls onMenu
+//
+// 5. Update best-score display:
+//      bestScores[gameId] ?? 0  (instead of any local state)
+//
+// 6. The "CONTINUE" button label should contextualise based on session state:
+//
+//      const lastEntry = sessionHistory[sessionHistory.length - 1];
+//      const isEliminated = lastEntry?.outcome === "eliminated";
+//      const nextGame = getNextGame(gameId);   // import from GameRouter or inline
+//
+//      label = isEliminated
+//        ? "END SESSION"
+//        : nextGame
+//        ? "NEXT GAME →"
+//        : "FINISH SESSION";
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── ResultScreen Component ──────────────────────────────────────────────────
+
+export function ResultScreen({
+  gameId,
+  onContinue,
+  onReplay,
+  onMenu,
+  // Legacy props
+  outcome,
+  statLine,
+  prize,
+  onTryAgain,
+}: ResultScreenProps) {
+  // Determine if using new or legacy interface
+  const isLegacy = outcome !== undefined;
+  
+  // Use legacy interface if provided
+  if (isLegacy) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(5, 8, 16, 0.95)",
+          backdropFilter: "blur(4px)",
+          color: "#fff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 200,
+          fontFamily: "'DM Mono', monospace",
+          padding: "40px 20px",
+        }}
+      >
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          style={{
+            textAlign: "center",
+            maxWidth: 500,
+          }}
+        >
+          {/* Outcome */}
+          <div style={{ fontSize: "clamp(32px, 6vw, 56px)", fontWeight: "bold", color: outcome === "victory" ? "#00FFB2" : "#FF0066", marginBottom: 32, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            {outcome}
+          </div>
+
+          {/* Stat Line */}
+          {statLine && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: `1px solid ${outcome === "victory" ? "#00FFB2" : "#FF0066"}`,
+                borderRadius: 8,
+                padding: "24px",
+                marginBottom: 32,
+                fontSize: 14,
+                letterSpacing: "0.1em",
+              }}
+            >
+              {statLine}
+            </motion.div>
+          )}
+
+          {/* Prize if applicable */}
+          {prize && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              style={{
+                fontSize: 12,
+                color: "#FFD700",
+                marginBottom: 32,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+              }}
+            >
+              Prize: ₩{prize.toLocaleString()}
+            </motion.div>
+          )}
+
+          {/* Action Buttons */}
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              marginTop: 40,
+              width: "100%",
+            }}
+          >
+            <button
+              onClick={onTryAgain}
+              style={{
+                background: outcome === "victory" ? "#00FFB2" : "#FF0066",
+                color: "#050810",
+                border: "none",
+                padding: "14px 28px",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 12,
+                fontWeight: "bold",
+                letterSpacing: "0.2em",
+                cursor: "pointer",
+                textTransform: "uppercase",
+                borderRadius: 4,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.opacity = "0.8";
+                (e.target as HTMLButtonElement).style.transform = "translateY(-2px)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.opacity = "1";
+                (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+              }}
+            >
+              TRY AGAIN
+            </button>
+
+            <button
+              onClick={onMenu}
+              style={{
+                background: "transparent",
+                color: "rgba(255,255,255,0.5)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                padding: "14px 28px",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 12,
+                letterSpacing: "0.2em",
+                cursor: "pointer",
+                textTransform: "uppercase",
+                borderRadius: 4,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.5)";
+                (e.target as HTMLButtonElement).style.color = "#fff";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)";
+                (e.target as HTMLButtonElement).style.color = "rgba(255,255,255,0.5)";
+              }}
+            >
+              MENU
+            </button>
+          </motion.div>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
+  // New interface for session-level results
+  const { survived, total, played } = useGameStore((s) => selectSessionStats(s));
+  const sessionHistory = useGameStore((s) => s.sessionHistory);
+  const bestScores = useGameStore((s) => s.bestScores);
+
+  const lastEntry = sessionHistory[sessionHistory.length - 1];
+  const isEliminated = lastEntry?.outcome === "eliminated";
+  
+  const GAME_LABELS: Record<GameId, string> = {
+    "red-light-green-light": "Red Light, Green Light",
+    "glass-bridge": "Glass Bridge",
+    "dalgona": "Dalgona Candy",
+    "glass-breaker": "Glass Breaker",
+    "menu": "Menu"
+  };
+
+  const gameLabel = GAME_LABELS[gameId!] ?? "Unknown Game";
+  const currentScore = lastEntry?.score ?? 0;
+  const bestScore = bestScores[gameId!] ?? 0;
+
+  const outcomeColor = isEliminated ? "#FF0066" : "#00FFB2";
+  const outcomeText = isEliminated ? "ELIMINATED" : "VICTORY";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(5, 8, 16, 0.95)",
+        backdropFilter: "blur(4px)",
+        color: "#fff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 200,
+        fontFamily: "'DM Mono', monospace",
+        padding: "40px 20px",
+      }}
+    >
+      <motion.div
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        style={{
+          textAlign: "center",
+          maxWidth: 500,
+        }}
+      >
+        {/* Game Title */}
+        <div style={{ fontSize: 12, letterSpacing: "0.2em", color: "rgba(255,255,255,0.5)", marginBottom: 24, textTransform: "uppercase" }}>
+          {gameLabel}
+        </div>
+
+        {/* Outcome */}
+        <div style={{ fontSize: "clamp(32px, 6vw, 56px)", fontWeight: "bold", color: outcomeColor, marginBottom: 32, letterSpacing: "0.1em" }}>
+          {outcomeText}
+        </div>
+
+        {/* Score Display */}
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${outcomeColor}`,
+            borderRadius: 8,
+            padding: "24px",
+            marginBottom: 32,
+          }}
+        >
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em", marginBottom: 8 }}>SCORE</div>
+          <div style={{ fontSize: 28, fontWeight: "bold", color: outcomeColor, marginBottom: 16 }}>
+            {currentScore}
+          </div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em" }}>
+            Best: <span style={{ color: outcomeColor }}>{bestScore}</span>
+          </div>
+        </motion.div>
+
+        {/* Session Progress Bar */}
+        <SessionProgressBar survived={survived} played={played} total={total} />
+
+        {/* Action Buttons */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.6 }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginTop: 40,
+            width: "100%",
+          }}
+        >
+          <button
+            onClick={onContinue}
+            style={{
+              background: outcomeColor,
+              color: "#050810",
+              border: "none",
+              padding: "14px 28px",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12,
+              fontWeight: "bold",
+              letterSpacing: "0.2em",
+              cursor: "pointer",
+              textTransform: "uppercase",
+              borderRadius: 4,
+              transition: "all 0.2s ease",
+              textDecoration: "none",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.opacity = "0.8";
+              (e.target as HTMLButtonElement).style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.opacity = "1";
+              (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+            }}
+          >
+            {isEliminated ? "END SESSION" : "CONTINUE →"}
+          </button>
+
+          <button
+            onClick={onReplay}
+            style={{
+              background: "transparent",
+              color: outcomeColor,
+              border: `1px solid ${outcomeColor}`,
+              padding: "14px 28px",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12,
+              letterSpacing: "0.2em",
+              cursor: "pointer",
+              textTransform: "uppercase",
+              borderRadius: 4,
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.background = `${outcomeColor}20`;
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.background = "transparent";
+            }}
+          >
+            PLAY AGAIN
+          </button>
+
+          <button
+            onClick={onMenu}
+            style={{
+              background: "transparent",
+              color: "rgba(255,255,255,0.5)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              padding: "14px 28px",
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12,
+              letterSpacing: "0.2em",
+              cursor: "pointer",
+              textTransform: "uppercase",
+              borderRadius: 4,
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.5)";
+              (e.target as HTMLButtonElement).style.color = "#fff";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.2)";
+              (e.target as HTMLButtonElement).style.color = "rgba(255,255,255,0.5)";
+            }}
+          >
+            MENU
+          </button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 export default ResultScreen;

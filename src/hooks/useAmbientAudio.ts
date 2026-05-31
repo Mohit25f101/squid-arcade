@@ -6,7 +6,7 @@
 import { useEffect, useRef } from "react";
 import { audioEventBus } from "../lib/audio/AudioEventBus";
 import { useSoundManager } from "./useSoundManager";
-import { useGameStore, selectPhase } from "../store/gameStore";
+import { useGameStore, selectRuntimePhase } from "../store/gameStore";
 import type { SoundId } from "../managers/SoundManager";
 
 // ─── Layered ambient config per phase ─────────────────────────────────────────
@@ -20,16 +20,16 @@ interface LayerConfig {
 }
 
 const PHASE_LAYERS: Partial<Record<string, LayerConfig>> = {
-  menu:    { base: ["room_tone"],                    fadeIn: 1200, fadeOut: 800  },
-  playing: { base: ["drone_root", "room_tone"],      fadeIn:  800, fadeOut: 600  },
-  paused:  { base: ["room_tone"],                    fadeIn:  400, fadeOut: 400  },
+  idle:    { base: ["room_tone"],               fadeIn: 1200, fadeOut: 800  },
+  playing: { base: ["drone_root", "room_tone"], fadeIn:  800, fadeOut: 600  },
+  paused:  { base: ["room_tone"],               fadeIn:  400, fadeOut: 400  },
 };
 
 // ─── useAmbientAudio ─────────────────────────────────────────────────────────
 
 export function useAmbientAudio(): void {
   const sm          = useSoundManager();
-  const phase       = useGameStore(selectPhase);
+  const phase       = useGameStore(selectRuntimePhase);
   const prevPhaseRef= useRef<string | null>(null);
   const activeLayers= useRef<SoundId[]>([]);
 
