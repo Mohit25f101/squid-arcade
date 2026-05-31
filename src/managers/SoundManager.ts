@@ -21,7 +21,6 @@ export type SoundId =
   | "ui_confirm"
   | "ui_back"
   | "doll_turn"
-  | "crowd_gasp"
   | "crowd_cheer"
   | "heartbeat"
   | "crowd_murmur"
@@ -38,7 +37,6 @@ export type SoundId =
   | "scan_tone"
   | "doll_theme_full"
   | "doll_theme_2note"
-  | "doll_song"
   // ── Menu background (FIX 3.1: registered here so all audio goes through one system) ──
   | "menu_bg"
   // ── GlassBridge sounds ────────────────────────────────────────────────────
@@ -78,7 +76,7 @@ const SOUND_DEFS: Record<SoundId, SoundDefinition> = {
   // ── SFX ──────────────────────────────────────────────────────────────────
   green_light:       { src: ["/audio/sfx/green_light.mp3"],    category: "sfx",     volume: 0.7  },
   red_light:         { src: ["/audio/sfx/red_light.mp3"],      category: "sfx",     volume: 0.85 },
-  red_light_stinger: { src: ["/audio/stingers/red-light-stinger.mp3"], category: "sfx", volume: 0.9 },
+  red_light_stinger: { src: ["/audio/stingers/exhale-texture.mp3"], category: "sfx", volume: 0.9 },
   player_step:       { src: ["/audio/sfx/step.mp3"],           category: "sfx",     volume: 0.25, pool: 4 },
   player_jump:       { src: ["/audio/sfx/jump.mp3"],           category: "sfx",     volume: 0.45, pool: 2 },
   player_land:       { src: ["/audio/sfx/land.mp3"],           category: "sfx",     volume: 0.35, pool: 2 },
@@ -104,7 +102,7 @@ const SOUND_DEFS: Record<SoundId, SoundDefinition> = {
   drone_overtone:    { src: ["/audio/drone/drone-overtone-loop.mp3"], category: "ambient", volume: 0.18, loop: true, html5: true },
   // ── Melodic / music ───────────────────────────────────────────────────────
   music_box:         { src: ["/audio/melodic/reverse-piano-loop.mp3"],    category: "music", volume: 0.40, loop: true, html5: true },
-  ostinato:          { src: ["/audio/melodic/ostinato-7-8-loop.mp3"],     category: "music", volume: 0.32, loop: true, html5: true },
+  ostinato:          { src: ["/audio/melodic/reverse-piano-loop.mp3"],      category: "music", volume: 0.32, loop: true, html5: true },
   // ── Menu background (FIX 3.1) ────────────────────────────────────────────
   menu_bg:           { src: ["/audio/melodic/Back Song.mp3"],             category: "music", volume: 0.55, loop: true, html5: true },
   // ── Percussion ───────────────────────────────────────────────────────────

@@ -10,7 +10,6 @@ const GAME_LABELS: Record<GameId, string> = {
   "red-light-green-light": "Red Light, Green Light",
   "glass-bridge":          "Glass Bridge",
   "dalgona":               "Dalgona Candy",
-  "glass-breaker":         "Glass Breaker",
   "menu":                  "Menu"
 };
 
@@ -18,7 +17,6 @@ const GAME_SYMBOLS: Record<GameId, string> = {
   "red-light-green-light": "▲",
   "glass-bridge":          "○",
   "dalgona":               "□",
-  "glass-breaker":         "◇",
   "menu":                  "M"
 };
 

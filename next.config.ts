@@ -37,6 +37,16 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy",          value: "strict-origin-when-cross-origin" },
         ],
       },
+      // dalgona.html is served inside a same-origin iframe by DalgonaCandy.tsx.
+      // The rule above sets X-Frame-Options: DENY for all routes; this specific
+      // override MUST come after that rule so it wins the merge for this path only.
+      // SAMEORIGIN allows same-origin iframes while still blocking cross-origin framing.
+      {
+        source:  "/dalgona.html",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        ],
+      },
     ];
   },
 
