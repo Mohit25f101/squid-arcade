@@ -188,6 +188,24 @@ function GameIconCard({
           <React.Fragment key={i}>{l}{i < lines.length - 1 && <br />}</React.Fragment>
         ))}
       </span>
+      {/* FIX 1.5 / Menu Polish — render desc field below the label */}
+      <span
+        className="sq-icon-desc"
+        style={{
+          fontFamily: "var(--font-mono-sq, 'JetBrains Mono', monospace)",
+          fontSize: "clamp(9px, 1.6vw, 11px)",
+          letterSpacing: "0.08em",
+          color: "rgba(255,255,255,0.42)",
+          lineHeight: 1.55,
+          textAlign: "center",
+          marginTop: 6,
+          padding: "0 8px",
+          maxWidth: 160,
+          display: "block",
+        }}
+      >
+        {mode.desc}
+      </span>
     </button>
   );
 }
@@ -568,7 +586,7 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
       >
         {/* Title */}
         <div className="sq-title-block">
-          <span className="sq-korean-label sq-font-korean">스피드 게임</span>
+          <span className="sq-korean-label sq-font-korean">오징어 게임</span>
           <h1 className="sq-main-title sq-font-bebas">SQUID GAME</h1>
           <div className="sq-title-divider">
             <div className="sq-title-divider-line pink-right" />
@@ -611,12 +629,12 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
             </div>
             <div className="sq-status-divider" aria-hidden />
             <div className="sq-status-item">
-              <span className="sq-status-label sq-font-mono">TIMER</span>
+              <span className="sq-status-label sq-font-mono">GAMES</span>
               <span
-                className="sq-status-val sq-font-mono sq-neon-pink"
-                style={{ color:"#FF0066", fontSize:"1.2rem" }}
+                className="sq-status-val sq-font-bebas sq-neon-pink"
+                style={{ color:"#FF0066", fontSize:"1.4rem" }}
               >
-                00:{String(countdownSec).padStart(2, "0")}
+                3
               </span>
             </div>
           </div>

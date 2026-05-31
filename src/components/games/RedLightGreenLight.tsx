@@ -17,6 +17,7 @@ import MobileTouchControls from "@/components/touch/MobileTouchControls";
 import CanvasWrapper, { type CanvasWrapperHandle, type CanvasSize } from "../canvas/CanvasWrapper";
 import { useGameAudio } from "../../hooks/useAmbientAudio";
 import { SoundManager } from "@/managers/SoundManager";
+import { inputManager } from "@/managers/InputManager";
 import { drawMinecraftCharacter } from "@/lib/render/drawMinecraftCharacter";
 
 // ─── Design Constants ─────────────────────────────────────────────────────────
@@ -141,6 +142,10 @@ interface GameState {
   inputJump: boolean;
   inputSprint: boolean;
   audioEvents: Set<string>;
+  // FIX 5.4 — victory screen-flash frame counter (counts down 0..3)
+  victoryFlash: number;
+  // FIX 6.2 — countdown camera reveal phase ('forward'|'pullback'|'done')
+  cameraRevealPhase: "forward" | "pullback" | "done";
 }
 
 // ─── Colour Palette ───────────────────────────────────────────────────────────
@@ -236,6 +241,8 @@ function makeGameState(diffNum: number): GameState {
     aliveCount: NPC_COUNT + 1, playerScore: 0,
     inputLeft: false, inputRight: false, inputJump: false, inputSprint: false,
     audioEvents: new Set(),
+    victoryFlash: 0,
+    cameraRevealPhase: "forward",
   };
 }
 
@@ -246,13 +253,19 @@ function drawBackground(ctx: CanvasRenderingContext2D, camX: number, gs: GameSta
   const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
   const danger = gs.lightPhase === "red" ? 1 : gs.lightPhase === "warning" ? 0.5 : 0;
   
-  // Base sky: Surreal bright blue to dusty horizon
-  const rT = Math.floor(lerp(120, 230, danger));
-  const gT = Math.floor(lerp(180, 50, danger));
-  const bT = Math.floor(lerp(255, 50, danger));
-  
+  // FIX 6.1 — Bleached pastel palette matching the show's overexposed playground
+  // Green-light base: desaturated blue-grey (#c8d8e8) → warm off-white (#e8ddd0)
+  // Red shift stays: bleed to ominous red is far more effective vs this pale base
+  const rT = Math.floor(lerp(200, 230, danger));  // 200→230 (pale blue-grey → danger red start)
+  const gT = Math.floor(lerp(216, 50,  danger));  // 216→50  (cool grey → dropped green)
+  const bT = Math.floor(lerp(232, 50,  danger));  // 232→50  (light blue → dropped blue)
+
+  const rB = Math.floor(lerp(232, 210, danger));  // warm off-white horizon
+  const gB = Math.floor(lerp(221, 80,  danger));
+  const bB = Math.floor(lerp(208, 60,  danger));
+
   sky.addColorStop(0, `rgb(${rT}, ${gT}, ${bT})`);
-  sky.addColorStop(1, `rgb(${rT + 60}, ${gT + 60}, ${bT + 40})`); // Dusty horizon
+  sky.addColorStop(1, `rgb(${rB}, ${gB}, ${bB})`); // Bleached warm horizon
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, DW, GROUND_Y);
 
@@ -325,6 +338,45 @@ function drawFinishLine(ctx: CanvasRenderingContext2D, camX: number): void {
   ctx.font        = "bold 13px JetBrains Mono, monospace";
   ctx.textAlign   = "center";
   ctx.fillText("FINISH", sx, GROUND_Y - 8);
+
+  // FIX 6.3 — Static guard silhouettes flanking the finish line
+  // Guards are authority figures: 1.2× player scale, slightly transparent
+  const guardW = Math.round(PLAYER_W * 1.2);
+  const guardH = Math.round(PLAYER_H * 1.2);
+  const guardY = GROUND_Y - guardH;
+
+  ctx.globalAlpha = 0.85;
+  // Left guard — faces the player (facing = -1 → looks left / toward player)
+  drawMinecraftCharacter(ctx, {
+    x: sx - 44,
+    y: guardY,
+    width: guardW,
+    height: guardH,
+    facing: -1,
+    animPhase: 0,
+    opacity: 1,
+    scaleX: 1,
+    scaleY: 1,
+    role: "guard",
+    state: "idle",
+    hitFlash: 0,
+  });
+  // Right guard — faces right (away from approaching players)
+  drawMinecraftCharacter(ctx, {
+    x: sx + 44,
+    y: guardY,
+    width: guardW,
+    height: guardH,
+    facing: 1,
+    animPhase: 0,
+    opacity: 1,
+    scaleX: 1,
+    scaleY: 1,
+    role: "guard",
+    state: "idle",
+    hitFlash: 0,
+  });
+  ctx.globalAlpha = 1.0;
 }
 
 function drawDoll(ctx: CanvasRenderingContext2D, doll: DollState, camX: number, gs: GameState): void {
@@ -854,6 +906,9 @@ function updatePlayer(p: Player, gs: GameState, dt: number, isHuman: boolean): v
     if (isHuman) {
       gs.audioEvents.add("victory");
       gs.phase = "victory";
+      // FIX 5.4 — victory burst: particles + 3-frame screen flash
+      spawnVictoryBurst(gs, p.wx, p.wy);
+      gs.victoryFlash = 3;
     }
   }
 }
@@ -927,6 +982,22 @@ function updateCamera(gs: GameState, dt: number): void {
   const human = gs.players[0];
   const cam   = gs.camera;
 
+  // FIX 6.2 — Countdown camera reveal: pan to show finish line, then pull back
+  if (gs.phase === "countdown") {
+    const elapsed = 3 - gs.countdown; // 0→3 seconds into countdown
+    if (elapsed < 1.8) {
+      // Phase 1: pan forward to reveal the finish line (60–70% of level)
+      gs.cameraRevealPhase = "forward";
+      const revealTarget = FINISH_X * 0.65 - DW * 0.5;
+      cam.x = lerp(cam.x, clamp(revealTarget, 0, DOLL_WORLD_X - DW * 0.5), Math.min(1, dt * 1.8));
+    } else {
+      // Phase 2: pull back to player start position
+      gs.cameraRevealPhase = "pullback";
+      cam.x = lerp(cam.x, 0, Math.min(1, dt * 5));
+    }
+    return;
+  }
+
   const targetX = clamp(
     human.wx - DW * CAM_LEAD_X,
     0,
@@ -987,6 +1058,28 @@ function updateDifficulty(gs: GameState): void {
 
 // ─── Particle Spawn Helpers ───────────────────────────────────────────────────
 
+// ─── Victory Particle Burst (FIX 5.4) ────────────────────────────────────────
+
+function spawnVictoryBurst(gs: GameState, wx: number, wy: number): void {
+  // 50 particles: gold + teal, 180° arc forward, gravity, alpha fade
+  for (let i = 0; i < 50; i++) {
+    const angle = -(Math.PI * 0.1) + Math.random() * Math.PI * 1.2; // forward arc
+    const speed = 120 + Math.random() * 320;
+    const isGold = Math.random() < 0.55;
+    gs.particles.push({
+      x:       wx,
+      y:       wy + PLAYER_H * 0.5,
+      vx:      Math.cos(angle) * speed,
+      vy:      Math.sin(angle) * speed - 80,
+      life:    0,
+      maxLife: 1.0 + Math.random() * 1.0,
+      r:       2.5 + Math.random() * 4,
+      color:   isGold ? "#FFD700" : "#00FFB2",
+      type:    "spark",
+    });
+  }
+}
+
 function spawnDust(gs: GameState, wx: number, wy: number, count = 3): void {
   for (let i = 0; i < count; i++) {
     gs.particles.push({
@@ -1032,6 +1125,8 @@ function gameTick(gs: GameState, rawDt: number): void {
 
   if (gs.phase === "countdown") {
     gs.countdown -= rawDt;
+    // FIX 6.2 — Update camera even during countdown for the reveal pan
+    updateCamera(gs, rawDt);
     return;
   }
 
@@ -1042,6 +1137,9 @@ function gameTick(gs: GameState, rawDt: number): void {
     gs.phase = "gameover";
     return;
   }
+
+  // FIX 5.4 — Decrement victory flash counter (frame-based)
+  if (gs.victoryFlash > 0) gs.victoryFlash--;
 
   updateDifficulty(gs);
   updateLightStateMachine(gs, dt);
@@ -1109,6 +1207,12 @@ function renderFrame(ctx: CanvasRenderingContext2D, size: CanvasSize, gs: GameSt
     drawHUD(ctx, gs);
   }
 
+  // FIX 5.4 — Victory screen flash (3-frame white overlay)
+  if (gs.victoryFlash > 0) {
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(0, 0, DW, DH);
+  }
+
   ctx.restore();
 }
 
@@ -1156,44 +1260,13 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
   const audio     = useGameAudio();
 
   const inputRef = useRef({ left: false, right: false, jump: false, sprint: false });
-  const jumpConsumedRef = useRef(false);
+  // jumpConsumedRef removed (FIX 5.1) — InputManager latches 'up' intent
 
   useEffect(() => { loadFromStorage(); audio.preloadGame(); }, []);
 
-  // ── Key listeners ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const dn = (e: KeyboardEvent) => {
-      switch (e.code) {
-        case "ArrowLeft":  case "KeyA":             inputRef.current.left   = true;  break;
-        case "ArrowRight": case "KeyD":             inputRef.current.right  = true;  break;
-        case "ArrowUp": case "KeyW": case "Space":
-          e.preventDefault();
-          if (!jumpConsumedRef.current) {
-            inputRef.current.jump  = true;
-            jumpConsumedRef.current = true;
-          }
-          break;
-        case "ShiftLeft": case "ShiftRight":        inputRef.current.sprint = true;  break;
-      }
-    };
-    const up = (e: KeyboardEvent) => {
-      switch (e.code) {
-        case "ArrowLeft":  case "KeyA":             inputRef.current.left   = false; break;
-        case "ArrowRight": case "KeyD":             inputRef.current.right  = false; break;
-        case "ArrowUp": case "KeyW": case "Space":
-          inputRef.current.jump   = false;
-          jumpConsumedRef.current = false;
-          break;
-        case "ShiftLeft": case "ShiftRight":        inputRef.current.sprint = false; break;
-      }
-    };
-    window.addEventListener("keydown", dn, { passive: false });
-    window.addEventListener("keyup",   up);
-    return () => {
-      window.removeEventListener("keydown", dn);
-      window.removeEventListener("keyup",   up);
-    };
-  }, []);
+  // ── FIX 5.1: Keyboard input now handled by inputManager singleton ──────────
+  // inputRef is kept solely for MobileTouchControls touch state.
+  // The inputManager.snapshot().heldKeys drives keyboard in onTick.
 
   // ── Escape → exit to menu ────────────────────────────────────────────────
   useEffect(() => {
@@ -1202,6 +1275,8 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
       if (e.code === "Escape") {
         e.preventDefault();
         audio.stopHeartbeat();
+        // FIX 5.1: reset InputManager state so no keys bleed into next scene
+        inputManager.reset();
         onExit();
       }
     };
@@ -1216,7 +1291,8 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
     setCountdownN(3);
     setFinalScore(0);
     setShowElim(false);
-    jumpConsumedRef.current = false;
+    // FIX 5.1 — reset inputManager state on game restart (clears stale key holds)
+    inputManager.reset();
     audio.stopHeartbeat();
   }, [diffNum, audio]);
 
@@ -1235,12 +1311,19 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
 
       const gs = gsRef.current;
 
-      gs.inputLeft   = inputRef.current.left;
-      gs.inputRight  = inputRef.current.right;
-      gs.inputSprint = inputRef.current.sprint;
-      gs.inputJump   = inputRef.current.jump;
+      // FIX 5.1 — Read keyboard from InputManager + touch from inputRef (merge)
+      const km = inputManager.snapshot();
+      const touch = inputRef.current;
 
-      if (gs.inputJump) inputRef.current.jump = false;
+      gs.inputLeft   = km.heldKeys.has("ArrowLeft")  || km.heldKeys.has("KeyA") || touch.left;
+      gs.inputRight  = km.heldKeys.has("ArrowRight") || km.heldKeys.has("KeyD") || touch.right;
+      gs.inputSprint = km.heldKeys.has("ShiftLeft")  || km.heldKeys.has("ShiftRight") || touch.sprint;
+
+      // Jump: use latched 'up' and 'action' intents, then consume them
+      const kbJump = km.up || km.action;
+      gs.inputJump = kbJump || touch.jump;
+      if (kbJump) inputManager.consumeIntent("up", "action");
+      if (touch.jump) touch.jump = false;
 hudSync.write({
   score:    Math.floor(gs.playerScore),
   lives:    gs.aliveCount,         // alive player count doubles as "lives remaining"
@@ -1355,6 +1438,8 @@ hudSync.write({
     return () => {
       setPaused(true);
       audio.stopHeartbeat();
+      // FIX 5.1: flush held-key state so keys don't bleed into the next scene
+      inputManager.reset();
     };
   }, [setPaused, audio]);
 
@@ -1385,7 +1470,7 @@ hudSync.write({
       {/* ── Persistent BACK TO MENU button ───────────────────────────────── */}
       {onExit && (
         <button
-          onClick={() => { audio.stopHeartbeat(); onExit(); }}
+          onClick={() => { audio.stopHeartbeat(); inputManager.reset(); onExit(); }}
           style={{
             position: "absolute", top: 16, left: 16, zIndex: 250,
             padding: "10px 18px",

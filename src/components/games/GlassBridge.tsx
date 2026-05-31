@@ -3,6 +3,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameShellBridge } from "@/components/GameShell";
 import { useHUDSync } from "@/components/hud/useHUDSync";
+import { SoundManager } from "@/managers/SoundManager";
+import { ResultScreen } from "../ui/ResultScreen";
+import { lerp, clamp } from "@/utils/math";
+import { useGameStore } from "@/store/gameStore";
 
 interface GameProps {
   onExit?: () => void;
@@ -191,14 +195,6 @@ function makeRng(seed: number) {
 // 5. PURE UTILITIES
 // ============================================================
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
-}
-
 function jumpArc(startY: number, targetY: number, t: number): number {
   return lerp(startY, targetY, t) - Math.sin(t * Math.PI) * JUMP_HEIGHT;
 }
@@ -283,26 +279,23 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
-  // Deep, terrifying abyss gradient
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#02070d"); // Near ceiling
-  grad.addColorStop(0.4, "#030d1a"); // Bridge level
-  grad.addColorStop(0.8, "#010308"); // Deep fall
-  grad.addColorStop(1, "#000000");   // Abyss
+  grad.addColorStop(0, "#02070d"); 
+  grad.addColorStop(0.4, "#030d1a"); 
+  grad.addColorStop(0.8, "#010308"); 
+  grad.addColorStop(1, "#000000");   
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Volumetric Fog Layers (Cinematic Depth)
   for (let i = 0; i < 4; i++) {
     const yPos = h * (0.3 + i * 0.25);
     const bandGrad = ctx.createRadialGradient(w / 2, yPos, 0, w / 2, yPos, w * 0.8);
-    bandGrad.addColorStop(0, `rgba(3, 135, 121, ${0.06 - i * 0.01})`); // Brand Teal Fog
+    bandGrad.addColorStop(0, `rgba(3, 135, 121, ${0.06 - i * 0.01})`); 
     bandGrad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = bandGrad;
     ctx.fillRect(0, 0, w, h);
   }
 
-  // Suspended structural cables in the deep background
   ctx.strokeStyle = "rgba(255,255,255,0.02)";
   ctx.lineWidth = 2;
   for (let x = 0; x < w; x += 120) {
@@ -835,41 +828,7 @@ function renderParticles(ctx: CanvasRenderingContext2D, particles: Particle[], c
   ctx.restore();
 }
 
-function renderHUD(ctx: CanvasRenderingContext2D, gs: GameState): void {
-  const progress = gs.currentRow / gs.totalRows;
-  const timeLeft = gs.timeLeft;
-  const isLow = timeLeft < 20;
-
-  ctx.fillStyle = "rgba(0,4,12,0.7)";
-  ctx.fillRect(0, 0, WORLD_W, 52);
-
-  ctx.fillStyle = "rgba(140,200,255,0.9)";
-  ctx.font = "bold 16px 'Courier New', monospace";
-  ctx.textAlign = "left";
-  ctx.fillText(`PANEL  ${gs.currentRow} / ${gs.totalRows}`, 28, 30);
-
-  const mins = Math.floor(timeLeft / 60);
-  const secs = Math.floor(timeLeft % 60).toString().padStart(2, "0");
-  ctx.fillStyle = isLow ? `rgba(255,${60 + Math.sin(gs.atmosphericT * 8) * 60},60,0.95)` : "rgba(200,230,255,0.8)";
-  ctx.font = `bold ${isLow ? 22 : 18}px 'Courier New', monospace`;
-  ctx.textAlign = "center";
-  ctx.fillText(`${mins}:${secs}`, WORLD_W / 2, 32);
-
-  const barW = 240;
-  const barX = WORLD_W - barW - 28;
-  ctx.fillStyle = "rgba(20,40,80,0.6)";
-  ctx.fillRect(barX, 14, barW, 10);
-  ctx.fillStyle = `rgba(80,180,255,${0.7 + progress * 0.3})`;
-  ctx.fillRect(barX, 14, barW * progress, 10);
-  ctx.strokeStyle = "rgba(80,140,220,0.4)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(barX, 14, barW, 10);
-
-  ctx.fillStyle = "rgba(140,190,240,0.7)";
-  ctx.font = "11px 'Courier New', monospace";
-  ctx.textAlign = "right";
-  ctx.fillText("PROGRESS", WORLD_W - 28, 11);
-
+function renderTutorialHint(ctx: CanvasRenderingContext2D, gs: GameState): void {
   if (gs.currentRow === 0 && gs.elapsed < 5) {
     const alpha = clamp(1 - (gs.elapsed - 3) / 2, 0, 1);
     ctx.fillStyle = `rgba(180,220,255,${alpha * 0.8})`;
@@ -956,7 +915,7 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
   renderParticles(ctx, gs.particles, camY);
   ctx.restore(); 
 
-  if (gs.phase === "playing" || gs.phase === "falling") renderHUD(ctx, gs);
+  if (gs.phase === "playing" || gs.phase === "falling") renderTutorialHint(ctx, gs);
   renderOverlays(ctx, gs, assets);
 }
 
@@ -995,7 +954,6 @@ function useGameLoop(callback: (dt: number) => void, active: boolean): React.Mut
   const scaleRef = useRef<((s: number) => void) | null>(null);
   const scaleValRef = useRef(1);
 
-  // Architecture Loop Fix: Decouples rendering engine ticks from reference closures
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
@@ -1073,52 +1031,6 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-const GameOverScreen: React.FC<{ row: number; total: number; onRestart: () => void; onExit?: () => void }> = ({
-  row, total, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,2,8,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(255,80,80,0.95)", fontSize: "clamp(32px, 6vw, 56px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 16, textShadow: "0 0 60px rgba(255,60,60,0.5)" }}>
-      ELIMINATED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(140,180,220,0.7)", fontSize: 14, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`PANEL ${row} of ${total}`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1628", background: "rgba(80,160,255,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Try Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,160,255,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-const VictoryScreen: React.FC<{ elapsed: number; onRestart: () => void; onExit?: () => void }> = ({
-  elapsed, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,4,10,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(80,220,160,0.98)", fontSize: "clamp(28px, 5vw, 48px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 12, textShadow: "0 0 60px rgba(60,200,140,0.5)" }}>
-      SURVIVED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(120,200,160,0.65)", fontSize: 13, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`TIME: ${Math.floor(elapsed)}s`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1a0f", background: "rgba(80,200,140,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Play Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,200,140,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
-
 // ============================================================
 // 26. MAIN REACT COMPONENT
 // ============================================================
@@ -1133,23 +1045,32 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
   const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
   const [finalRow, setFinalRow] = useState(0);
   const [finalElapsed, setFinalElapsed] = useState(0);
+  
+  const [finalScore, setFinalScore] = useState(0);
+  const addScore = useGameStore((s) => s.addScore);
+  const scoreRecorded = useRef(false);
 
-  // Sync reference guard configuration prevents closures from leaking stale metadata states
   const uiPhaseRef = useRef(uiPhase);
   useEffect(() => {
     uiPhaseRef.current = uiPhase;
   }, [uiPhase]);
 
-  // Memory Hygiene: Explicit particle system teardown prevent memory leaks across sessions
   useEffect(() => {
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       particlePool = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      SoundManager.getInstance().stopAll();
     };
   }, []);
 
   useGameShellBridge({
     uiPhase,
-    sourceGame: "glass-breaker",
+    sourceGame: "glass-bridge",
     progressMarker: finalRow,
     progressTotal: TOTAL_ROWS,
   });
@@ -1207,6 +1128,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     if (!assetsRef.current) {
       assetsRef.current = initBakedAssets();
     }
+    scoreRecorded.current = false;
     setUiPhase("playing");
   }, []);
 
@@ -1225,33 +1147,60 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
     gameTick(gs, dt, inputRef);
 
+    if (gs.audioEvents.size > 0) {
+      const sm = SoundManager.getInstance();
+      for (const ev of gs.audioEvents) {
+        switch (ev) {
+          case "shatter":
+            sm.play("glass_shatter", 0);
+            break;
+          case "victory":
+            sm.play("glass_victory", 0);
+            break;
+        }
+      }
+      gs.audioEvents.clear();
+    }
+
     const playerAlive = gs.player.status === "alive";
     hudSync.write({
-      score:    gs.currentRow,
-      lives:    playerAlive ? 1 : 0,
-      time:     Math.ceil(Math.max(0, gs.timeLeft)),
-      health:   playerAlive ? 100 : 0,
+      score:     gs.currentRow * 100,
+      lives:     playerAlive ? 1 : 0,
+      time:      Math.ceil(Math.max(0, gs.timeLeft)),
+      health:    playerAlive ? 100 : 0,
       maxHealth: 100,
-      level:    gs.currentRow,
+      level:     gs.currentRow + 1,
     });
     
-    // Explicit frame cycle sync tick flush instruction prevents telemetry interface lag
     hudSync.tick(performance.now());   
 
     if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
       hudSync.write({ health: 0, lives: 0 });
       hudSync.forceFlush();
       setFinalRow(gs.currentRow);
+      if (!scoreRecorded.current) {
+          const score = gs.currentRow * 100;
+          addScore(score);
+          setFinalScore(score);
+          scoreRecorded.current = true;
+      }
       setUiPhase("gameover");
     }
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
       setFinalElapsed(gs.elapsed);
+      if (!scoreRecorded.current) {
+          const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
+          const score = (TOTAL_ROWS * 100) + timeBonus;
+          addScore(score);
+          setFinalScore(score);
+          scoreRecorded.current = true;
+      }
       setUiPhase("victory");
     }
 
     const quality: "high" | "low" = "high";
     renderFrame(ctx, gs, assets, quality);
-  }, [hudSync]);
+  }, [hudSync, addScore]);
 
   useGameLoop(tick, uiPhase === "playing");
 
@@ -1298,16 +1247,16 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
       )}
 
       {uiPhase === "intro" && <IntroScreen onStart={startGame} />}
-      {uiPhase === "gameover" && (
-        <GameOverScreen
-          row={finalRow}
-          total={TOTAL_ROWS}
-          onRestart={restartGame}
-          onExit={onExit} 
+
+      {/* Unified ResultScreen Implementation */}
+      {(uiPhase === "gameover" || uiPhase === "victory") && (
+        <ResultScreen 
+          outcome={uiPhase === "victory" ? "victory" : "eliminated"} 
+          statLine={uiPhase === "victory" ? `SCORE: ${finalScore.toLocaleString()}` : `SCORE: ${finalScore.toLocaleString()} (PANEL ${finalRow})`} 
+          prize={uiPhase === "victory" ? 45600000000 : undefined}
+          onTryAgain={restartGame} 
+          onMenu={onExit ?? (() => {})} 
         />
-      )}
-      {uiPhase === "victory" && (
-        <VictoryScreen elapsed={finalElapsed} onRestart={restartGame} onExit={onExit} />
       )}
 
       {uiPhase === "playing" && (

@@ -1,13 +1,30 @@
 // src/hooks/useMenuAudio.ts
 //
-// Wraps Howler.js for the main menu audio system.
-// Sources all sounds from the repository's /public/audio/ folder.
-// Respects the master/sfx/music volume settings from gameStore.
+// FIX 3.1 — Migrate menu audio from raw Howl instances to SoundManager.
+//
+// Previously this hook created its own Howl objects for the BG track and five
+// SFX sounds, bypassing SoundManager entirely. That meant:
+//   - Menu BG volume was computed with a hand-rolled formula that drifted from
+//     the store's master/music settings after a single-digit rounding error.
+//   - The unlock gate was a separate code path — mute/unmute from the settings
+//     panel had no effect on menu audio until the next page load.
+//   - Two parallel audio systems could both call Howl.play() concurrently,
+//     causing double-trigger artefacts at game launch.
+//
+// Now: all audio is routed through the SoundManager singleton.
+//   - menu_bg maps to the new "menu_bg" SoundId (registered in SoundManager).
+//   - SFX names map to existing SoundIds:
+//       hover      → ui_hover
+//       click      → ui_click
+//       open       → riser_micro
+//       transition → riser_standard
+//       exit       → player_eliminated
+// Volume, mute, and unlock are now fully controlled by SoundManager.
 
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { useGameStore } from "@/store/gameStore";
+import { useCallback } from "react";
+import { SoundManager } from "@/managers/SoundManager";
 
 type SoundName = "hover" | "click" | "open" | "transition" | "exit";
 
@@ -17,100 +34,35 @@ interface MenuAudioController {
   stopBg:  () => void;
 }
 
+// Map friendly menu names to canonical SoundManager IDs
+const MENU_SFX_MAP: Record<SoundName, Parameters<SoundManager["play"]>[0]> = {
+  hover:      "ui_hover",
+  click:      "ui_click",
+  open:       "riser_micro",
+  transition: "riser_standard",
+  exit:       "player_eliminated",
+};
+
 export function useMenuAudio(): MenuAudioController {
-  const bgRef    = useRef<import("howler").Howl | null>(null);
-  const sfxRef   = useRef<Record<SoundName, import("howler").Howl | null>>({
-    hover:      null,
-    click:      null,
-    open:       null,
-    transition: null,
-    exit:       null,
-  });
-  const readyRef  = useRef(false);
-  const settings  = useGameStore((s) => s.settings);
-
-  // Lazy-load Howler only on client
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (readyRef.current) return;
-
-    import("howler").then(({ Howl }) => {
-      // Background ambient loop — music-box doll theme
-      bgRef.current = new Howl({
-        src:    ["/audio/melodic/Back Song.mp3"],
-        loop:   true,
-        volume: settings.musicVolume * settings.masterVolume * 0.55,
-        preload: true,
-      });
-
-      // SFX
-      sfxRef.current.hover = new Howl({
-        src:    ["/audio/stingers/servo-click.webm"],
-        volume: settings.sfxVolume * settings.masterVolume * 0.45,
-        preload: true,
-      });
-
-      sfxRef.current.click = new Howl({
-        src:    ["/audio/stingers/sub-hit.webm"],
-        volume: settings.sfxVolume * settings.masterVolume * 0.6,
-        preload: true,
-      });
-
-      sfxRef.current.open = new Howl({
-        src:    ["/audio/stingers/riser-micro.webm"],
-        volume: settings.sfxVolume * settings.masterVolume * 0.5,
-        preload: true,
-      });
-
-      sfxRef.current.transition = new Howl({
-        src:    ["/audio/stingers/riser-standard.webm"],
-        volume: settings.sfxVolume * settings.masterVolume * 0.6,
-        preload: true,
-      });
-
-      sfxRef.current.exit = new Howl({
-        src:    ["/audio/sfx/elimination.webm"],
-        volume: settings.sfxVolume * settings.masterVolume * 0.4,
-        preload: true,
-      });
-
-      readyRef.current = true;
-    });
-
-    return () => {
-      bgRef.current?.stop();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Keep bg volume in sync with settings
-  useEffect(() => {
-    if (!bgRef.current) return;
-    bgRef.current.volume(settings.musicVolume * settings.masterVolume * 0.55);
-  }, [settings.musicVolume, settings.masterVolume]);
+  // Use the singleton directly — useSoundManager() is for hook-lifecycle
+  // management (volume sync, unlock events). Here we just need fire-and-forget
+  // calls that don't need React re-render tracking.
+  const sm = SoundManager.getInstance();
 
   const play = useCallback((name: SoundName) => {
-    if (!readyRef.current) return;
-    try {
-      sfxRef.current[name]?.play();
-    } catch {
-      // Audio context not ready — fail silently
-    }
-  }, []);
+    const id = MENU_SFX_MAP[name];
+    const cooldown = name === "hover" ? 60 : name === "click" ? 80 : 0;
+    sm.play(id, cooldown);
+  }, [sm]);
 
   const startBg = useCallback(() => {
-    if (!readyRef.current || !bgRef.current) return;
-    if (!bgRef.current.playing()) {
-      bgRef.current.fade(0, settings.musicVolume * settings.masterVolume * 0.55, 2000);
-      bgRef.current.play();
-    }
-  }, [settings.musicVolume, settings.masterVolume]);
+    // loop() is idempotent — safe to call if already playing
+    sm.loop("menu_bg");
+  }, [sm]);
 
   const stopBg = useCallback(() => {
-    if (!bgRef.current) return;
-    bgRef.current.fade(bgRef.current.volume() as number, 0, 800);
-    setTimeout(() => bgRef.current?.stop(), 900);
-  }, []);
+    sm.stopLoop("menu_bg", 800);
+  }, [sm]);
 
   return { play, startBg, stopBg };
 }
