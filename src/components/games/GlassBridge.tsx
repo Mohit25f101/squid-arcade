@@ -989,11 +989,24 @@ const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inpu
     if (!left || !right) return;
     const onLeftDown = (e: Event) => { e.preventDefault(); inputRef.current.left = true; };
     const onRightDown = (e: Event) => { e.preventDefault(); inputRef.current.right = true; };
+    // Release handlers: without these, a touch on the intro screen (when the
+    // game loop is not ticking to consume/reset the flag) leaves left/right
+    // permanently latched true, causing an unintended jump on game start.
+    const onLeftUp = (e: Event) => { e.preventDefault(); inputRef.current.left = false; };
+    const onRightUp = (e: Event) => { e.preventDefault(); inputRef.current.right = false; };
     left.addEventListener("touchstart", onLeftDown, { passive: false });
     right.addEventListener("touchstart", onRightDown, { passive: false });
+    left.addEventListener("touchend", onLeftUp, { passive: false });
+    left.addEventListener("touchcancel", onLeftUp, { passive: false });
+    right.addEventListener("touchend", onRightUp, { passive: false });
+    right.addEventListener("touchcancel", onRightUp, { passive: false });
     return () => {
       left.removeEventListener("touchstart", onLeftDown);
       right.removeEventListener("touchstart", onRightDown);
+      left.removeEventListener("touchend", onLeftUp);
+      left.removeEventListener("touchcancel", onLeftUp);
+      right.removeEventListener("touchend", onRightUp);
+      right.removeEventListener("touchcancel", onRightUp);
     };
   }, [inputRef]);
 

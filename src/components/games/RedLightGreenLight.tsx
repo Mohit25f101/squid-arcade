@@ -1268,6 +1268,19 @@ export default function RedLightGreenLight({ onExit }: GameProps) {
   // inputRef is kept solely for MobileTouchControls touch state.
   // The inputManager.snapshot().heldKeys drives keyboard in onTick.
 
+  // ── UNIFIED INPUT ROUTING ───────────────────────────────────────────────
+  // RLGL is rendered by GameRouter directly (NOT wrapped in GameShell), so the
+  // GameShell attach()/setScale() lifecycle never runs for it. Without an
+  // attach() the singleton's keyboard listeners are never bound and
+  // snapshot().heldKeys stays empty. Attach here so RLGL routes through the
+  // SAME inputManager as every other game instead of a parallel input path.
+  useEffect(() => {
+    const target = containerRef.current;
+    if (!target) return;
+    inputManager.attach(target);
+    return () => inputManager.detach();
+  }, []);
+
   // ── Escape → exit to menu ────────────────────────────────────────────────
   useEffect(() => {
     if (!onExit) return;
@@ -1465,6 +1478,12 @@ hudSync.write({
         ariaLabel="Red Light Green Light"
         canvasId="rlgl-canvas"
         className="w-full h-full"
+        onResize={(_ctx, size) => {
+          // Keep the unified inputManager's pointer/touch normalization in sync
+          // with CanvasWrapper's contain-fit scale (CSS size / design size),
+          // replacing GameShell.setScale() which never runs for RLGL.
+          inputManager.setScale(size.width / DW);
+        }}
       />
 
       {/* ── Persistent BACK TO MENU button ───────────────────────────────── */}

@@ -586,8 +586,8 @@ let carvedCells = new Set();
 
 function cellIdx(gx, gy) { return gy * GRID + gx; }
 function worldToGrid(wx, wy) {
-  const gx = Math.floor((wx / scale - CANDY_X) / CELL);
-  const gy = Math.floor((wy / scale - CANDY_Y) / CELL);
+  const gx = Math.floor((wx / cssScale - CANDY_X) / CELL);
+  const gy = Math.floor((wy / cssScale - CANDY_Y) / CELL);
   return {
     gx: Math.max(0, Math.min(GRID - 1, gx)),
     gy: Math.max(0, Math.min(GRID - 1, gy))
@@ -991,11 +991,13 @@ function restartGame(){
 
 // ── Pointer → canvas coords ────────────────────────────
 function toCanvas(clientX, clientY){
+  // Return CSS pixels (device-independent). DPR is intentionally NOT applied
+  // here; world conversion divides by cssScale (= fitScale), render multiplies
+  // by cssScale. This removes the ×devicePixelRatio touch-offset bug.
   const rect=canvas.getBoundingClientRect();
-  const ratio=canvas.width/rect.width;
   return {
-    x:(clientX-rect.left)*ratio,
-    y:(clientY-rect.top)*ratio
+    x:clientX-rect.left,
+    y:clientY-rect.top
   };
 }
 
@@ -1012,13 +1014,16 @@ canvas.addEventListener('pointerdown', e=>{
   getAudio();
 
   if(phase==='playing'){
-    const worldX=needleX/scale, worldY=needleY/scale;
+    const worldX=needleX/cssScale, worldY=needleY/cssScale;
     const inSlab=(
       worldX>=CANDY_X-6 && worldX<=CANDY_X+CANDY_W+6 &&
       worldY>=CANDY_Y-6 && worldY<=CANDY_Y+CANDY_H+6
     );
     if(!inSlab){ triggerInstantFail('initial-click-outside-slab'); return; }
-    if(distToOutline(pos,shapePath)>=ON_EDGE_TOL*scale){
+    // shapePath is in buffer space (×scale); lift the CSS-space pos to buffer
+    // space so the geometric distance is comparable, then test in world units.
+    const bufPos={x:needleX*scale/cssScale, y:needleY*scale/cssScale};
+    if(distToOutline(bufPos,shapePath)>=ON_EDGE_TOL*scale){
       triggerInstantFail('initial-click-off-path'); return;
     }
   }
@@ -1029,7 +1034,10 @@ canvas.addEventListener('pointermove', e=>{
   const pos=toCanvas(e.clientX,e.clientY);
   needlePrevX=needleX; needlePrevY=needleY;
   needleX=pos.x; needleY=pos.y;
-  const dx=needleX-needlePrevX, dy=needleY-needlePrevY;
+  // Velocity in buffer-space units (×scale/cssScale) so existing scale-based
+  // thresholds (needleVel/(scale*N)) stay calibrated after the CSS-coord switch.
+  const k=scale/cssScale;
+  const dx=(needleX-needlePrevX)*k, dy=(needleY-needlePrevY)*k;
   const mag=Math.sqrt(dx*dx+dy*dy);
   needleVel=mag;
   pushStab(mag);
@@ -1055,7 +1063,8 @@ function triggerInstantFail(reason){
   if(phase!=='playing') return;
   playSnap();
   shakeIntensity=22;
-  for(let i=0;i<3;i++) emitCrackSpark(needleX,needleY,1.0);
+  const _sk=scale/cssScale;
+  for(let i=0;i<3;i++) emitCrackSpark(needleX*_sk,needleY*_sk,1.0);
   const {gx,gy}=worldToGrid(needleX,needleY);
   const blastR=5;
   for(let dy=-blastR;dy<=blastR;dy++){
@@ -1096,8 +1105,10 @@ function checkWin(){
 
 // ── Core carving logic ────────────────────────────────
 function processCarve(){
-  const pos={x:needleX, y:needleY};
-  const worldX=needleX/scale, worldY=needleY/scale;
+  // needleX/Y are CSS pixels; lift to buffer space (×scale/cssScale) so they
+  // are comparable to shapePath, which is stored in buffer space.
+  const pos={x:needleX*scale/cssScale, y:needleY*scale/cssScale};
+  const worldX=needleX/cssScale, worldY=needleY/cssScale;
   const SLAB_MARGIN=6;
   const inSlab=(
     worldX>=CANDY_X-SLAB_MARGIN && worldX<=CANDY_X+CANDY_W+SLAB_MARGIN &&
@@ -1150,7 +1161,7 @@ function processCarve(){
     return;
   }
 
-  if(Math.random()<0.4) emitDust(needleX, needleY, 2);
+  if(Math.random()<0.4) emitDust(needleX*scale/cssScale, needleY*scale/cssScale, 2);
 
   const now=performance.now();
   if(now-lastScrapeAudio>SCRAPE_AUDIO_MS){
@@ -1503,7 +1514,8 @@ function render(){
 
   // ── ENHANCED: Needle cursor ──────────────────────────
   if((phase==='playing'||phase==='snap') && needleDown){
-    const nx=needleX, ny=needleY;
+    // needleX/Y are CSS pixels; lift to buffer space for drawing.
+    const nx=needleX*scale/cssScale, ny=needleY*scale/cssScale;
     // Outer glow ring
     ctx.beginPath();
     ctx.arc(nx,ny,CARVE_RADIUS*scale*1.6,0,Math.PI*2);
@@ -1533,10 +1545,10 @@ function render(){
     ctx.fill();
     // Velocity trail
     if(needleVel>1){
-      const dxt=needleX-needlePrevX, dyt=needleY-needlePrevY;
+      const k=scale/cssScale;
       ctx.beginPath();
-      ctx.moveTo(needlePrevX,needlePrevY);
-      ctx.lineTo(needleX,needleY);
+      ctx.moveTo(needlePrevX*k,needlePrevY*k);
+      ctx.lineTo(needleX*k,needleY*k);
       ctx.strokeStyle=`rgba(255,210,80,${clamp(needleVel/(scale*8),0,0.45)})`;
       ctx.lineWidth=2*scale; ctx.stroke();
     }
