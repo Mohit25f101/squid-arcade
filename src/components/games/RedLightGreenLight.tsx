@@ -20,6 +20,7 @@ import {
 import * as THREE from "three";
 import { Howl } from "howler";
 import { useGameStore } from "@/store/gameStore";
+import { inputManager } from "@/managers/InputManager";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * CONSTANTS — world layout, gameplay tunables
@@ -97,7 +98,7 @@ interface AudioHandles {
 }
 
 function buildAudio(volumes: { master: number; sfx: number; music: number }): AudioHandles {
-  const mk = (src: string, vol: number, opts: Partial<Howl["_opts"]> = {}) =>
+  const mk = (src: string, vol: number, opts: Record<string, any> = {}) =>
     new Howl({
       src: [src],
       volume: Math.max(0, Math.min(1, vol * volumes.master)),
@@ -415,7 +416,7 @@ function Guard({ position, rotationY = 0 }: { position: [number, number, number]
         <boxGeometry args={[0.18, 1.2, 0.18]} />
         <meshStandardMaterial color="#e92076" roughness={0.6} />
       </mesh>
-      <mesh position={[0.42, 0.9, 0]}>
+      <mesh position={[0.42, 0.9, 0]} castShadow>
         <boxGeometry args={[0.18, 1.2, 0.18]} />
         <meshStandardMaterial color="#e92076" roughness={0.6} />
       </mesh>
@@ -605,6 +606,10 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const hudThrottleRef   = useRef(0);
   const turnDirRef    = useRef<"to_red" | "to_green">("to_red");
 
+  // Lightweight Gunshot Tracer references
+  const shotLineRef = useRef<THREE.Line>(null);
+  const shotTimerRef = useRef<number>(0);
+
   useEffect(() => {
     const arr: PlayerEntity[] = [];
     arr.push({
@@ -662,6 +667,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     shakeRef.current      = 0;
     fakeOutChanceRef.current = 0;
     aliveCountRef.current = NPC_COUNT + 1;
+    shotTimerRef.current  = 0;
+
+    if (shotLineRef.current) {
+      shotLineRef.current.visible = false;
+    }
 
     const a = audioRef.current;
     if (a) {
@@ -715,12 +725,32 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   useFrame((_, rawDt) => {
     if (pausedRef.current) return;
     const dt = Math.min(rawDt, 0.05);
+    
+    // Capture input framework snapshot and update buffer cleanly
+    const snap = inputManager.snapshot();
+
     const a = audioRef.current;
-    if (!a) return;
+    if (!a) {
+      inputManager.endFrame();
+      return;
+    }
 
     const players = playersRef.current;
     const human   = players[0];
-    if (!human) return;
+    if (!human) {
+      inputManager.endFrame();
+      return;
+    }
+
+    // Animate structural bullet tracer line fading
+    if (shotTimerRef.current > 0 && shotLineRef.current) {
+      shotTimerRef.current -= dt;
+      const mat = shotLineRef.current.material as THREE.LineBasicMaterial;
+      if (mat) mat.opacity = Math.max(0, shotTimerRef.current / 0.25);
+      if (shotTimerRef.current <= 0) {
+        shotLineRef.current.visible = false;
+      }
+    }
 
     if (gamePhaseRef.current === GamePhase.COUNTDOWN) {
       countdownRef.current -= dt;
@@ -731,14 +761,12 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       }
       if (countdownRef.current <= 0) {
         gamePhaseRef.current = GamePhase.PLAYING;
-        
-        // Notify Store of game start
         useGameStore.getState().setRuntimePhase("playing");
-
         a.go.play();
         startDollSong();
         lightPhaseRef.current = LightPhase.GREEN;
       }
+      inputManager.endFrame();
       return;
     }
 
@@ -746,6 +774,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       for (const p of players) {
         if (!p.alive && p.fallProgress < 1) p.fallProgress = Math.min(1, p.fallProgress + dt * 2);
       }
+      inputManager.endFrame();
       return;
     }
 
@@ -755,6 +784,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       stopDollSong();
       a.heartbeat.stop();
       onGameOver(GamePhase.TIMEOUT, Math.floor(scoreRef.current));
+      inputManager.endFrame();
       return;
     }
 
@@ -790,7 +820,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
 
     if (human.alive && !human.finished) {
       const input = inputRef.current;
-      const wantMove = input.forward;
+      // Pull clean movement intent from specialized InputManager architecture
+      const wantMove = snap.up || snap.action;
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
       const targetVz = wantMove ? -speed : 0;
       const accel = wantMove ? 14 : 26;
@@ -857,7 +888,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     }
 
     if (lp === LightPhase.RED) {
-      if (human.alive && !human.finished && Math.abs(human.vz) > MOVE_THRESHOLD) {
+      // Evaluate human movement limits safely against current tuning rules
+      const triggerMoveIntent = snap.up || snap.action;
+      const physicalMovement = Math.abs(human.vz) > MOVE_THRESHOLD || snap.deltaMagnitude > 12.0;
+
+      if (human.alive && !human.finished && (triggerMoveIntent || physicalMovement)) {
         human.alive = false;
         human.fallProgress = 0;
         gamePhaseRef.current = GamePhase.ELIMINATED;
@@ -867,6 +902,23 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         a.shatter.play();
         a.elimination.play();
         a.gasp.play();
+
+        // Calculate dynamic 3D tracer coordinates from Left Finish Guard coordinates
+        if (shotLineRef.current) {
+          const guardX = -FIELD_WIDTH / 2 + 2;
+          const guardY = 1.92; // Guard chest height
+          const guardZ = FINISH_Z + 1.5;
+
+          const points = [
+            new THREE.Vector3(guardX, guardY, guardZ),
+            new THREE.Vector3(human.x, 0.95, human.z) // Target player torso
+          ];
+          
+          shotLineRef.current.geometry.setFromPoints(points);
+          shotLineRef.current.visible = true;
+          shotTimerRef.current = 0.25; // Render tracer burst for 250ms
+        }
+
         onGameOver(GamePhase.ELIMINATED, Math.floor(scoreRef.current));
       }
       for (let i = 1; i < players.length; i++) {
@@ -900,6 +952,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         playerProgressPct: progress,
       });
     }
+
+    inputManager.endFrame();
   });
 
   const isRed = lightPhaseRef.current === LightPhase.RED;
@@ -914,6 +968,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         ? (turnTRef.current < 0.5 ? "players" : "away")
         : "players");
 
+  // Allocate safe geometric structures for gunshot visual line tracers
+  const lineGeometry = useMemo(() => new THREE.BufferGeometry(), []);
+  
+  // Bypass the SVG vs R3F type collision
+  const R3FLine = 'line' as any;
   return (
     <>
       <FollowCamera
@@ -951,6 +1010,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       {playersRef.current.map((p) => (
         <PlayerMesh key={p.id} player={p} isMoving={Math.abs(p.vz) > 0.2} />
       ))}
+
+      {/* Gunshot tracer element injection */}
+      <R3FLine ref={shotLineRef} geometry={lineGeometry}>
+        <lineBasicMaterial color="#ff1133" linewidth={3} transparent opacity={1} depthWrite={false} />
+      </R3FLine>
     </>
   );
 }
@@ -970,7 +1034,6 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   const updateBestScore = useGameStore((s) => s.updateBestScore);
   const setRuntimePhase = useGameStore((s) => s.setRuntimePhase);
 
-  // Initialize runtime state properly via store
   useEffect(() => {
     setRuntimePhase("countdown");
   }, [setRuntimePhase]);
@@ -1020,18 +1083,12 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         onExit?.();
         return;
       }
-      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "Space") {
-        inputRef.current.forward = true;
-        e.preventDefault();
-      }
+      // Stripped structural directional running keys to protect singleton mapping
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
         inputRef.current.sprint = true;
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "Space") {
-        inputRef.current.forward = false;
-      }
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
         inputRef.current.sprint = false;
       }
@@ -1079,7 +1136,6 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 
   const [endState, setEndState] = useState<{ phase: GamePhase; score: number } | null>(null);
   
-  // Handled GameOver synced to Store
   const handleGameOver = useCallback((phase: GamePhase, score: number) => {
     setEndState({ phase, score });
     if (phase === GamePhase.VICTORY) {
