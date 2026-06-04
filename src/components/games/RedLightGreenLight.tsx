@@ -16,6 +16,7 @@ import {
   Sky,
   Stars,
   ContactShadows,
+  Line,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { Howl } from "howler";
@@ -145,10 +146,13 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
   const fromY   = facing === "away" ? Math.PI : 0;
   const yRot    = THREE.MathUtils.lerp(fromY, targetY, turnProgress);
 
+  // Menacing forward lean during red light
+  const bodyLean = isRed ? -0.12 : 0;
+  const bodyRise = isRed ? 0.08 : 0;
+
   useFrame((state) => {
     if (!group.current) return;
     
-    // Slower, more mechanical turn
     const turnSpeed = turnProgress < 0.3 ? 0.6 : turnProgress > 0.7 ? 0.4 : 1;
     group.current.rotation.y = THREE.MathUtils.lerp(
       group.current.rotation.y, 
@@ -156,12 +160,15 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
       0.08 * turnSpeed
     );
     
-    // Menacing idle during green light
-    if (facing === "away" && turnProgress < 0.05) {
+    // Apply threatening lean during red
+    if (isRed && turnProgress > 0.9) {
+      group.current.position.y = position[1] + bodyRise + Math.sin(state.clock.elapsedTime * 3) * 0.02;
+      group.current.rotation.x = bodyLean;
+      group.current.rotation.z = 0;
+    } else if (facing === "away" && turnProgress < 0.05) {
       const t = state.clock.elapsedTime;
       group.current.rotation.z = Math.sin(t * 1.8) * 0.035;
       group.current.position.y = position[1] + Math.sin(t * 1.2) * 0.04;
-      // Slight head tilt
       group.current.rotation.x = Math.sin(t * 0.8) * 0.015;
     } else {
       group.current.rotation.z = 0;
@@ -169,7 +176,6 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
       group.current.position.y = position[1];
     }
 
-    // Dramatic eye pulse on red
     if (eyeL.current && eyeR.current) {
       const mat = eyeL.current.material as THREE.MeshStandardMaterial;
       const mat2 = eyeR.current.material as THREE.MeshStandardMaterial;
@@ -282,24 +288,42 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
         <meshStandardMaterial color="#333" metalness={0.6} roughness={0.4} />
       </mesh>
       <mesh position={[0, 4.4, 0]}>
-        <sphereGeometry args={[0.13, 16, 16]} />
+        <sphereGeometry args={[isRed ? 0.16 : 0.13, 16, 16]} />
         <meshStandardMaterial
-          color={isRed ? "#ff2a2a" : "#26d671"}
+          color={isRed ? "#ff0000" : "#26d671"}
           emissive={isRed ? "#ff0000" : "#26d671"}
-          emissiveIntensity={isRed ? 3 + scanIntensity * 2 : 0.8}
+          emissiveIntensity={isRed ? 5 + scanIntensity * 4 : 0.8}
+          toneMapped={false}
         />
       </mesh>
       {isRed && (
-        <spotLight
-          position={[0, 3.4, 0.6]}
-          target-position={[0, 0, 30]}
-          intensity={4 + scanIntensity * 6}
-          angle={0.7}
-          penumbra={0.35}
-          color="#ff2a2a"
-          distance={120}
-          castShadow={false}
-        />
+        <>
+          {/* Main scanning beam */}
+          <spotLight
+            position={[0, 3.4, 0.6]}
+            target-position={[0, 0, 40]}
+            intensity={8 + scanIntensity * 12}
+            angle={0.85}
+            penumbra={0.2}
+            color="#ff1a1a"
+            distance={140}
+            decay={1.8}
+            castShadow
+            shadow-mapSize-width={512}
+            shadow-mapSize-height={512}
+          />
+          {/* Wide area fill light */}
+          <spotLight
+            position={[0, 4.4, 0]}
+            target-position={[0, 0, 50]}
+            intensity={4}
+            angle={1.2}
+            penumbra={0.5}
+            color="#ff4444"
+            distance={100}
+            decay={2}
+          />
+        </>
       )}
     </group>
   );
@@ -416,7 +440,7 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 function Guard({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      {/* Body - larger, more imposing */}
+      {/* Body */}
       <mesh position={[0, 1.1, 0]} castShadow>
         <boxGeometry args={[0.85, 1.7, 0.5]} />
         <meshStandardMaterial color="#e92076" roughness={0.5} metalness={0.1} />
@@ -426,7 +450,7 @@ function Guard({ position, rotationY = 0 }: { position: [number, number, number]
         <boxGeometry args={[0.5, 0.52, 0.45]} />
         <meshStandardMaterial color="#0b0b0b" roughness={0.3} metalness={0.2} />
       </mesh>
-      {/* Mask shape - larger */}
+      {/* Mask shape */}
       <mesh position={[0, 2.1, 0.23]}>
         <boxGeometry args={[0.22, 0.22, 0.02]} />
         <meshStandardMaterial 
@@ -470,7 +494,7 @@ function Guard({ position, rotationY = 0 }: { position: [number, number, number]
  * ENVIRONMENT
  * ────────────────────────────────────────────────────────────────────────────*/
 
-function Arena() {
+function Arena({ isRed }: { isRed: boolean }) {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, FIELD_LEN / 2 - 5]} receiveShadow>
@@ -546,6 +570,55 @@ function Arena() {
       <Guard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
       <Guard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
       <Guard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
+
+      {/* Guard laser sights during RED LIGHT */}
+      {isRed && (
+        <>
+          {/* Finish line guards targeting center */}
+          <Line
+            points={[
+              [-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5],
+              [0, 1.5, START_Z / 2],
+            ]}
+            color="#ff0000"
+            lineWidth={0.8}
+            transparent
+            opacity={0.6 + Math.sin(performance.now() * 0.008) * 0.2}
+          />
+          <Line
+            points={[
+              [FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5],
+              [0, 1.5, START_Z / 2],
+            ]}
+            color="#ff0000"
+            lineWidth={0.8}
+            transparent
+            opacity={0.6 + Math.sin(performance.now() * 0.008 + 0.5) * 0.2}
+          />
+          
+          {/* Wall guard sweeping lasers */}
+          <Line
+            points={[
+              [-FIELD_WIDTH / 2 + 1, 2.2, 40],
+              [Math.sin(performance.now() * 0.002) * 8, 1.5, 40 + Math.cos(performance.now() * 0.002) * 20],
+            ]}
+            color="#ff0000"
+            lineWidth={0.6}
+            transparent
+            opacity={0.5}
+          />
+          <Line
+            points={[
+              [FIELD_WIDTH / 2 - 1, 2.2, 40],
+              [Math.sin(performance.now() * 0.002 + Math.PI) * 8, 1.5, 40 + Math.cos(performance.now() * 0.002 + Math.PI) * 20],
+            ]}
+            color="#ff0000"
+            lineWidth={0.6}
+            transparent
+            opacity={0.5}
+          />
+        </>
+      )}
     </group>
   );
 }
@@ -638,7 +711,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
   const turnTRef      = useRef(0);     
   const redTimerRef   = useRef(0);     
-  const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN);
+  // Initialize gamePhaseRef at Location 3 (effectively Reset equivalent for boot)
+  const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN); 
   const countdownRef  = useRef(3);
   const timeLeftRef   = useRef(ROUND_TIMER);
   const scoreRef      = useRef(0);
@@ -705,7 +779,10 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     lightPhaseRef.current = LightPhase.GREEN;
     turnTRef.current      = 0;
     redTimerRef.current   = 0;
-    gamePhaseRef.current  = GamePhase.COUNTDOWN;
+    
+    // Location 3: Reset
+    gamePhaseRef.current  = GamePhase.COUNTDOWN; // ADDED to sync state
+    
     countdownRef.current  = 3;
     timeLeftRef.current   = ROUND_TIMER;
     scoreRef.current      = 0;
@@ -752,6 +829,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     const a = audioRef.current;
     if (!a) return;
     const onEnd = () => {
+      // Ensure song end trigger is mapped correctly to our LightPhase and GamePhase state architecture
       if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
         lightPhaseRef.current = LightPhase.TURNING_RED;
         turnDirRef.current    = "to_red";
@@ -806,7 +884,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         if (intNow > 0) a.beep.play();
       }
       if (countdownRef.current <= 0) {
-        gamePhaseRef.current = GamePhase.PLAYING;
+        // Location 4: Countdown -> Playing
+        gamePhaseRef.current = GamePhase.PLAYING; // ADDED to sync state
         useGameStore.getState().setRuntimePhase("playing");
         a.go.play();
         startDollSong();
@@ -816,6 +895,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       return;
     }
 
+    // Prevents code execution loop for game-over and victory conditions safely
     if (gamePhaseRef.current !== GamePhase.PLAYING) {
       for (const p of players) {
         if (!p.alive && p.fallProgress < 1) p.fallProgress = Math.min(1, p.fallProgress + dt * 2);
@@ -887,7 +967,10 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         human.finished = true;
         human.z = FINISH_Z;
         human.vz = 0;
-        gamePhaseRef.current = GamePhase.VICTORY;
+        
+        // Location 1: Victory
+        gamePhaseRef.current = GamePhase.VICTORY; // ADDED to sync state and halt loop
+        
         stopDollSong();
         a.heartbeat.stop();
         a.victory.play();
@@ -960,14 +1043,16 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         a.heartbeat.volume(0.55);
       }
 
-      // Human elimination - only check actual velocity
       if (human.alive && !human.finished) {
         const hasMovement = Math.abs(human.vz) > MOVE_THRESHOLD;
         
         if (hasMovement) {
           human.alive = false;
           human.fallProgress = 0;
-          gamePhaseRef.current = GamePhase.ELIMINATED;
+          
+          // Location 2: Elimination
+          gamePhaseRef.current = GamePhase.ELIMINATED; // ADDED to sync state and halt loop
+          
           shakeRef.current = 0.45; // Stronger shake
           stopDollSong();
           a.heartbeat.stop();
@@ -1060,71 +1145,98 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         phase={gamePhaseRef.current}
         shake={shakeRef.current}
       />
-      {/* Lighting */}
-      <ambientLight intensity={isRed ? 0.35 : 0.55} color={isRed ? "#ff3838" : "#fff2dc"} />
+      
+      {/* Lighting - Dramatic Green/Red Transition */}
+      <ambientLight 
+        intensity={isRed ? 0.25 : 0.65} 
+        color={isRed ? "#4a0808" : "#ffe8c4"} 
+      />
       <directionalLight
         position={[15, 20, 20]}
-        intensity={isRed ? 0.7 : 1.05}
+        intensity={isRed ? 0.5 : 1.2}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-left={-30}
         shadow-camera-right={30}
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
         shadow-camera-near={1}
         shadow-camera-far={80}
-        color={isRed ? "#ff6666" : "#fff8e8"}
+        shadow-bias={-0.0001}
+        color={isRed ? "#ff4444" : "#fff4d6"}
       />
       <hemisphereLight 
         args={[
-          isRed ? "#ff4444" : "#bcd9ff", 
-          isRed ? "#1a0000" : "#3a2a1d", 
-          isRed ? 0.25 : 0.45
+          isRed ? "#330000" : "#b8d4ff", 
+          isRed ? "#0a0000" : "#4a3a2d", 
+          isRed ? 0.15 : 0.5
         ]} 
       />
+
+      {/* Dramatic overhead red wash during red light */}
+      {isRed && (
+        <>
+          <directionalLight
+            position={[0, 25, -15]}
+            intensity={1.5}
+            color="#ff2020"
+            target-position={[0, 0, 40]}
+          />
+          <pointLight
+            position={[0, 8, -12]}
+            intensity={3}
+            distance={80}
+            decay={1.5}
+            color="#ff3333"
+          />
+        </>
+      )}
 
       {/* Guard muzzle flash on elimination */}
       {performance.now() - guardFlashRef.current < 100 && (
         <>
           <pointLight
             position={[-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5]}
-            intensity={12}
-            distance={30}
-            color="#ff4444"
+            intensity={15}
+            distance={35}
+            color="#ffaa44"
             decay={2}
+            castShadow
           />
           <pointLight
             position={[FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5]}
-            intensity={12}
-            distance={30}
-            color="#ff4444"
+            intensity={15}
+            distance={35}
+            color="#ffaa44"
             decay={2}
+            castShadow
           />
         </>
       )}
 
-      {/* Dramatic red spotlight during red light */}
+      {/* Sky/Background - Sharp color shift */}
+      <color attach="background" args={[isRed ? "#1a0505" : "#a7c3df"]} />
+
+      {/* Volumetric fog feel - denser during red */}
+      <fog 
+        attach="fog" 
+        args={[
+          isRed ? "#2a0808" : "#98b8d8", 
+          isRed ? 18 : 40, 
+          isRed ? 95 : 150
+        ]} 
+      />
+
+      {/* Additional atmospheric fog layer during red */}
       {isRed && (
-        <spotLight
-          position={[0, 15, -12]}
-          target-position={[0, 0, 40]}
-          intensity={3}
-          angle={0.9}
-          penumbra={0.4}
-          color="#ff2a2a"
-          distance={150}
-          castShadow={false}
+        <fog 
+          attach="fog" 
+          args={["#440808", 60, 120]} 
         />
       )}
 
-      <color attach="background" args={[isRed ? "#2a1214" : "#a7c3df"]} />
-      <fog attach="fog" args={[
-        isRed ? "#4a1a1c" : "#a7c3df", 
-        isRed ? 25 : 35, 
-        isRed ? 110 : 140
-      ]} />
-      <Arena />
+      <Arena isRed={isRed} />
       <Doll
         position={[0, 0, -12.5]}
         facing={facing}
@@ -1155,8 +1267,6 @@ interface RLGLProps {
 
 export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) {
   const settings = useGameStore((s) => s.settings);
-  const addScore = useGameStore((s) => s.addScore);
-  const updateBestScore = useGameStore((s) => s.updateBestScore);
   const setRuntimePhase = useGameStore((s) => s.setRuntimePhase);
 
   useEffect(() => {
@@ -1261,20 +1371,23 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 
   const [endState, setEndState] = useState<{ phase: GamePhase; score: number } | null>(null);
   
+  // Centralized store synchronization cleanly capturing all game-over states including timeout
   const handleGameOver = useCallback((phase: GamePhase, score: number) => {
     setEndState({ phase, score });
+    
+    // GameStore integration via explicit state capture
+    const state = useGameStore.getState();
+    state.addScore(score);
+    state.updateBestScore("red-light-green-light", score);
+    
     if (phase === GamePhase.VICTORY) {
-      addScore(score);
-      updateBestScore("red-light-green-light", score);
-      setRuntimePhase("victory");
+      state.setRuntimePhase("victory");
       onComplete?.(score, "victory");
     } else if (phase === GamePhase.ELIMINATED || phase === GamePhase.TIMEOUT) {
-      addScore(score);
-      updateBestScore("red-light-green-light", score);
-      setRuntimePhase("eliminated");
+      state.setRuntimePhase("eliminated");
       onComplete?.(score, "eliminated");
     }
-  }, [addScore, updateBestScore, setRuntimePhase, onComplete]);
+  }, [onComplete]);
 
   const [resetSignal, setResetSignal] = useState(0);
   const handleRestart = useCallback(() => {
