@@ -1113,13 +1113,13 @@ function processCarve(){
     const { gx: ogx, gy: ogy } = worldToGrid(needleX, needleY);
     const oidx = cellIdx(ogx, ogy);
     edgeStressGrid[oidx] = Math.min(1, edgeStressGrid[oidx] + 0.06 * excess);
-    candyIntegrity = Math.max(0, candyIntegrity - 0.09 * excess);
+    candyIntegrity = Math.max(0, candyIntegrity - 0.015 * excess);  // CHANGED: 0.09 -> 0.015
     shakeIntensity = Math.max(shakeIntensity, 5 * excess);
     if(candyIntegrity <= 0){ triggerInstantFail('off-path-damage'); }
     return;
   }
 
-  if(needleVel < 0.3) return;
+  if(needleVel < 0.15) return;  // CHANGED: 0.3 -> 0.15
 
   for(let i=0; i<shapePath.length; i++){
     const a = shapePath[i], b = shapePath[(i+1)%shapePath.length];
@@ -1779,7 +1779,7 @@ function updatePhysics(dt) {
   if (phase !== 'playing') return;
 
   // Natural stress decay when needle is lifted
-  const decayRate = needleDown ? 0.0006 : 0.0018;
+  const decayRate = needleDown ? 0.0012 : 0.0024;
   for (let i = 0; i < GRID * GRID; i++) {
     edgeStressGrid[i] = Math.max(0, edgeStressGrid[i] - decayRate * dt / 16);
   }
