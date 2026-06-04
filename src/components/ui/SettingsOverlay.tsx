@@ -74,6 +74,19 @@ export default function SettingsOverlay({ onClose, onHover, onClick }: SettingsO
   const updateSettings = useGameStore((s) => s.updateSettings);
   const panelRef       = useRef<HTMLDivElement>(null);
 
+  // Apply settings to audio managers whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sm = require('@/managers/SoundManager').SoundManager.getInstance();
+      const mm = require('@/managers/MusicManager').MusicManager.getInstance();
+      
+      sm.setMasterVolume(settings.masterVolume);
+      sm.setSFXVolume(settings.sfxVolume);
+      sm.setMusicVolume(settings.musicVolume);
+      mm.updateVolume();
+    }
+  }, [settings.masterVolume, settings.sfxVolume, settings.musicVolume]);
+
   // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

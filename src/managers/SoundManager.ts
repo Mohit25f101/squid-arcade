@@ -1,6 +1,7 @@
 // src/managers/SoundManager.ts
 
 import { Howl, Howler } from "howler";
+import { useGameStore } from "@/store/gameStore";
 
 export type SoundId =
   | "hover"
@@ -77,6 +78,35 @@ export class SoundManager {
   private _destroyed: boolean = false;
 
   private constructor() {
+    // 1. Initialize volumes from persistent store settings immediately
+    // This ensures early sounds (like UI clicks in the main menu) adhere to user preferences
+    try {
+      const state = useGameStore.getState();
+      if (state && state.settings) {
+        this._masterVolume = state.settings.masterVolume ?? 1.0;
+        this._sfxVolume = state.settings.sfxVolume ?? 1.0;
+        this._musicVolume = state.settings.musicVolume ?? 1.0;
+      }
+      
+      // 2. Subscribe to store changes so settings automatically apply anywhere without extra boilerplate
+      useGameStore.subscribe((newState, oldState) => {
+        if (!newState || !oldState) return;
+        
+        if (newState.settings.masterVolume !== oldState.settings.masterVolume) {
+          this.setMasterVolume(newState.settings.masterVolume);
+        }
+        if (newState.settings.sfxVolume !== oldState.settings.sfxVolume) {
+          this.setSFXVolume(newState.settings.sfxVolume);
+        }
+        if (newState.settings.musicVolume !== oldState.settings.musicVolume) {
+          this.setMusicVolume(newState.settings.musicVolume);
+        }
+      });
+    } catch (e) {
+      console.warn("SoundManager: Could not initialize volumes from store", e);
+    }
+
+    // 3. Audio context unlock for browsers
     if (typeof window !== "undefined" && typeof document !== "undefined") {
       const unlock = () => {
         if (!this._unlocked) {

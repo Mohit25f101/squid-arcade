@@ -41,7 +41,11 @@ const RED_DURATION_BASE  = 3.2;
 const RED_DURATION_MIN   = 2.0;
 const MOVE_THRESHOLD     = 0.05;        
 const NPC_COUNT          = 18;
-const ROUND_TIMER        = 90;
+
+// Difficulty-based timer constants
+const TIMER_EASY   = 60;  // Easy = 60 seconds
+const TIMER_MEDIUM = 45;  // Medium = 45 seconds
+const TIMER_HARD   = 30;  // Hard = 30 seconds
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * STATE MACHINE ENUMS
@@ -553,15 +557,17 @@ function Guard({
 
   return (
     <group ref={group} position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[-0.13, 0.08, 0]} castShadow>
-        <boxGeometry args={[0.18, 0.16, 0.26]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
+      {/* Boots - styled as actual footwear, not debug boxes */}
+      <mesh position={[-0.13, 0.05, 0.02]} castShadow>
+        <boxGeometry args={[0.14, 0.1, 0.22]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
       </mesh>
-      <mesh position={[0.13, 0.08, 0]} castShadow>
-        <boxGeometry args={[0.18, 0.16, 0.26]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
+      <mesh position={[0.13, 0.05, 0.02]} castShadow>
+        <boxGeometry args={[0.14, 0.1, 0.22]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
       </mesh>
 
+      {/* Legs - proper pink guard suit color */}
       <mesh position={[-0.13, 0.55, 0]} castShadow>
         <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
         <meshStandardMaterial color="#e34a8a" roughness={0.75} />
@@ -907,9 +913,10 @@ interface SceneProps {
   pausedRef: React.MutableRefObject<boolean>;
   inputRef: React.MutableRefObject<{ forward: boolean; sprint: boolean }>;
   resetSignal: number;
+  roundTimer: number;
 }
 
-function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: SceneProps) {
+function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roundTimer }: SceneProps) {
   const playersRef    = useRef<PlayerEntity[]>([]);
   const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
   const turnTRef      = useRef(0);     
@@ -917,7 +924,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
   const graceTimerRef = useRef(0);     
   const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN); 
   const countdownRef  = useRef(3);
-  const timeLeftRef   = useRef(ROUND_TIMER);
+  const timeLeftRef   = useRef(roundTimer);
   const scoreRef      = useRef(0);
   const shakeRef      = useRef(0);
   const lastStepRef   = useRef(0);
@@ -1006,7 +1013,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
     
     gamePhaseRef.current  = GamePhase.COUNTDOWN;
     countdownRef.current  = 3;
-    timeLeftRef.current   = ROUND_TIMER;
+    timeLeftRef.current   = roundTimer;
     scoreRef.current      = 0;
     shakeRef.current      = 0;
     fakeOutChanceRef.current = 0;
@@ -1022,7 +1029,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
     stopDollSong();
     SoundManager.getInstance().stopLoop("heartbeat" as any, 0);
 
-  }, [resetSignal, stopDollSong]);
+  }, [resetSignal, stopDollSong, roundTimer]);
 
   const countdownLastIntRef = useRef(3);
 
@@ -1102,7 +1109,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
     } else if (lp === LightPhase.RED) {
       redTimerRef.current += dt;
       graceTimerRef.current += dt;
-      const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / ROUND_TIMER * 0.5);
+      const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / roundTimer * 0.5);
       if (redTimerRef.current >= redDur) {
         // Return to GREEN: doll turns back smoothly (Doll component lerps rotation
         // toward the new targetRotation=0), heartbeat and scan_tone stop, and the
@@ -1127,11 +1134,18 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
       const targetVz = wantMove ? -speed : 0;
       
-      const accel = wantMove ? 12 : 28;
-      human.vz = THREE.MathUtils.lerp(human.vz, targetVz, Math.min(1, dt * accel));
-      // Stable stopping threshold: once velocity falls below the perception
-      // deadzone clamp it to exactly zero to prevent perpetual micro-drift.
-      if (!wantMove && Math.abs(human.vz) < 0.04) human.vz = 0;
+      // Frame-independent acceleration with proper decay constants
+      // These values ensure consistent stopping behavior at any framerate
+      const accelRate = wantMove ? 25.0 : 40.0;
+      const decayFactor = Math.exp(-accelRate * dt);
+      human.vz = human.vz * decayFactor + targetVz * (1 - decayFactor);
+      
+      // Stable stopping threshold: hard-clamp to zero when below deadzone
+      // This eliminates micro-drift and ensures immediate stopping
+      const STOP_THRESHOLD = 0.05;
+      if (!wantMove && Math.abs(human.vz) < STOP_THRESHOLD) {
+        human.vz = 0;
+      }
       
       human.vx = 0;
       human.z += human.vz * dt;
@@ -1192,9 +1206,14 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
       const npcSpeed = baseSpeed + speedVariation;
       const targetVz = p.npcMoving ? -npcSpeed : 0;
-      const accel = p.npcMoving ? 8 + (p.id % 3) * 2 : 22;
-      p.vz = THREE.MathUtils.lerp(p.vz, targetVz, Math.min(1, dt * accel));
-      if (!p.npcMoving && Math.abs(p.vz) < 0.04) p.vz = 0;
+      
+      // Frame-independent NPC movement with proper decay
+      const accelRate = p.npcMoving ? 15.0 + (p.id % 3) * 3 : 35.0;
+      const decayFactor = Math.exp(-accelRate * dt);
+      p.vz = p.vz * decayFactor + targetVz * (1 - decayFactor);
+      
+      // Hard-stop threshold for NPCs
+      if (!p.npcMoving && Math.abs(p.vz) < 0.05) p.vz = 0;
 
       if (p.npcMoving) {
         const drift = Math.sin(performance.now() * 0.003 + p.id * 0.7) * 0.015;
@@ -1452,6 +1471,15 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   const settings = useGameStore((s) => s.settings);
   const setRuntimePhase = useGameStore((s) => s.setRuntimePhase);
 
+  // Compute round timer based on current difficulty
+  const difficultyTimer = useMemo(() => {
+    switch (settings.difficulty) {
+      case "easy": return TIMER_EASY;
+      case "hard": return TIMER_HARD;
+      default: return TIMER_MEDIUM;
+    }
+  }, [settings.difficulty]);
+
   useEffect(() => {
     setRuntimePhase("countdown");
   }, [setRuntimePhase]);
@@ -1477,7 +1505,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     // Use the SoundManager to store the volume state universally 
     sm.setMasterVolume(settings.masterVolume);
     sm.setSFXVolume(settings.sfxVolume);
-    sm.setMusicVolume(settings.musicVolume); // FIXED: Used `sm` instead of `mm`
+    sm.setMusicVolume(settings.musicVolume); 
     
     // Command the MusicManager to pull the updated multipliers from the SoundManager
     mm.updateVolume();
@@ -1533,7 +1561,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   }, []);
 
   const [hud, setHud] = useState({
-    timeLeft: ROUND_TIMER,
+    timeLeft: difficultyTimer,
     aliveCount: NPC_COUNT + 1,
     lightPhase: LightPhase.GREEN,
     score: 0,
@@ -1561,11 +1589,24 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 
   const [resetSignal, setResetSignal] = useState(0);
   const handleRestart = useCallback(() => {
+    // Clean stop all audio before restart
+    SoundManager.getInstance().stopAll(0);
+    MusicManager.getInstance().stop(0);
+    
+    // Reset UI state
     setEndState(null);
     setRuntimePhase("countdown");
-    setHud({ timeLeft: ROUND_TIMER, aliveCount: NPC_COUNT + 1, lightPhase: LightPhase.GREEN, score: 0, playerProgressPct: 0 });
+    setHud({ 
+      timeLeft: difficultyTimer, 
+      aliveCount: NPC_COUNT + 1, 
+      lightPhase: LightPhase.GREEN, 
+      score: 0, 
+      playerProgressPct: 0 
+    });
+    
+    // Trigger scene reset via signal
     setResetSignal((n) => n + 1);
-  }, [setRuntimePhase]);
+  }, [setRuntimePhase, difficultyTimer]);
 
   const moveHoldHandlers = useMemo(() => ({
     onPointerDown: (e: React.PointerEvent) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); inputRef.current.forward = true; },
@@ -1598,6 +1639,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
             pausedRef={pausedRef}
             inputRef={inputRef}
             resetSignal={resetSignal}
+            roundTimer={difficultyTimer}
           />
         </Suspense>
       </Canvas>
