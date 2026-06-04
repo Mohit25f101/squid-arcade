@@ -603,6 +603,14 @@ let guardY = 0;
 // ── Bullet state ────────────────────────────────────────
 let bullets = [];
 
+// ── Elimination sequence timing ──────────────────────────
+let elimSequenceTimer = 0;
+let elimSequencePhase = 0; // 0=aim, 1=fire, 2=impact, 3=blood
+
+// ── Victory sequence timing ──────────────────────────────
+let victoryTimer = 0;
+let candySeparation = 0;
+
 let atmosphericDust = [];
 for (let i = 0; i < 40; i++) {
   atmosphericDust.push({
@@ -1152,10 +1160,13 @@ function processCarve(){
   }
 
   completionRatio = carvedSegments.size / shapePath.length;
-  if(checkWin()){
-    playTick(880,0.3,0.3);
-    setTimeout(()=>playTick(1100,0.3,0.3),200);
-    setPhase('success');
+  if(checkWin() && phase === 'playing'){
+    phase = 'victory';
+    victoryTimer = 0;
+    candySeparation = 0;
+    playTick(660,0.15,0.25);
+    setTimeout(()=>playTick(880,0.2,0.3),120);
+    setTimeout(()=>playTick(1100,0.25,0.35),240);
     return;
   }
 
@@ -1192,27 +1203,10 @@ function processCarve(){
 
 function triggerInstantFail(reason){
   if(phase !== 'playing') return;
-  playSnap();
-  shakeIntensity = 22;
-  
-  // Ensure guard coordinates are updated immediately for the bullet calculation
-  guardX = canvas.width  * 0.84 - (shakeX * 0.35);
-  guardY = canvas.height * 0.42;
-  leftGuardX = canvas.width * 0.16 - (shakeX * 0.35);
-  leftGuardY = canvas.height * 0.42;
-
-  // Fire bullets from both soldiers
-  const targetX = canvas.width / 2;
-  const targetY = canvas.height / 2;
-  const rightMuzzleX = guardX + (22 * scale + 56 * scale);
-  const rightMuzzleY = guardY + 38 * scale;
-  const leftMuzzleX = leftGuardX - (22 * scale + 56 * scale);
-  const leftMuzzleY = leftGuardY + 38 * scale;
-  
-  createBullet(rightMuzzleX, rightMuzzleY, targetX, targetY);
-  createBullet(leftMuzzleX, leftMuzzleY, targetX, targetY);
-  
-  for(let i=0; i<3; i++) emitCrackSpark(needleX, needleY, 1.0);
+  phase = 'eliminating';
+  elimSequenceTimer = 0;
+  elimSequencePhase = 0;
+  needleDown = false;
   
   const {gx,gy} = worldToGrid(needleX, needleY);
   const blastR = 5;
@@ -1224,17 +1218,8 @@ function triggerInstantFail(reason){
       const idx = cellIdx(nx,ny);
       edgeStressGrid[idx] = 1.0;
       structuralStrength[idx] = 0;
-      fracturePoints.push({
-        x: (CANDY_X + nx * CELL + CELL / 2) * scale,
-        y: (CANDY_Y + ny * CELL + CELL / 2) * scale,
-        radius: 4 * scale, maxRadius: (14+10) * scale,
-        age: 0, severity: 1.0,
-        spokeAngles: Array.from({length:8}, (_,k)=>(k/8)*Math.PI*2+Math.random()*0.5)
-      });
     }
   }
-  phase = 'snap';
-  setTimeout(() => setPhase('eliminated'), 800);
 }
 
 function updateParticles(){
@@ -1357,8 +1342,8 @@ function render(){
 
   // Arms and gun (mirrored)
   const leftTension = 1 - candyIntegrity;
-  const leftAiming = leftTension > 0.35 || phase === 'snap' || phase === 'eliminated';
-  const leftFiring = phase === 'snap' || phase === 'eliminated';
+  const leftAiming = leftTension > 0.35 || phase === 'snap' || phase === 'eliminated' || phase === 'eliminating';
+  const leftFiring = phase === 'snap' || phase === 'eliminated' || (phase === 'eliminating' && elimSequencePhase >= 1);
 
   ctx.fillStyle = '#7a0d2f';
   if (leftAiming) {
@@ -1418,11 +1403,15 @@ function render(){
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    if (leftFiring && frame % 4 < 2) {
-      ctx.fillStyle = 'rgba(255,220,80,0.85)';
+    if (leftFiring && elimSequencePhase === 1 && elimSequenceTimer < 850) {
+      const flashSize = 16 + Math.sin(frame * 0.8) * 4;
+      ctx.fillStyle = 'rgba(255,240,100,0.95)';
+      ctx.shadowColor = 'rgba(255,200,50,0.9)';
+      ctx.shadowBlur = 20 * scale;
       ctx.beginPath();
-      ctx.arc(leftMuzzleX, leftMuzzleY, 12 * scale, 0, Math.PI * 2);
+      ctx.arc(leftMuzzleX, leftMuzzleY, flashSize * scale, 0, Math.PI * 2);
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
   } else {
     ctx.fillStyle = '#0a0a0a';
@@ -1491,8 +1480,8 @@ function render(){
   ctx.shadowBlur = 0;
 
   const tensionLevel = 1 - candyIntegrity;        
-  const isAiming     = tensionLevel > 0.35 || phase === 'snap' || phase === 'eliminated';
-  const isFiring     = phase === 'snap' || phase === 'eliminated';
+  const isAiming     = tensionLevel > 0.35 || phase === 'snap' || phase === 'eliminated' || phase === 'eliminating';
+  const isFiring     = phase === 'snap' || phase === 'eliminated' || (phase === 'eliminating' && elimSequencePhase >= 1);
 
   ctx.fillStyle = '#7a0d2f';
   if (isAiming) {
@@ -1551,11 +1540,15 @@ function render(){
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    if (isFiring && frame % 4 < 2) {
-      ctx.fillStyle = 'rgba(255,220,80,0.85)';
+    if (isFiring && elimSequencePhase === 1 && elimSequenceTimer < 850) {
+      const flashSize = 16 + Math.sin(frame * 0.8) * 4;
+      ctx.fillStyle = 'rgba(255,240,100,0.95)';
+      ctx.shadowColor = 'rgba(255,200,50,0.9)';
+      ctx.shadowBlur = 20 * scale;
       ctx.beginPath();
-      ctx.arc(muzzleAbsX, muzzleAbsY, 12 * scale, 0, Math.PI * 2);
+      ctx.arc(muzzleAbsX, muzzleAbsY, flashSize * scale, 0, Math.PI * 2);
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
   } else {
     ctx.fillStyle = '#0a0a0a';
@@ -1603,6 +1596,24 @@ function render(){
       ctx.fillRect(0, 0, CANDY_W * scale, CANDY_H * scale);
     }
     ctx.restore();
+    
+    // Victory separation effect
+    if (phase === 'victory' && candySeparation > 0) {
+      const sepDist = candySeparation * 8 * scale;
+      ctx.save();
+      ctx.translate(0, -sepDist);
+      ctx.globalAlpha = 1 - (candySeparation * 0.3);
+      ctx.shadowColor = 'rgba(245,200,66,0.6)';
+      ctx.shadowBlur = 20 * scale * candySeparation;
+      
+      ctx.beginPath();
+      shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(245,210,80,0.85)';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
   }
 
   // ── Fracture cracks ───────────────────────────────────────────────
@@ -1884,10 +1895,72 @@ function loop(timestamp) {
   lastTimestamp = timestamp;
 
   updateCountdown(dt);
+  
+  // ── Elimination sequence ──────────────────────────────
+  if (phase === 'eliminating') {
+    elimSequenceTimer += dt;
+    
+    if (elimSequencePhase === 0 && elimSequenceTimer > 400) {
+      // Aim complete → Fire
+      elimSequencePhase = 1;
+      playSnap();
+      shakeIntensity = 12;
+      
+      const targetX = canvas.width / 2;
+      const targetY = canvas.height / 2;
+      const rightMuzzleX = guardX + (22 * scale + 56 * scale);
+      const rightMuzzleY = guardY + 38 * scale;
+      const leftMuzzleX = leftGuardX - (22 * scale + 56 * scale);
+      const leftMuzzleY = leftGuardY + 38 * scale;
+      
+      createBullet(rightMuzzleX, rightMuzzleY, targetX, targetY);
+      createBullet(leftMuzzleX, leftMuzzleY, targetX, targetY);
+    }
+    
+    if (elimSequencePhase === 1 && elimSequenceTimer > 650) {
+      // Bullets hit → Impact
+      elimSequencePhase = 2;
+      shakeIntensity = 26;
+      for(let i=0; i<4; i++) emitCrackSpark(canvas.width/2, canvas.height/2, 1.0);
+      
+      for(let i=0; i<12; i++){
+        const a=Math.random()*Math.PI*2, r=(20+Math.random()*40)*scale;
+        const fx = canvas.width/2 + Math.cos(a)*r;
+        const fy = canvas.height/2 + Math.sin(a)*r;
+        fracturePoints.push({
+          x: fx, y: fy,
+          radius: 3 * scale, maxRadius: (18+Math.random()*14) * scale,
+          age: 0, severity: 1.0,
+          spokeAngles: Array.from({length:6}, (_,k)=>(k/6)*Math.PI*2+Math.random()*0.6)
+        });
+      }
+    }
+    
+    if (elimSequencePhase === 2 && elimSequenceTimer > 750) {
+      // Impact → Blood
+      elimSequencePhase = 3;
+      phase = 'snap';
+    }
+    
+    if (elimSequencePhase === 3 && elimSequenceTimer > 1400) {
+      setPhase('eliminated');
+    }
+  }
+  
+  // ── Victory sequence ──────────────────────────────────
+  if (phase === 'victory') {
+    victoryTimer += dt;
+    candySeparation = Math.min(1, victoryTimer / 800);
+    
+    if (victoryTimer > 1200) {
+      setPhase('success');
+    }
+  }
+  
   updatePhysics(dt);
   updateParticles();
 
-  if (phase !== 'intro') render();
+  if (phase !== 'intro' || phase === 'victory' || phase === 'eliminating') render();
 
   rafId = requestAnimationFrame(loop);
 }
