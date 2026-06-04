@@ -101,20 +101,28 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
 
   useFrame((state, dt) => {
     if (!group.current) return;
-    
-    const lerpSpeed = 0.06;
+
+    // Exponential decay: alpha = 1 - e^(-k*dt) gives the same effective
+    // angular speed regardless of frame rate (unlike a fixed per-frame lerp
+    // factor which runs faster at high frame rates and slower at low ones).
+    // bodySpeed ~5.5 rad/s effective: ~90° in ~0.25 s — natural doll-turn.
+    // headSpeed ~4.0 rad/s effective: slightly slower so body leads head.
+    const bodySpeed = 1 - Math.exp(-5.5 * dt);
+    const headSpeed = 1 - Math.exp(-4.0 * dt);
+
     group.current.rotation.y = THREE.MathUtils.lerp(
-      group.current.rotation.y, 
-      targetRotation, 
-      lerpSpeed
+      group.current.rotation.y,
+      targetRotation,
+      bodySpeed
     );
-    
+
     if (headRef.current) {
-      const headTargetY = targetRotation * 1.15;
+      // Head overshoots body rotation by 18 % for a natural tracking look.
+      const headTargetY = targetRotation * 1.18;
       headRef.current.rotation.y = THREE.MathUtils.lerp(
         headRef.current.rotation.y,
         headTargetY,
-        lerpSpeed * 0.7
+        headSpeed
       );
     }
     
@@ -1071,6 +1079,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       gamePhaseRef.current = GamePhase.TIMEOUT;
       stopDollSong();
       sm.stopLoop("heartbeat" as any, 300);
+      sm.stopLoop("scan_tone" as any, 300);
       onGameOver(GamePhase.TIMEOUT, Math.floor(scoreRef.current));
       inputManager.endFrame();
       return;
@@ -1087,7 +1096,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
         redTimerRef.current = 0;
         graceTimerRef.current = 0;
         dollRotationRef.current = Math.PI;
-        sm.play("scan_tone" as any);
+        sm.loop("scan_tone" as any);
         sm.loop("heartbeat" as any);
       }
     } else if (lp === LightPhase.RED) {
@@ -1095,8 +1104,18 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       graceTimerRef.current += dt;
       const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / ROUND_TIMER * 0.5);
       if (redTimerRef.current >= redDur) {
-        lightPhaseRef.current = LightPhase.WARNING;
-        turnTRef.current = 0;
+        // Return to GREEN: doll turns back smoothly (Doll component lerps rotation
+        // toward the new targetRotation=0), heartbeat and scan_tone stop, and the
+        // doll song restarts to begin the next GREEN→WARNING→RED cycle.
+        // Previously this set WARNING with turnTRef=0, making the doll rotate 0→PI
+        // again even though it was already at PI — wrong direction, wrong phase.
+        lightPhaseRef.current = LightPhase.GREEN;
+        redTimerRef.current   = 0;
+        graceTimerRef.current = 0;
+        dollRotationRef.current = 0;
+        sm.stopLoop("heartbeat" as any, 400);
+        sm.stopLoop("scan_tone" as any, 300);
+        startDollSong();
       }
     } else if (lp === LightPhase.GREEN) {
       dollRotationRef.current = 0;
@@ -1108,8 +1127,11 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
       const targetVz = wantMove ? -speed : 0;
       
-      const accel = wantMove ? 14 : 150;
+      const accel = wantMove ? 12 : 28;
       human.vz = THREE.MathUtils.lerp(human.vz, targetVz, Math.min(1, dt * accel));
+      // Stable stopping threshold: once velocity falls below the perception
+      // deadzone clamp it to exactly zero to prevent perpetual micro-drift.
+      if (!wantMove && Math.abs(human.vz) < 0.04) human.vz = 0;
       
       human.vx = 0;
       human.z += human.vz * dt;
@@ -1131,6 +1153,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
         
         stopDollSong();
         sm.stopLoop("heartbeat" as any, 300);
+        sm.stopLoop("scan_tone" as any, 300);
         sm.play("player_victory" as any);
         sm.play("crowd_cheer" as any);
         
@@ -1169,8 +1192,9 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: Sc
       const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
       const npcSpeed = baseSpeed + speedVariation;
       const targetVz = p.npcMoving ? -npcSpeed : 0;
-      const accel = p.npcMoving ? 8 + (p.id % 3) * 2 : 18;
+      const accel = p.npcMoving ? 8 + (p.id % 3) * 2 : 22;
       p.vz = THREE.MathUtils.lerp(p.vz, targetVz, Math.min(1, dt * accel));
+      if (!p.npcMoving && Math.abs(p.vz) < 0.04) p.vz = 0;
 
       if (p.npcMoving) {
         const drift = Math.sin(performance.now() * 0.003 + p.id * 0.7) * 0.015;

@@ -93,6 +93,7 @@ export class MusicManager {
   }
 
   public stop(fadeMs: number = 0): void {
+    this._transitioning = false;
     if (!this._currentId) return;
     const howl = this._howls.get(this._currentId);
     

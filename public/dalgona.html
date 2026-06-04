@@ -698,15 +698,45 @@ function playSnap() {
 }
 
 const SHAPES = {
+  // Static shapes — must match every entry in pickShape()'s pool exactly.
+  // Root cause of the prior crash: pickShape returned 'circle' and 'star'
+  // but neither key existed here, so SHAPES[id] was undefined, and calling
+  // undefined() threw "SHAPES[id] is not a function".
   triangle: () => [{nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}],
+
+  // 24-sided polygon produces a smooth circle at game canvas resolution.
+  circle: () => {
+    const pts = [];
+    for (let j = 0; j < 24; j++) {
+      pts.push({
+        nx: 0.5 + Math.cos((j / 24) * Math.PI * 2 - Math.PI / 2) * 0.42,
+        ny: 0.5 + Math.sin((j / 24) * Math.PI * 2 - Math.PI / 2) * 0.42
+      });
+    }
+    return pts;
+  },
+
+  // Classic 5-pointed star matching the Squid Game dalgona prop.
+  star: () => {
+    const pts = [];
+    for (let j = 0; j < 10; j++) {
+      const r = j % 2 === 0 ? 0.44 : 0.20;
+      pts.push({
+        nx: 0.5 + Math.cos((j / 10) * Math.PI * 2 - Math.PI / 2) * r,
+        ny: 0.5 + Math.sin((j / 10) * Math.PI * 2 - Math.PI / 2) * r
+      });
+    }
+    return pts;
+  },
+
   umbrella: () => [
     {nx:0.50,ny:0.90},{nx:0.50,ny:0.76},{nx:0.44,ny:0.76},{nx:0.44,ny:0.70},{nx:0.10,ny:0.70},{nx:0.10,ny:0.58},
     {nx:0.16,ny:0.44},{nx:0.26,ny:0.34},{nx:0.38,ny:0.28},{nx:0.50,ny:0.26},{nx:0.62,ny:0.28},{nx:0.74,ny:0.34},
     {nx:0.84,ny:0.44},{nx:0.90,ny:0.58},{nx:0.90,ny:0.70},{nx:0.56,ny:0.70},{nx:0.56,ny:0.76},{nx:0.50,ny:0.76}
   ]
 };
-const SHAPE_ICONS = { triangle:'▲', umbrella:'☂' };
-const SHAPE_NAMES = { triangle:'TRIANGLE', umbrella:'UMBRELLA' };
+const SHAPE_ICONS = { triangle:'▲', circle:'⬤', star:'★', umbrella:'☂' };
+const SHAPE_NAMES = { triangle:'TRIANGLE', circle:'CIRCLE', star:'STAR', umbrella:'UMBRELLA' };
 
 // Procedurally generate 50+ Polygons and Stars!
 for(let sides=4; sides<=28; sides++) {
