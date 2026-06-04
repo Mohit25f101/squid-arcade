@@ -42,7 +42,7 @@ export function useAmbientAudio(): void {
       if (!nextBase.includes(id)) {
         const prevConfig = prevPhase ? PHASE_LAYERS[prevPhase] : null;
         // FIXED: Routing to stopLoop to support the fadeOut parameter
-        sm.stopLoop(id, prevConfig?.fadeOut ?? 600);
+        sm.stop(id, prevConfig?.fadeOut ?? 600);
       }
     }
 

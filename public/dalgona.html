@@ -594,6 +594,15 @@ let crackOffscreen = null;
 let frame = 0;
 let rafId = null;
 
+// ── Left & Right soldier state ──────────────────────────
+let leftGuardX = 0;
+let leftGuardY = 0;
+let guardX = 0;
+let guardY = 0;
+
+// ── Bullet state ────────────────────────────────────────
+let bullets = [];
+
 let atmosphericDust = [];
 for (let i = 0; i < 40; i++) {
   atmosphericDust.push({
@@ -753,6 +762,29 @@ function computeStability(){
   stability = 1/(1+(varSum/n)/120);
 }
 
+function createBullet(fromX, fromY, toX, toY) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const speed = 18 * scale;
+  bullets.push({
+    x: fromX,
+    y: fromY,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    life: 1,
+    size: 4 * scale
+  });
+}
+
+function updateBullets() {
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    b.life -= 0.015;
+    if (b.life <= 0) bullets.splice(i, 1);
+  }
+}
+
 // ── Canvas sizing — FULLSCREEN, NO BLACK BARS ─────────
 function resize(){
   const vw = window.innerWidth;
@@ -904,6 +936,7 @@ function initGame(id){
   frame = 0;
   lastCarvedSegment = -1;
   messageSent = false;
+  bullets = [];
   rebuildOffscreens();
 }
 
@@ -1162,6 +1195,23 @@ function triggerInstantFail(reason){
   playSnap();
   shakeIntensity = 22;
   
+  // Ensure guard coordinates are updated immediately for the bullet calculation
+  guardX = canvas.width  * 0.84 - (shakeX * 0.35);
+  guardY = canvas.height * 0.42;
+  leftGuardX = canvas.width * 0.16 - (shakeX * 0.35);
+  leftGuardY = canvas.height * 0.42;
+
+  // Fire bullets from both soldiers
+  const targetX = canvas.width / 2;
+  const targetY = canvas.height / 2;
+  const rightMuzzleX = guardX + (22 * scale + 56 * scale);
+  const rightMuzzleY = guardY + 38 * scale;
+  const leftMuzzleX = leftGuardX - (22 * scale + 56 * scale);
+  const leftMuzzleY = leftGuardY + 38 * scale;
+  
+  createBullet(rightMuzzleX, rightMuzzleY, targetX, targetY);
+  createBullet(leftMuzzleX, leftMuzzleY, targetX, targetY);
+  
   for(let i=0; i<3; i++) emitCrackSpark(needleX, needleY, 1.0);
   
   const {gx,gy} = worldToGrid(needleX, needleY);
@@ -1238,8 +1288,151 @@ function render(){
   ctx.fillStyle = dirtGrad;
   ctx.fillRect(-CANDY_X*2, canvas.height * 0.4, canvas.width*2, canvas.height);
 
-  const guardX = canvas.width  * 0.84 - (shakeX * 0.35);
-  const guardY = canvas.height * 0.42;
+  // ── Left soldier (MIRROR of right) ────────────────────────────────
+  leftGuardX = canvas.width * 0.16 - (shakeX * 0.35);
+  leftGuardY = canvas.height * 0.42;
+  const lgs = scale * 1.1;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(leftGuardX, leftGuardY + 130 * lgs, 38 * lgs, 9 * lgs, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Suit
+  const leftSuitGrad = ctx.createLinearGradient(
+    leftGuardX - 28 * lgs, leftGuardY + 30 * lgs,
+    leftGuardX + 28 * lgs, leftGuardY + 110 * lgs
+  );
+  leftSuitGrad.addColorStop(0,    '#ff2a6e');
+  leftSuitGrad.addColorStop(0.45, '#bd1e51');
+  leftSuitGrad.addColorStop(1,    '#7a0d2f');
+  ctx.fillStyle = leftSuitGrad;
+  ctx.beginPath();
+  ctx.moveTo(leftGuardX - 26 * lgs, leftGuardY + 115 * lgs);
+  ctx.lineTo(leftGuardX - 19 * lgs, leftGuardY + 32  * lgs);
+  ctx.lineTo(leftGuardX + 19 * lgs, leftGuardY + 32  * lgs);
+  ctx.lineTo(leftGuardX + 26 * lgs, leftGuardY + 115 * lgs);
+  ctx.closePath();
+  ctx.fill();
+
+  // Highlight
+  ctx.fillStyle = 'rgba(255,200,210,0.18)';
+  ctx.fillRect(leftGuardX - 22 * lgs, leftGuardY + 34 * lgs, 4 * lgs, 78 * lgs);
+
+  // Belt
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(leftGuardX - 24 * lgs, leftGuardY + 68 * lgs, 48 * lgs, 6 * lgs);
+  ctx.fillStyle = '#7a7a7a';
+  ctx.fillRect(leftGuardX - 4 * lgs,  leftGuardY + 69 * lgs, 8 * lgs, 4 * lgs);
+
+  // Head
+  const leftHeadR = 19 * lgs;
+  const leftHeadGrad = ctx.createRadialGradient(
+    leftGuardX + 6 * lgs, leftGuardY + 4 * lgs, 2 * lgs,
+    leftGuardX,           leftGuardY + 10 * lgs, leftHeadR
+  );
+  leftHeadGrad.addColorStop(0, '#2a2a2a');
+  leftHeadGrad.addColorStop(1, '#050505');
+  ctx.fillStyle = leftHeadGrad;
+  ctx.beginPath();
+  ctx.arc(leftGuardX, leftGuardY + 10 * lgs, leftHeadR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Mask shine
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1 * lgs;
+  ctx.beginPath();
+  ctx.arc(leftGuardX + 2 * lgs, leftGuardY + 6 * lgs, leftHeadR - 1, Math.PI * 1.45, Math.PI * 1.95);
+  ctx.stroke();
+
+  // Square mask
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2 * lgs;
+  ctx.strokeRect(leftGuardX - 7 * lgs, leftGuardY + 3 * lgs, 14 * lgs, 14 * lgs);
+  ctx.shadowColor = 'rgba(255,255,255,0.6)';
+  ctx.shadowBlur = 6 * lgs;
+  ctx.strokeRect(leftGuardX - 7 * lgs, leftGuardY + 3 * lgs, 14 * lgs, 14 * lgs);
+  ctx.shadowBlur = 0;
+
+  // Arms and gun (mirrored)
+  const leftTension = 1 - candyIntegrity;
+  const leftAiming = leftTension > 0.35 || phase === 'snap' || phase === 'eliminated';
+  const leftFiring = phase === 'snap' || phase === 'eliminated';
+
+  ctx.fillStyle = '#7a0d2f';
+  if (leftAiming) {
+    ctx.fillRect(leftGuardX - 30 * lgs, leftGuardY + 36 * lgs, 14 * lgs, 8 * lgs);
+    ctx.fillRect(leftGuardX + 16 * lgs, leftGuardY + 36 * lgs, 14 * lgs, 8 * lgs);
+  } else {
+    ctx.fillRect(leftGuardX - 22 * lgs, leftGuardY + 40 * lgs, 10 * lgs, 26 * lgs);
+    ctx.fillRect(leftGuardX + 12 * lgs, leftGuardY + 40 * lgs, 10 * lgs, 26 * lgs);
+  }
+
+  // Gun (mirrored - pointing right)
+  ctx.save();
+  ctx.translate(leftGuardX, leftGuardY + 38 * lgs);
+  if (leftAiming) {
+    const leftBarrelLen = 56 * lgs;
+    ctx.fillStyle = '#1a0e0a';
+    ctx.fillRect(-6 * lgs, -5 * lgs, 14 * lgs, 10 * lgs);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-22 * lgs, -4 * lgs, 16 * lgs, 8 * lgs);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(-22 * lgs - leftBarrelLen, -2 * lgs, leftBarrelLen, 4 * lgs);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(-14 * lgs, -8 * lgs, 4 * lgs, 4 * lgs);
+
+    const leftTipX = -22 * lgs - leftBarrelLen;
+    const leftTipY = 0;
+    const leftMuzzleX = leftGuardX + leftTipX;
+    const leftMuzzleY = leftGuardY + 38 * lgs + leftTipY;
+    const leftTargetX = canvas.width / 2 + (leftFiring ? 0 : Math.sin(frame * 0.06) * 40 * scale);
+    const leftTargetY = canvas.height / 2 + (leftFiring ? 0 : Math.cos(frame * 0.04) * 25 * scale);
+
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,0,30,${leftFiring ? 0.95 : 0.55})`;
+    ctx.lineWidth = (leftFiring ? 4 : 2) * scale;
+    ctx.shadowColor = 'rgba(255,0,30,0.85)';
+    ctx.shadowBlur = 14 * scale;
+    ctx.beginPath();
+    ctx.moveTo(leftMuzzleX, leftMuzzleY);
+    ctx.lineTo(leftTargetX, leftTargetY);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,200,200,0.95)';
+    ctx.lineWidth = 1 * scale;
+    ctx.beginPath();
+    ctx.moveTo(leftMuzzleX, leftMuzzleY);
+    ctx.lineTo(leftTargetX, leftTargetY);
+    ctx.stroke();
+
+    const leftDotR = (leftFiring ? 7 : 4) * scale;
+    ctx.fillStyle = 'rgba(255,40,40,0.95)';
+    ctx.shadowColor = 'rgba(255,0,0,1)';
+    ctx.shadowBlur = 18 * scale;
+    ctx.beginPath();
+    ctx.arc(leftTargetX, leftTargetY, leftDotR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    if (leftFiring && frame % 4 < 2) {
+      ctx.fillStyle = 'rgba(255,220,80,0.85)';
+      ctx.beginPath();
+      ctx.arc(leftMuzzleX, leftMuzzleY, 12 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(-38 * lgs, 4 * lgs, 44 * lgs, 6 * lgs);
+    ctx.restore();
+  }
+
+  // ── Right soldier ──────────────────────────────────────
+  guardX = canvas.width  * 0.84 - (shakeX * 0.35);
+  guardY = canvas.height * 0.42;
   const gs     = scale * 1.1;
 
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -1380,6 +1573,30 @@ function render(){
     ctx.translate(cx, cy);
     ctx.scale(hbPulse, hbPulse);
     ctx.drawImage(candyOffscreen, 0, 0);
+    
+    // Enhanced crack overlay based on stress
+    if (edgeStress > 0.2) {
+      const crackAlpha = clamp((edgeStress - 0.2) / 0.8, 0, 1);
+      ctx.fillStyle = `rgba(80,20,0,${crackAlpha * 0.35})`;
+      ctx.fillRect(0, 0, CANDY_W * scale, CANDY_H * scale);
+      
+      // Visible crack lines overlay
+      ctx.strokeStyle = `rgba(25,6,0,${crackAlpha * 0.85})`;
+      ctx.lineWidth = Math.max(2, crackAlpha * 6) * scale;
+      ctx.setLineDash([8 * scale, 4 * scale]);
+      for (let i = 0; i < Math.floor(crackAlpha * 12); i++) {
+        const x1 = Math.random() * CANDY_W * scale;
+        const y1 = Math.random() * CANDY_H * scale;
+        const angle = Math.random() * Math.PI;
+        const len = (30 + Math.random() * 60) * scale * crackAlpha;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    
     if (edgeStress > 0.3) {
       const burnAlpha = clamp((edgeStress - 0.3) / 0.7, 0, 1) * 0.48;
       ctx.fillStyle = `rgba(60,10,0,${burnAlpha})`;
@@ -1412,6 +1629,19 @@ function render(){
   // ── Shape outline ─────────────────────────────────────────────────
   if ((phase === 'playing' || phase === 'countdown') && shapePath.length) {
     ctx.save();
+    
+    // Carved area fill (darkened interior)
+    if (carvedSegments.size > 0) {
+      ctx.fillStyle = 'rgba(160,100,20,0.25)';
+      ctx.shadowColor = 'rgba(245,180,20,0.4)';
+      ctx.shadowBlur = 12 * scale;
+      ctx.beginPath();
+      shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    
     // Faint dotted guide for uncarved path
     ctx.setLineDash([6 * scale, 5 * scale]);
     ctx.lineDashOffset = frame * 0.45;
@@ -1421,13 +1651,14 @@ function render(){
     shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
     ctx.closePath();
     ctx.stroke();
+    
     // Glowing amber for carved segments
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;
-    ctx.shadowColor = 'rgba(245,180,20,0.8)';
-    ctx.shadowBlur = 9 * scale;
-    ctx.strokeStyle = 'rgba(245,210,50,0.94)';
-    ctx.lineWidth = 3.5 * scale;
+    ctx.shadowColor = 'rgba(245,180,20,0.9)';
+    ctx.shadowBlur = 14 * scale;
+    ctx.strokeStyle = 'rgba(255,220,60,0.98)';
+    ctx.lineWidth = 5 * scale;
     ctx.lineCap = 'round';
     for (let si = 0; si < shapePath.length; si++) {
       if (carvedSegments.has(si)) {
@@ -1449,6 +1680,30 @@ function render(){
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(0.5, p.size * scale * 0.55), 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Bullets ───────────────────────────────────────────────────────
+  for (let bi = 0; bi < bullets.length; bi++) {
+    const b = bullets[bi];
+    ctx.save();
+    ctx.globalAlpha = clamp(b.life, 0, 1);
+    ctx.fillStyle = '#ffc040';
+    ctx.shadowColor = 'rgba(255,200,64,0.9)';
+    ctx.shadowBlur = 8 * scale;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bullet trail
+    ctx.strokeStyle = 'rgba(255,200,64,0.6)';
+    ctx.lineWidth = 2 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - b.vx * 0.3, b.y - b.vy * 0.3);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
@@ -1513,10 +1768,6 @@ function render(){
     }
   }
 }
-// ═══════════════════════════════════════════════════════
-// MISSING SECTION — reconstructed from physics constants
-// and game design intent.
-// ═══════════════════════════════════════════════════════
 
 // ── Win condition ─────────────────────────────────────
 function checkWin() {
@@ -1540,6 +1791,8 @@ function updatePhysics(dt) {
     const idx = cellIdx(gx, gy);
     edgeStressGrid[idx] = Math.min(1, edgeStressGrid[idx] + wobble);
   }
+
+  updateBullets();
 
   // Derive aggregate edge stress (max of all cells)
   let maxStress = 0;
