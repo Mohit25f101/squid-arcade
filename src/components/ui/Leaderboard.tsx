@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { getLeaderboard, formatDate } from "@/lib/Leaderboard";
+import { getLeaderboard,  } from "@/lib/Leaderboard";
 
 interface LeaderboardProps {
   onBack: () => void;
@@ -50,7 +50,7 @@ export default function Leaderboard({ onBack, highlightSession }: LeaderboardPro
             <tbody>
               {entries.map((entry, idx) => (
                 <tr
-                  key={entry.sessionId}
+                  key={`${entry.sessionId}-${idx}`}
                   style={{
                     borderBottom: "1px solid rgba(255,255,255,0.1)",
                     background: entry.sessionId === highlightSession ? "rgba(255,255,255,0.05)" : "transparent",

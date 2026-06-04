@@ -49,7 +49,7 @@ export function useSceneCleanup(
 
     // Run registered cleanup functions
     for (const fn of cleanupFns.current) {
-      try { fn(); } catch (e) { /* never let a cleanup crash the others */ }
+      try { fn(); } catch { /* never let a cleanup crash the others */ }
     }
     cleanupFns.current = [];
 

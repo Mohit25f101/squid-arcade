@@ -50,7 +50,9 @@ export type AudioEvents = {
 };
 
 class EventBus {
-  private listeners: { [K in keyof AudioEvents]?: Function[] } = {};
+  // Bypasses contravariance errors internally while preserving strict public generic wrappers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private listeners: { [K in keyof AudioEvents]?: ((payload: any) => void)[] } = {};
 
   on<K extends keyof AudioEvents>(event: K, callback: (payload: AudioEvents[K]) => void) {
     if (!this.listeners[event]) this.listeners[event] = [];
@@ -58,7 +60,7 @@ class EventBus {
   }
 
   /** Remove a specific listener. Always call this in useEffect cleanup to
-   *  prevent duplicate subscriptions across hook remounts. */
+   * prevent duplicate subscriptions across hook remounts. */
   off<K extends keyof AudioEvents>(event: K, callback: (payload: AudioEvents[K]) => void) {
     if (!this.listeners[event]) return;
     this.listeners[event] = this.listeners[event]!.filter(cb => cb !== callback);
@@ -66,7 +68,7 @@ class EventBus {
 
   emit<K extends keyof AudioEvents>(event: K, payload?: AudioEvents[K]) {
     if (this.listeners[event]) {
-      this.listeners[event]!.forEach(cb => cb(payload as AudioEvents[K]));
+      this.listeners[event]!.forEach(cb => cb(payload));
     }
   }
 }

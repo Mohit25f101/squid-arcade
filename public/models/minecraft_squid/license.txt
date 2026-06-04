@@ -1,0 +1,11 @@
+Model Information:
+* title:	Minecraft squid game player
+* source:	https://sketchfab.com/3d-models/minecraft-squid-game-player-69e29c6ae20046239b017aec93ce0633
+* author:	timtime (https://sketchfab.com/timislav)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Minecraft squid game player" (https://sketchfab.com/3d-models/minecraft-squid-game-player-69e29c6ae20046239b017aec93ce0633) by timtime (https://sketchfab.com/timislav) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

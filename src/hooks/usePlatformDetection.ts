@@ -56,8 +56,8 @@ export async function requestFullscreen(
   try {
     if (el.requestFullscreen) {
       await el.requestFullscreen({ navigationUI: "hide" });
-    } else if ((el as any).webkitRequestFullscreen) {
-      await (el as any).webkitRequestFullscreen();
+    } else if ((el as unknown as { webkitRequestFullscreen: unknown }).webkitRequestFullscreen) {
+      await (el as unknown as { webkitRequestFullscreen: (opts?: unknown) => Promise<void> }).webkitRequestFullscreen();
     }
   } catch {
     // Fullscreen rejected (iOS Safari, some embedded contexts) — no-op
@@ -67,8 +67,8 @@ export async function requestFullscreen(
 export async function exitFullscreen(): Promise<void> {
   try {
     if (document.exitFullscreen) await document.exitFullscreen();
-    else if ((document as any).webkitExitFullscreen) {
-      (document as any).webkitExitFullscreen();
+    else if ((document as unknown as { webkitExitFullscreen: unknown }).webkitExitFullscreen) {
+      (document as unknown as { webkitExitFullscreen: () => void }).webkitExitFullscreen();
     }
   } catch {}
 }
@@ -76,7 +76,7 @@ export async function exitFullscreen(): Promise<void> {
 export function isFullscreen(): boolean {
   return !!(
     document.fullscreenElement ||
-    (document as any).webkitFullscreenElement
+    (document as unknown as { webkitFullscreenElement: unknown }).webkitFullscreenElement
   );
 }
 
@@ -89,8 +89,8 @@ export function isFullscreen(): boolean {
  */
 export async function lockLandscape(): Promise<void> {
   try {
-    if ((screen.orientation as any)?.lock) {
-      await (screen.orientation as any).lock("landscape");
+    if ((screen.orientation as unknown as { lock: unknown })?.lock) {
+      await (screen.orientation as unknown as { lock: (orientation: string) => Promise<void> }).lock("landscape");
     }
   } catch {
     // Not supported (iOS, Firefox) — show portrait warning overlay instead
@@ -107,7 +107,7 @@ export async function lockLandscape(): Promise<void> {
  *   const { canvasRef, containerRef } = useCanvasScaling();
  *   <div ref={containerRef}><canvas ref={canvasRef} /></div>
  */
-import { useRef, useCallback } from "react";
+import { useRef, } from "react";
 
 export function useCanvasScaling(
   onResize?: (w: number, h: number) => void

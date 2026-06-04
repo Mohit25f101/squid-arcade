@@ -1,5 +1,4 @@
 // src/hooks/useAmbientAudio.ts
-// Full file replacement.
 
 "use client";
 
@@ -42,7 +41,8 @@ export function useAmbientAudio(): void {
     for (const id of activeLayers.current) {
       if (!nextBase.includes(id)) {
         const prevConfig = prevPhase ? PHASE_LAYERS[prevPhase] : null;
-        sm.stop(id, prevConfig?.fadeOut ?? 600);
+        // FIXED: Routing to stopLoop to support the fadeOut parameter
+        sm.stopLoop(id, prevConfig?.fadeOut ?? 600);
       }
     }
 
@@ -61,7 +61,8 @@ export function useAmbientAudio(): void {
 
   useEffect(() => {
     return () => {
-      for (const id of activeLayers.current) sm.stop(id, 400);
+      // FIXED: Routing to stopLoop to support the fadeOut parameter
+      for (const id of activeLayers.current) sm.stopLoop(id, 400);
     };
   }, [sm]);
 }
@@ -76,8 +77,9 @@ export function useAudioSubscriptions() {
   useEffect(() => {
     const onGreenLight = () => {
       // Tension layer out — resume base ambient movement
-      sm.stop("scan_tone",  300);
-      sm.stop("heartbeat",  300);
+      // FIXED: Routing to stopLoop to support the fadeOut parameter
+      sm.stopLoop("scan_tone",  300);
+      sm.stopLoop("heartbeat",  300);
       sm.loop("drone_root");
       sm.loop("room_tone");
     };
@@ -87,7 +89,8 @@ export function useAudioSubscriptions() {
       sm.loop("scan_tone");
       sm.play("heartbeat");
     };
-
+    
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const onElimination = (_id: string) => {
       sm.play("player_eliminated");
     };
@@ -110,21 +113,51 @@ export function useGameAudio() {
   const sm = useSoundManager();
 
   return {
-    onGreenLight:    () => { sm.play("green_light", 100); sm.setHeartbeat(0); },
-    onRedLight:      () => { sm.play("red_light",   100); sm.setHeartbeat(0.6); },
+    // Green/Red light music is now strictly handled by RLGLAudioController.
+    // We leave these as safe empty stubs just in case other files still call them.
+    onGreenLight:    () => { 
+      if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
+      else sm.stopLoop("heartbeat", 300); // FIXED
+    },
+    
+    onRedLight:      () => { 
+      if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0.6); 
+    },
+    
     onDollTurn:      () => sm.play("doll_turn",          80),
     onStep:          () => sm.play("player_step",        40, 0.15),
     onJump:          () => sm.play("player_jump",        80, 0.08),
     onLand:          () => sm.play("player_land",        60, 0.1),
-    onEliminated:    () => { sm.play("player_eliminated", 0); sm.play("crowd_gasp", 200); sm.setHeartbeat(0); },
-    onVictory:       () => { sm.play("player_victory", 0); sm.play("crowd_cheer", 300); sm.setHeartbeat(0); },
+    
+    onEliminated:    () => { 
+      sm.play("player_eliminated", 0); 
+      sm.play("crowd_gasp", 200); 
+      if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
+      else sm.stopLoop("heartbeat", 300); // FIXED
+    },
+    
+    onVictory:       () => { 
+      sm.play("player_victory", 0); 
+      sm.play("crowd_cheer", 300); 
+      if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
+      else sm.stopLoop("heartbeat", 300); // FIXED
+    },
+    
     onCountdownBeep: () => sm.play("countdown_beep",     50),
     onCountdownGo:   () => sm.play("countdown_go",        0),
-    onCombo:         () => sm.play("combo_hit",           80, 0.12),
-    setDangerLevel:  (v: number) => sm.setHeartbeat(v),
-    stopHeartbeat:   () => sm.stop("heartbeat", 400),
+    
+    // Legacy stub to prevent crashes if called
+    onCombo:         () => { /* combo_hit removed */ },
+    
+    setDangerLevel:  (v: number) => {
+      if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(v);
+    },
+    
+    stopHeartbeat:   () => sm.stopLoop("heartbeat", 400), // FIXED
+    
+    // Preload strictly valid SoundIds
     preloadGame:     () => sm.preload([
-      "green_light", "red_light", "player_step", "player_jump",
+      "player_step", "player_jump",
       "player_land", "player_eliminated", "player_victory",
       "countdown_beep", "countdown_go", "doll_turn",
       "crowd_gasp", "crowd_cheer", "heartbeat",

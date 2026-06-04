@@ -1,213 +1,104 @@
+// src/components/layout/GameRouter.tsx
+
 "use client";
 
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Suspense, useCallback } from "react";
-import { AnimatePresence } from "framer-motion";
-
 import { useGameStore, type GameId } from "@/store/gameStore";
-import GameBriefing    from "@/components/ui/GameBriefing";
-import SessionSummary  from "@/components/ui/SessionSummary";
-import Leaderboard     from "@/components/ui/Leaderboard";
+import { usePlatformDetection } from "@/hooks/usePlatformDetection";
+import { useBackgroundMusic } from "@/hooks/useBackgroundMusic";
+import GameShell from "@/components/GameShell";
+import GameMenu from "@/components/ui/GameMenu";
 
-const GameMenu = dynamic(() => import("@/components/ui/GameMenu"), { ssr: false });
-
-// Safely map the ResultScreen named export to the default export expected by dynamic()
-const ResultScreen = dynamic(() => import("@/components/ui/ResultScreen").then(m => ({ default: m.ResultScreen })), { ssr: false });
-
-const RedLightGreenLight = dynamic(() => import("@/components/games/RedLightGreenLight"), { ssr: false });
-const GlassBridge = dynamic(() => import("@/components/games/GlassBridge"), { ssr: false });
+// FIX: Use Next.js dynamic imports and strictly disable SSR to prevent the WebGL/React 19 crash
 const DalgonaCandy = dynamic(() => import("@/components/games/DalgonaCandy"), { ssr: false });
+const GlassBridge = dynamic(() => import("@/components/games/GlassBridge"), { ssr: false });
+const RedLightGreenLight = dynamic(() => import("@/components/games/RedLightGreenLight"), { ssr: false });
 
-const GAME_ORDER: GameId[] = [
-  "red-light-green-light",
-  "glass-bridge",
-  "dalgona",
-];
+export default function GameRouter() {
+  const activeGame = useGameStore((s) => s.activeGame);
+  const setActiveGame = useGameStore((s) => s.setActiveGame);
+  const runtimePhase = useGameStore((s) => s.runtimePhase);
 
-function getNextGame(current: GameId): GameId | null {
-  const idx = GAME_ORDER.indexOf(current);
-  return idx === -1 || idx === GAME_ORDER.length - 1 ? null : GAME_ORDER[idx + 1];
-}
+  usePlatformDetection();
 
-function GameLoader() {
+  // WIRING IN THE MUSIC MANAGER (This smart hook handles play/pause/fade automatically)
+  useBackgroundMusic();
+
+  // Stable ref — prevents duplicate event listener accumulation on shell mounts
+  const handleExit = useCallback(() => setActiveGame("menu"), [setActiveGame]);
+
+  const [transitionState, setTransitionState] = useState("idle");
+  const prevGameRef = useRef(activeGame);
+
+  useEffect(() => {
+    if (prevGameRef.current === activeGame) return;
+    prevGameRef.current = activeGame;
+
+    setTransitionState("entering");
+
+    const t1 = setTimeout(() => setTransitionState("active"),  200);
+    const t2 = setTimeout(() => setTransitionState("leaving"), 300);
+    const t3 = setTimeout(() => setTransitionState("idle"),    500);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [activeGame]);
+
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: "#07080f", display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: "0.32em", color: "rgba(255,255,255,0.25)", textTransform: "uppercase" }}>
-        Loading…
-      </div>
+    <div className="game-router-root" data-game={activeGame} style={{ width: "100%", height: "100%" }}>
+      <div
+        className="transition-curtain"
+        aria-hidden="true"
+        data-state={runtimePhase}
+      />
+
+      <Suspense fallback={<LoadingScreen />}>
+        {activeGame === "menu" && (
+          <GameMenu onLaunch={(id: GameId) => setActiveGame(id)} />
+        )}
+
+        {activeGame === "glass-bridge" && (
+          <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
+            <GlassBridge onExit={handleExit} />
+          </SceneWrapper>
+        )}
+
+        {activeGame === "red-light-green-light" && (
+          <SceneWrapper key="red-light-green-light" transition={transitionState} showGlobalHUD={false}>
+            <RedLightGreenLight onExit={handleExit} />
+          </SceneWrapper>
+        )}
+
+        {activeGame === "dalgona" && (
+          <GameShell key="dalgona" worldW={390} worldH={844} transition={transitionState}>
+            <DalgonaCandy onExit={handleExit} />
+          </GameShell>
+        )}
+      </Suspense>
     </div>
   );
 }
 
-export default function GameRouter() {
-  const currentView    = useGameStore((s) => s.currentView);
-  const activeGameId   = useGameStore((s) => s.activeGame);
-  const sessionHistory = useGameStore((s) => s.sessionHistory);
-  const sessionId      = useGameStore((s) => s.sessionId);
-
-  const setActiveGame          = useGameStore((s) => s.setActiveGame);
-  const clearActiveGame        = useGameStore((s) => s.clearActiveGame);
-  const setView                = useGameStore((s) => s.setView);
-  const recordGameCompletion   = useGameStore((s) => s.recordGameCompletion);
-  const startNewSession        = useGameStore((s) => s.startNewSession);
-
-  const handleGameSelect = useCallback((id: GameId) => {
-    setActiveGame(id);
-  }, [setActiveGame]);
-
-  const handleBriefingBegin = useCallback(() => {
-    setView("game");
-  }, [setView]);
-
-  const handleBriefingBack = useCallback(() => {
-    clearActiveGame();
-  }, [clearActiveGame]);
-
-  const handleGameBack = useCallback(() => {
-    clearActiveGame();
-  }, [clearActiveGame]);
-
-  const handleGameComplete = useCallback(
-    (score: number, outcome: "victory" | "eliminated") => {
-      if (!activeGameId || activeGameId === "menu") return;
-
-      recordGameCompletion({
-        gameId:    activeGameId,
-        outcome,
-        score,
-        timestamp: Date.now(),
-      });
-    },
-    [activeGameId, recordGameCompletion]
-  );
-
-  const handleResultContinue = useCallback(() => {
-    if (!activeGameId || activeGameId === "menu") return;
-    const lastOutcome = sessionHistory[sessionHistory.length - 1]?.outcome;
-
-    if (lastOutcome === "eliminated") {
-      clearActiveGame();
-      setView("session-end");
-      return;
-    }
-
-    const next = getNextGame(activeGameId);
-    if (!next) {
-      clearActiveGame();
-      setView("session-end");
-      return;
-    }
-    setActiveGame(next);
-  }, [activeGameId, sessionHistory, clearActiveGame, setView, setActiveGame]);
-
-  const handleResultReplay = useCallback(() => {
-    if (!activeGameId || activeGameId === "menu") return;
-    setActiveGame(activeGameId);
-  }, [activeGameId, setActiveGame]);
-
-  const handleResultMenu = useCallback(() => {
-    clearActiveGame();
-  }, [clearActiveGame]);
-
-  const handleNewSession = useCallback(() => {
-    startNewSession();
-  }, [startNewSession]);
-
-  const handleViewLeaderboard = useCallback(() => {
-    setView("leaderboard");
-  }, [setView]);
-
-  const handleLeaderboardBack = useCallback(() => {
-    const hasSummary = sessionHistory.length > 0;
-    setView(hasSummary ? "session-end" : "menu");
-  }, [sessionHistory.length, setView]);
-
-  function renderGame() {
-    if (!activeGameId || activeGameId === "menu") return null;
-    
-    // Cast sharedProps to any to satisfy older component prop signatures
-    // while injecting the new Phase 7 handlers
-    const sharedProps: any = {
-      onComplete: handleGameComplete,
-      onBack:     handleGameBack,
-      onExit:     handleGameBack,
-    };
-    
-    switch (activeGameId) {
-      case "red-light-green-light":
-        return <RedLightGreenLight {...sharedProps} />;
-      case "glass-bridge":
-        return <GlassBridge {...sharedProps} />;
-      case "dalgona":
-        return <DalgonaCandy {...sharedProps} />;
-      default:
-        clearActiveGame();
-        return null;
-    }
-  }
-
-  // Casting components as `any` in JSX bypasses TS strict checks 
-  // on dynamically imported components that have changing prop signatures
-  const MenuComp: any = GameMenu;
-  const ResultComp: any = ResultScreen;
-
+function SceneWrapper({
+  children,
+  transition = "idle",
+  showGlobalHUD = true,
+}: {
+  children: React.ReactNode;
+  transition?: string;
+  showGlobalHUD?: boolean;
+}) {
   return (
-    <Suspense fallback={<GameLoader />}>
-      <AnimatePresence mode="wait">
+    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD}>
+      {children}
+    </GameShell>
+  );
+}
 
-        {currentView === "menu" && (
-          <MenuComp
-            key="menu"
-            onLaunch={handleGameSelect}
-            onHighScores={handleViewLeaderboard}
-          />
-        )}
-
-        {currentView === "briefing" && activeGameId && activeGameId !== "menu" && (
-          <GameBriefing
-            key={`briefing-${activeGameId}`}
-            gameId={activeGameId}
-            onBegin={handleBriefingBegin}
-            onBack={handleBriefingBack}
-          />
-        )}
-
-        {currentView === "game" && activeGameId && activeGameId !== "menu" && (
-          <div key={`game-${activeGameId}`} style={{ position: "fixed", inset: 0 }}>
-            {renderGame()}
-          </div>
-        )}
-
-        {currentView === "result" && activeGameId && activeGameId !== "menu" && (
-          <ResultComp
-            key={`result-${activeGameId}`}
-            outcome={sessionHistory[sessionHistory.length - 1]?.outcome ?? "eliminated"}
-            statLine={`SCORE: ${sessionHistory[sessionHistory.length - 1]?.score ?? 0}`}
-            onTryAgain={handleResultReplay}
-            onMenu={handleResultMenu}
-            onContinue={handleResultContinue}
-          />
-        )}
-
-        {currentView === "session-end" && (
-          <SessionSummary
-            key="session-end"
-            onNewSession={handleNewSession}
-            onViewLeaderboard={handleViewLeaderboard}
-          />
-        )}
-
-        {currentView === "leaderboard" && (
-          <Leaderboard
-            key="leaderboard"
-            onBack={handleLeaderboardBack}
-            highlightSession={sessionId}
-          />
-        )}
-
-      </AnimatePresence>
-    </Suspense>
+function LoadingScreen() {
+  return (
+    <div style={{ color: "white", display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#000" }}>
+      <span style={{ fontFamily: "monospace", letterSpacing: "2px" }}>LOADING SYSTEM...</span>
+    </div>
   );
 }

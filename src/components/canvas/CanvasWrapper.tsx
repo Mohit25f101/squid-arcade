@@ -151,7 +151,6 @@ const CanvasWrapper = forwardRef<CanvasWrapperHandle, CanvasWrapperProps>(
     {
       onReady,
       onResize,
-      aspectRatio,
       designWidth = 1280,
       designHeight = 720,
       resizeStrategy = "contain",
@@ -206,9 +205,7 @@ const CanvasWrapper = forwardRef<CanvasWrapperHandle, CanvasWrapperProps>(
       let offsetX = 0;
       let offsetY = 0;
 
-      const aspect = aspectRatio
-        ? aspectRatio[0] / aspectRatio[1]
-        : designWidth / designHeight;
+      
 
       switch (resizeStrategy) {
         case "stretch": {
@@ -281,7 +278,6 @@ const CanvasWrapper = forwardRef<CanvasWrapperHandle, CanvasWrapperProps>(
       designHeight,
       resizeStrategy,
       enableDPR,
-      aspectRatio,
       onResize,
     ]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useMemo } from "react";
 import { useGameStore } from "../../store/gameStore";
 import type { HUDState } from "../../store/gameStore";
 
@@ -73,13 +73,10 @@ export function useHUDSync(options: HUDSyncOptions = {}): HUDSyncHandle {
     return bufferRef.current;
   }, []);
 
-  // Stable handle — object identity never changes
-  const handleRef = useRef<HUDSyncHandle>({ write, tick, forceFlush, read });
-
-  handleRef.current.write      = write;
-  handleRef.current.tick       = tick;
-  handleRef.current.forceFlush = forceFlush;
-  handleRef.current.read       = read;
-
-  return handleRef.current;
+  return useMemo(() => ({
+    write,
+    tick,
+    forceFlush,
+    read
+  }), [write, tick, forceFlush, read]);
 }

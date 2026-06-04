@@ -92,6 +92,8 @@ const UPGRADE_THRESHOLD   = 58; // sustained above this → try upgrade
 const UPGRADE_COOLDOWN_MS = 5000;
 const DOWNGRADE_COOLDOWN_MS = 1500;
 
+const tierOrder = ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'] as ('LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA')[];
+
 interface AdaptiveQualityReturn {
   qualityRef: React.MutableRefObject<QualitySettings>;
   recordFrame: (deltaMs: number) => void;
@@ -105,12 +107,10 @@ export function useAdaptiveQuality(
   // window.devicePixelRatio is always available.
   const presets = useRef<Record<QualityTier, QualitySettings>>(buildPresets());
 
-  const qualityRef = useRef<QualitySettings>(presets.current[initialTier]);
+  const qualityRef = useRef<QualitySettings>(buildPresets()[initialTier]);
   const frameSamples = useRef<number[]>([]);
   const lastDecisionTime = useRef<number>(0);
   const lastUpgradeTime = useRef<number>(0);
-
-  const tierOrder: QualityTier[] = ["LOW", "MEDIUM", "HIGH", "ULTRA"];
 
   const applyTier = useCallback((tier: QualityTier) => {
     qualityRef.current = { ...presets.current[tier] };
@@ -159,7 +159,7 @@ export function useAdaptiveQuality(
         }
       }
     },
-    [applyTier, tierOrder]
+    [applyTier, ]
   );
 
   // Detect low-end devices at mount and start at lower tier.

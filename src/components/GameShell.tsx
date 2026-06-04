@@ -837,47 +837,27 @@ export function useGameShellBridge(opts: {
   progressMarker?: number;
   progressTotal?: number;
   reason?: string;
+  outcome?: "victory" | "eliminated"; // 1. Add definitive explicit outcome
 }): void {
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
   const triggerElimination = useGameStore((s) => s.triggerElimination);
 
-  const { uiPhase, sourceGame, progressMarker, progressTotal, reason } = opts;
+  const { uiPhase, sourceGame, progressMarker, progressTotal, reason, outcome } = opts;
 
   useEffect(() => {
-    
     switch (uiPhase) {
-      case "intro":
-        setRuntimePhase("intro");
-        break;
-      case "playing":
-        setRuntimePhase("playing");
-        break;
-      case "paused":
-        setRuntimePhase("paused");
-        break;
+      case "intro": setRuntimePhase("intro"); break;
+      case "playing": setRuntimePhase("playing"); break;
       case "gameover":
-        triggerElimination({
-          sourceGame,
-          reason,
-          progressMarker,
-          progressTotal,
-        });
-        break;
       case "victory":
-        setRuntimePhase("victory");
+        // 2. Derive purely from the explicit outcome prop
+        if (outcome === "victory") {
+          setRuntimePhase("victory");
+        } else if (outcome === "eliminated") {
+          triggerElimination({ sourceGame, reason, progressMarker, progressTotal });
+        }
         break;
-      // "transitioning" and any other local phases map to nothing —
-      // the store doesn't need to know about mid-animation states
-      default:
-        break;
+      default: break;
     }
-  }, [
-    uiPhase,
-    sourceGame,
-    reason,
-    progressMarker,
-    progressTotal,
-    setRuntimePhase,
-    triggerElimination,
-  ]);
+  }, [ uiPhase, sourceGame, reason, progressMarker, progressTotal, setRuntimePhase, triggerElimination, outcome ]);
 }

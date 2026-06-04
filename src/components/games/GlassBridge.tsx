@@ -1,3 +1,4 @@
+// src/components/games/GlassBridge.tsx
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -8,8 +9,10 @@ import { ResultScreen } from "../ui/ResultScreen";
 import { lerp, clamp } from "@/utils/math";
 import { useGameStore } from "@/store/gameStore";
 
+// FIXED: Added onComplete prop so the global store knows when the game ends
 interface GameProps {
   onExit?: () => void;
+  onComplete?: (score: number, outcome: "victory" | "eliminated") => void;
 }
 
 // ============================================================
@@ -20,12 +23,13 @@ const WORLD_W = 1280;
 const WORLD_H = 720;
 
 const TOTAL_ROWS = 18;
-const PANEL_W = 180;
+
+const PLAYER_W = 68; 
+const PLAYER_H = 100;
+const PANEL_W = 140; 
 const PANEL_H = 80;
-const PANEL_GAP_X = 24;
+const PANEL_GAP_X = 30;
 const PANEL_GAP_Y = 36;
-const BRIDGE_X_LEFT = WORLD_W / 2 - PANEL_W - PANEL_GAP_X / 2;
-const BRIDGE_X_RIGHT = WORLD_W / 2 + PANEL_GAP_X / 2;
 const ROW_0_Y = WORLD_H * 0.85; 
 
 const JUMP_DURATION = 0.38; 
@@ -37,15 +41,11 @@ const SLOW_MO_RESTORE_DELAY = 0.9;
 const SHAKE_SHATTER = 14;
 const SHAKE_DECAY_RATE = 0.88;
 
-const PLAYER_W = 52;
-const PLAYER_H = 76;
+const SAFE_BLUE: [number, number, number] = [3, 135, 121]; 
+const FRAGILE_BLUE: [number, number, number] = [180, 210, 220]; 
 
-const SAFE_BLUE: [number, number, number] = [3, 135, 121]; // Clinical Teal
-const FRAGILE_BLUE: [number, number, number] = [180, 210, 220]; // Thin, cheap glass
-const VOID_COLOR = "#050810";
 
 const CAMERA_LERP = 5;
-const CAMERA_ROW_OFFSET = 2.5; 
 
 const COUNTDOWN_TOTAL = 120; 
 
@@ -55,7 +55,7 @@ const COUNTDOWN_TOTAL = 120;
 
 interface Panel {
   row: number;
-  col: 0 | 1;
+  col: 0 | 1 | 2; 
   safe: boolean;
   state: "intact" | "cracking" | "shattered" | "gone";
   crackTimer: number; 
@@ -70,12 +70,12 @@ interface Panel {
 
 interface PlayerState {
   row: number; 
-  col: 0 | 1 | null; 
+  col: 0 | 1 | 2 | null; 
   worldY: number; 
   jumpT: number; 
   jumping: boolean;
   targetRow: number;
-  targetCol: 0 | 1;
+  targetCol: 0 | 1 | 2; 
   startY: number;
   facing: -1 | 1;
   status: "alive" | "falling" | "finished";
@@ -176,7 +176,7 @@ class ObjectPool<T extends { active: boolean }> {
 }
 
 // ============================================================
-// 4. SEEDED RANDOM (xorshift32)
+// 4. SEEDED RANDOM
 // ============================================================
 
 function makeRng(seed: number) {
@@ -203,8 +203,10 @@ function rowWorldY(row: number): number {
   return ROW_0_Y - row * (PANEL_H + PANEL_GAP_Y);
 }
 
-function colWorldX(col: 0 | 1): number {
-  return col === 0 ? BRIDGE_X_LEFT : BRIDGE_X_RIGHT;
+function colWorldX(col: 0 | 1 | 2): number {
+  if (col === 0) return WORLD_W / 2 - PANEL_W * 1.5 - PANEL_GAP_X; 
+  if (col === 1) return WORLD_W / 2 - PANEL_W * 0.5;                
+  return WORLD_W / 2 + PANEL_W * 0.5 + PANEL_GAP_X;                 
 }
 
 function rgb(r: number, g: number, b: number, a = 1): string {
@@ -220,10 +222,10 @@ function generateBridge(rows: number, seed: number): Panel[][] {
   const panels: Panel[][] = [];
 
   for (let row = 1; row <= rows; row++) {
-    const safeCol = rng.next() < 0.5 ? 0 : 1;
+    const safeCol = Math.floor(rng.next() * 3) as 0 | 1 | 2;
     const rowPanels: Panel[] = [];
 
-    for (let col = 0 as 0 | 1; col <= 1; col++) {
+    for (let col = 0 as 0 | 1 | 2; col <= 2; col++) {
       const isSafe = col === safeCol;
       const glintBase = rng.next() * Math.PI * 2;
 
@@ -275,38 +277,60 @@ function getCtx2d(c: HTMLCanvasElement | OffscreenCanvas): CanvasRenderingContex
   return c.getContext("2d") as CanvasRenderingContext2D;
 }
 
+// ─── FULL SQUID GAME: Glass Bridge Cavern ───────────────────────────────────
+// Replace the background baking and doll drawing in GlassBridge.tsx
+
 function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
+  // 1. Deep Cavern Abyss
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#02070d"); 
-  grad.addColorStop(0.4, "#030d1a"); 
-  grad.addColorStop(0.8, "#010308"); 
-  grad.addColorStop(1, "#000000");   
+  grad.addColorStop(0, "#0a0a0f");
+  grad.addColorStop(0.5, "#060608");
+  grad.addColorStop(1, "#000000");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  for (let i = 0; i < 4; i++) {
-    const yPos = h * (0.3 + i * 0.25);
-    const bandGrad = ctx.createRadialGradient(w / 2, yPos, 0, w / 2, yPos, w * 0.8);
-    bandGrad.addColorStop(0, `rgba(3, 135, 121, ${0.06 - i * 0.01})`); 
-    bandGrad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = bandGrad;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  ctx.strokeStyle = "rgba(255,255,255,0.02)";
+  // 2. Heavy Industrial Girders & Structures
+  ctx.fillStyle = "#12141a";
+  ctx.strokeStyle = "#1a1e26";
   ctx.lineWidth = 2;
-  for (let x = 0; x < w; x += 120) {
+  
+  for (let i = 0; i < 6; i++) {
+    const x = (w / 6) * i + 50;
+    // Massive vertical pillars
+    ctx.fillRect(x, 0, 40, h);
+    ctx.strokeRect(x, 0, 40, h);
+    
+    // Cross bracing
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + (Math.random() * 40 - 20), h);
+    for (let y = 0; y < h; y += 150) {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 40, y + 150);
+      ctx.moveTo(x + 40, y);
+      ctx.lineTo(x, y + 150);
+    }
     ctx.stroke();
   }
 
+  // 3. Atmospheric Fog / Cinematic Depth Lighting
+  const spotlight = ctx.createRadialGradient(w / 2, h * 0.2, 0, w / 2, h * 0.4, w * 0.9);
+  spotlight.addColorStop(0, "rgba(80, 160, 255, 0.12)");
+  spotlight.addColorStop(0.5, "rgba(50, 100, 180, 0.05)");
+  spotlight.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = spotlight;
+  ctx.fillRect(0, 0, w, h);
+
   return c;
 }
+
+// Update the drawDoll function in GlassBridge.tsx to utilize the realistic renderer
+// NOTE: Copy the exact implementation of `drawDoll` from RedLightGreenLight.tsx patch 3
+// and paste it here, ensuring the `targetY` calculates relative to the fallen player.
+// To save tokens, I invoke the exact signature.
+
+
 
 function bakeCrackStages(w: number, h: number): Array<HTMLCanvasElement | OffscreenCanvas> {
   return [0.25, 0.5, 0.75, 1.0].map((progress) => {
@@ -450,7 +474,8 @@ function updateParticles(gs: GameState, dtSec: number): void {
 function updateCamera(gs: GameState, dtSec: number): void {
   const cam = gs.camera;
   const playerWorldY = gs.player.worldY;
-  cam.targetY = playerWorldY - WORLD_H * 0.55 + CAMERA_ROW_OFFSET * (PANEL_H + PANEL_GAP_Y);
+  
+  cam.targetY = playerWorldY - WORLD_H * 0.65;
 
   if (gs.player.status === "falling") {
     cam.y = cam.targetY;
@@ -477,7 +502,7 @@ function applyShake(ctx: CanvasRenderingContext2D, cam: CameraState): void {
   }
 }
 
-function startJump(gs: GameState, targetCol: 0 | 1): void {
+function startJump(gs: GameState, targetCol: 0 | 1 | 2): void {
   if (gs.player.jumping || gs.player.status !== "alive") return;
   if (gs.phase !== "playing") return;
 
@@ -548,9 +573,11 @@ function updatePlayer(gs: GameState, dtSec: number): void {
       return;
     }
 
-    const panel = gs.panels[p.row - 1]?.[p.col];
+    // FIXED: Safely default to 0 if null, and if the panel doesn't exist, trigger elimination not victory
+    const safeColIndex = p.col !== null ? p.col : 0;
+    const panel = gs.panels[p.row - 1]?.[safeColIndex];
     if (!panel) {
-      triggerVictory(gs);
+      triggerElimination(gs);
       return;
     }
 
@@ -581,7 +608,7 @@ function updatePanels(gs: GameState, dtSec: number): void {
   for (let r = rowMin; r <= rowMax; r++) {
     const row = gs.panels[r];
     if (!row) continue;
-    for (let c = 0; c < 2; c++) {
+    for (let c = 0; c <= 2; c++) {
       const panel = row[c];
       panel.glintTimer += dtSec * panel.glintPhase;
       panel.flashAlpha = Math.max(0, panel.flashAlpha - dtSec * 3);
@@ -631,7 +658,9 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
     gs.ambientDripTimer -= dtSec;
     if (gs.ambientDripTimer <= 0) {
       gs.ambientDripTimer = 0.8 + Math.random() * 0.6;
-      const rx = BRIDGE_X_LEFT + Math.random() * (BRIDGE_X_RIGHT + PANEL_W - BRIDGE_X_LEFT);
+      const leftEdge = colWorldX(0);
+      const rightEdge = colWorldX(2) + PANEL_W;
+      const rx = leftEdge + Math.random() * (rightEdge - leftEdge);
       const ry = rowWorldY(gs.currentRow) - (Math.random() * 200 + 50);
       emitBurst(gs, { x: rx, y: ry, count: 2, r: 60, g: 90, b: 140, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
     }
@@ -656,10 +685,12 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
 
   if (!gs.inputConsumed && !gs.player.jumping && gs.player.status === "alive") {
     if (inputRef.current.left) startJump(gs, 0);
-    else if (inputRef.current.right) startJump(gs, 1);
+    else if (inputRef.current.center) startJump(gs, 1);
+    else if (inputRef.current.right) startJump(gs, 2);
   }
 
   inputRef.current.left = false;
+  inputRef.current.center = false;
   inputRef.current.right = false;
 
   updatePanels(gs, scaled);
@@ -670,6 +701,162 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
 
   if (gs.phase === "falling") updateElimination(gs, dtSec);
   gs.elapsed += dtSec;
+}
+
+// ─── REALISTIC ANIMATRONIC DOLL — RLGL-grade ──────────────────────────────
+function drawDoll(
+  ctx: CanvasRenderingContext2D,
+  dollX: number,
+  dollY: number,
+  scale: number,
+  gs: GameState
+): void {
+  const S = 130 * scale;
+  const t = gs.atmosphericT ?? performance.now() * 0.001;
+
+  // Tracking: head rotates toward the player's current column smoothly
+  const targetCol = gs.player.col ?? gs.player.targetCol ?? 1;
+  const colOffsets = [-0.32, 0, 0.32];
+  const targetTilt = colOffsets[targetCol];
+  // Stateless smoothing using a stored value on gs
+  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  gs.__dollHeadTilt = gs.__dollHeadTilt ?? 0;
+  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  gs.__dollHeadTilt += (targetTilt - gs.__dollHeadTilt) * 0.18;
+  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  const headTilt: number = gs.__dollHeadTilt;
+
+  const isFalling  = gs.phase === "falling";
+  const isHostile  = isFalling || gs.timeLeft < 12;
+
+  // Mechanical micro-tremor when hostile (servo whine visual)
+  const tremor = isHostile ? (Math.sin(t * 36) * 0.4 + Math.sin(t * 17) * 0.6) : 0;
+
+  ctx.save();
+  ctx.translate(dollX + tremor, dollY);
+
+  // ── Long ground shadow ──
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath();
+  ctx.ellipse(0, S * 0.85, S * 0.55, S * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── Dress (gradient) ──
+  const dressGrad = ctx.createLinearGradient(0, -S * 0.2, 0, S * 0.8);
+  dressGrad.addColorStop(0, "#f9a03f");
+  dressGrad.addColorStop(0.55, "#e0651a");
+  dressGrad.addColorStop(1, "#8a1a1f");
+  ctx.fillStyle = dressGrad;
+  ctx.beginPath();
+  ctx.moveTo(-S * 0.42, -S * 0.10);
+  ctx.lineTo(-S * 0.55,  S * 0.82);
+  ctx.lineTo( S * 0.55,  S * 0.82);
+  ctx.lineTo( S * 0.42, -S * 0.10);
+  ctx.closePath();
+  ctx.fill();
+
+  // Yellow shirt
+  ctx.fillStyle = "#fde74c";
+  ctx.fillRect(-S * 0.25, -S * 0.22, S * 0.5, S * 0.32);
+
+  // ── Head group (rotates with tilt) ──
+  ctx.save();
+  ctx.translate(0, -S * 0.38);
+  ctx.rotate(headTilt);
+
+  // Back hair
+  ctx.fillStyle = "#0a0a0a";
+  ctx.beginPath();
+  ctx.arc(0, 0, S * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face sphere with subsurface gradient
+  const faceGrad = ctx.createRadialGradient(-S * 0.05, -S * 0.05, S * 0.04, 0, 0, S * 0.30);
+  faceGrad.addColorStop(0, "#ffe1d4");
+  faceGrad.addColorStop(1, "#d49a82");
+  ctx.fillStyle = faceGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, S * 0.30, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pigtails (orange)
+  ctx.fillStyle = "#c8521a";
+  ctx.beginPath(); ctx.arc(-S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
+
+  // ── Eye sockets ──
+  const eyeY = -S * 0.04;
+  const eyeOffX = S * 0.12;
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.055, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.055, 0, Math.PI * 2); ctx.fill();
+
+  if (isHostile) {
+    // ── GLOWING RED EYES (mechanical, pulsing) ──
+    const pulse = 0.7 + Math.sin(t * 8) * 0.3;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 28 * pulse;
+    ctx.fillStyle   = "#ff3030";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Hot white core
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // Dead matte eyes
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.restore(); // end head
+
+  // ── LASERS INTO THE ABYSS when player falls ──
+  if (isFalling) {
+    // Lasers shoot DOWN through the broken column into the void.
+    // We aim at the player's failed-column world-x relative to the doll.
+    const playerColIdx = gs.player.col ?? gs.player.targetCol ?? 1;
+    // approximate horizontal delta from doll (center) to player column
+    const colDelta = (playerColIdx - 1) * 180 * scale;
+    const abyssY   = 3000; // far down into the pit
+
+    // Outer red glow beam (both eyes converge on the falling target)
+    ctx.strokeStyle = "rgba(255,0,30,0.85)";
+    ctx.lineWidth   = 5 * scale;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 22 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Inner white-hot core
+    ctx.strokeStyle = "rgba(255,220,220,0.95)";
+    ctx.lineWidth   = 1.5 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.stroke();
+
+    // Impact dot at the fall column
+    ctx.fillStyle = "rgba(255,40,40,0.9)";
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 24 * scale;
+    ctx.beginPath();
+    ctx.arc(colDelta, 600, 9 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
 }
 
 function renderPanel(
@@ -834,7 +1021,7 @@ function renderTutorialHint(ctx: CanvasRenderingContext2D, gs: GameState): void 
     ctx.fillStyle = `rgba(180,220,255,${alpha * 0.8})`;
     ctx.font = "14px 'Courier New', monospace";
     ctx.textAlign = "center";
-    ctx.fillText("← LEFT / RIGHT → TO CHOOSE", WORLD_W / 2, WORLD_H - 80);
+    ctx.fillText("← LEFT / ↑ CENTER / RIGHT →", WORLD_W / 2, WORLD_H - 80);
   }
 }
 
@@ -875,27 +1062,34 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
   const startPlatformY = rowWorldY(0) - camY;
   const endPlatformY = rowWorldY(gs.totalRows + 1) - camY;
 
+  drawDoll(ctx, WORLD_W / 2, endPlatformY - 20, 1.3, gs);
+
+  const platformW = 560;
   ctx.fillStyle = "rgba(20,50,100,0.6)";
-  ctx.fillRect(WORLD_W / 2 - 160, startPlatformY, 320, 30);
+  ctx.fillRect(WORLD_W / 2 - platformW / 2, startPlatformY, platformW, 30);
   ctx.strokeStyle = "rgba(80,140,220,0.4)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(WORLD_W / 2 - 160, startPlatformY, 320, 30);
+  ctx.strokeRect(WORLD_W / 2 - platformW / 2, startPlatformY, platformW, 30);
 
   ctx.fillStyle = "rgba(20,80,60,0.6)";
-  ctx.fillRect(WORLD_W / 2 - 160, endPlatformY, 320, 30);
+  ctx.fillRect(WORLD_W / 2 - platformW / 2, endPlatformY, platformW, 30);
   ctx.strokeStyle = "rgba(80,200,140,0.4)";
-  ctx.strokeRect(WORLD_W / 2 - 160, endPlatformY, 320, 30);
+  ctx.strokeRect(WORLD_W / 2 - platformW / 2, endPlatformY, platformW, 30);
 
   ctx.strokeStyle = "rgba(60,90,140,0.25)";
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 16]);
   ctx.beginPath();
-  ctx.moveTo(WORLD_W / 2 - PANEL_W - PANEL_GAP_X * 0.5, endPlatformY);
-  ctx.lineTo(WORLD_W / 2 - PANEL_W - PANEL_GAP_X * 0.5, startPlatformY + 30);
+  ctx.moveTo(colWorldX(0) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(0) + PANEL_W / 2, startPlatformY + 30);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(WORLD_W / 2 + PANEL_W + PANEL_GAP_X * 0.5, endPlatformY);
-  ctx.lineTo(WORLD_W / 2 + PANEL_W + PANEL_GAP_X * 0.5, startPlatformY + 30);
+  ctx.moveTo(colWorldX(1) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(1) + PANEL_W / 2, startPlatformY + 30);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(colWorldX(2) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(2) + PANEL_W / 2, startPlatformY + 30);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -925,6 +1119,7 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
 
 interface TouchState {
   left: boolean;
+  center: boolean;
   right: boolean;
 }
 
@@ -935,7 +1130,7 @@ function createGameState(seed: number): GameState {
     panels: generateBridge(TOTAL_ROWS, seed),
     currentRow: 0, totalRows: TOTAL_ROWS,
     player: {
-      row: 0, col: null, worldY: startY, jumpT: 0, jumping: false, targetRow: 1, targetCol: 0,
+      row: 0, col: null, worldY: startY, jumpT: 0, jumping: false, targetRow: 1, targetCol: 1,
       startY, facing: 1, status: "alive", fallY: 0, fallVy: 0, screenShakeX: 0, screenShakeY: 0, walkBob: 0, walkBobDir: 1,
     },
     camera: { y: startY - WORLD_H * 0.5, targetY: startY - WORLD_H * 0.5, shake: 0, shakeTimer: 0, shakeDecay: SHAKE_DECAY_RATE, zoom: 1, targetZoom: 1 },
@@ -951,27 +1146,31 @@ function createGameState(seed: number): GameState {
 function useGameLoop(callback: (dt: number) => void, active: boolean): React.MutableRefObject<((scale: number) => void) | null> {
   const rafRef = useRef<number>(0);
   const lastRef = useRef<number>(0);
-  const scaleRef = useRef<((s: number) => void) | null>(null);
   const scaleValRef = useRef(1);
 
-  const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+  // Safely initialize ref using a stable function instance evaluated strictly on mount
+  const scaleRef = useRef<((s: number) => void)>((s: number) => { scaleValRef.current = s; });
 
-  scaleRef.current = (s: number) => { scaleValRef.current = s; };
+  const callbackRef = useRef(callback);
+  
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (!active) return;
     function frame(now: number) {
       const raw = Math.min((now - lastRef.current) / 1000, 0.05);
       lastRef.current = now;
-      callbackRef.current(raw);
+      if (callbackRef.current) callbackRef.current(raw * scaleValRef.current);
       rafRef.current = requestAnimationFrame(frame);
     }
     lastRef.current = performance.now();
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
   }, [active]);
-  return scaleRef;
+  
+  return scaleRef as unknown as React.MutableRefObject<((scale: number) => void) | null>;
 }
 
 interface MobileTouchControlsProps {
@@ -981,30 +1180,42 @@ interface MobileTouchControlsProps {
 
 const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inputRef }) => {
   const leftRef = useRef<HTMLButtonElement>(null);
+  const centerRef = useRef<HTMLButtonElement>(null);
   const rightRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const left = leftRef.current;
+    const center = centerRef.current;
     const right = rightRef.current;
-    if (!left || !right) return;
+    if (!left || !center || !right) return;
+    
     const onLeftDown = (e: Event) => { e.preventDefault(); inputRef.current.left = true; };
+    const onCenterDown = (e: Event) => { e.preventDefault(); inputRef.current.center = true; };
     const onRightDown = (e: Event) => { e.preventDefault(); inputRef.current.right = true; };
-    // Release handlers: without these, a touch on the intro screen (when the
-    // game loop is not ticking to consume/reset the flag) leaves left/right
-    // permanently latched true, causing an unintended jump on game start.
+    
     const onLeftUp = (e: Event) => { e.preventDefault(); inputRef.current.left = false; };
+    const onCenterUp = (e: Event) => { e.preventDefault(); inputRef.current.center = false; };
     const onRightUp = (e: Event) => { e.preventDefault(); inputRef.current.right = false; };
+    
     left.addEventListener("touchstart", onLeftDown, { passive: false });
+    center.addEventListener("touchstart", onCenterDown, { passive: false });
     right.addEventListener("touchstart", onRightDown, { passive: false });
+    
     left.addEventListener("touchend", onLeftUp, { passive: false });
     left.addEventListener("touchcancel", onLeftUp, { passive: false });
+    center.addEventListener("touchend", onCenterUp, { passive: false });
+    center.addEventListener("touchcancel", onCenterUp, { passive: false });
     right.addEventListener("touchend", onRightUp, { passive: false });
     right.addEventListener("touchcancel", onRightUp, { passive: false });
+    
     return () => {
       left.removeEventListener("touchstart", onLeftDown);
+      center.removeEventListener("touchstart", onCenterDown);
       right.removeEventListener("touchstart", onRightDown);
       left.removeEventListener("touchend", onLeftUp);
       left.removeEventListener("touchcancel", onLeftUp);
+      center.removeEventListener("touchend", onCenterUp);
+      center.removeEventListener("touchcancel", onCenterUp);
       right.removeEventListener("touchend", onRightUp);
       right.removeEventListener("touchcancel", onRightUp);
     };
@@ -1012,17 +1223,18 @@ const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inpu
 
   if (!visible) return null;
   const btnBase: React.CSSProperties = {
-    position: "absolute", bottom: 32, width: 100, height: 80, borderRadius: 12,
+    position: "absolute", bottom: 32, width: 80, height: 80, borderRadius: 12,
     background: "rgba(20,60,120,0.55)", border: "1.5px solid rgba(80,160,255,0.4)",
-    color: "rgba(160,210,255,0.9)", fontSize: 28, fontFamily: "monospace", display: "flex",
+    color: "rgba(160,210,255,0.9)", fontSize: 24, fontFamily: "monospace", display: "flex",
     alignItems: "center", justifyContent: "center", cursor: "pointer",
     userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(4px)", zIndex: 100
   };
 
   return (
     <>
-      <button ref={leftRef} style={{ ...btnBase, left: 24 }} aria-label="Left panel">←</button>
-      <button ref={rightRef} style={{ ...btnBase, right: 24 }} aria-label="Right panel">→</button>
+      <button ref={leftRef} style={{ ...btnBase, left: 16 }} aria-label="Left panel">←</button>
+      <button ref={centerRef} style={{ ...btnBase, left: "50%", transform: "translateX(-50%)" }} aria-label="Center panel">↑</button>
+      <button ref={rightRef} style={{ ...btnBase, right: 16 }} aria-label="Right panel">→</button>
     </>
   );
 };
@@ -1036,7 +1248,7 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
       ONE WRONG STEP. ONE CHANCE.
     </div>
     <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(120,180,240,0.6)", fontSize: 13, marginBottom: 40, textAlign: "center", lineHeight: 2, maxWidth: 320 }}>
-      {`← / → ARROW KEYS  or  TOUCH BUTTONS\n\nChoose left or right panel.\nOne is tempered glass. One is not.`}
+      {`← / ↑ / → ARROW KEYS or TOUCH BUTTONS\n\nChoose your path across the 3 lanes.\nOnly one is tempered glass.`}
     </div>
     <button onClick={onStart} style={{ fontFamily: "'Courier New', monospace", fontSize: 16, letterSpacing: "0.25em", color: "#0a1628", background: "rgba(80,180,255,0.9)", border: "none", padding: "16px 48px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
       Begin
@@ -1048,16 +1260,15 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
 // 26. MAIN REACT COMPONENT
 // ============================================================
 
-const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
+const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gsRef = useRef<GameState | null>(null);
   const assetsRef = useRef<BakedAssets | null>(null);
-  const inputRef = useRef<TouchState>({ left: false, right: false });
+  const inputRef = useRef<TouchState>({ left: false, center: false, right: false });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
   const [finalRow, setFinalRow] = useState(0);
-  const [finalElapsed, setFinalElapsed] = useState(0);
   
   const [finalScore, setFinalScore] = useState(0);
   const addScore = useGameStore((s) => s.addScore);
@@ -1070,7 +1281,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
   useEffect(() => {
     return () => {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       particlePool = null;
     };
   }, []);
@@ -1086,7 +1296,9 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     sourceGame: "glass-bridge",
     progressMarker: finalRow,
     progressTotal: TOTAL_ROWS,
+    outcome: uiPhase === "victory" ? "victory" : "eliminated"
   });
+  
 
   const hudSync = useHUDSync({ flushInterval: 100 });
   const isTouchDevice =
@@ -1099,30 +1311,45 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
+
     const resize = () => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      const scale = Math.min(cw / WORLD_W, ch / WORLD_H);
-      canvas.style.width = `${WORLD_W * scale}px`;
-      canvas.style.height = `${WORLD_H * scale}px`;
-    };
 
-    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
-    canvas.width = WORLD_W * dpr;
-    canvas.height = WORLD_H * dpr;
-    const ctx = canvas.getContext("2d");
-    if (ctx) ctx.scale(dpr, dpr);
+      // Backing store fills the container exactly (no letterboxing).
+      canvas.width  = Math.round(cw * dpr);
+      canvas.height = Math.round(ch * dpr);
+      canvas.style.width  = cw + "px";
+      canvas.style.height = ch + "px";
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Scale the world to COVER the viewport (clip overflow instead of bars)
+      const sx = (cw * dpr) / WORLD_W;
+      const sy = (ch * dpr) / WORLD_H;
+      const s  = Math.max(sx, sy);
+      ctx.setTransform(s, 0, 0, s, ((cw * dpr) - WORLD_W * s) / 2, ((ch * dpr) - WORLD_H * s) / 2);
+    };
 
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
-    return () => ro.disconnect();
+    window.addEventListener("resize", resize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
         if (!e.repeat) inputRef.current.left = true;
+      }
+      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
+        if (!e.repeat) inputRef.current.center = true;
       }
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
         if (!e.repeat) inputRef.current.right = true;
@@ -1165,10 +1392,10 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
       for (const ev of gs.audioEvents) {
         switch (ev) {
           case "shatter":
-            sm.play("glass_shatter", 0);
+            sm.play("shatter", 0);
             break;
           case "victory":
-            sm.play("glass_victory", 0);
+            sm.play("victory", 0);
             break;
         }
       }
@@ -1187,33 +1414,37 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     
     hudSync.tick(performance.now());   
 
+    // FIXED: Passed onComplete to globally sync the gameover outcome, preventing the ResultScreen from defaulting to the previous game's victory state
     if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
       hudSync.write({ health: 0, lives: 0 });
       hudSync.forceFlush();
       setFinalRow(gs.currentRow);
+      const score = gs.currentRow * 100;
       if (!scoreRecorded.current) {
-          const score = gs.currentRow * 100;
           addScore(score);
           setFinalScore(score);
           scoreRecorded.current = true;
+          if (onComplete) onComplete(score, "eliminated");
       }
       setUiPhase("gameover");
     }
+
+    // FIXED: Passed onComplete to globally sync the victory outcome
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
-      setFinalElapsed(gs.elapsed);
+      const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
+      const score = (TOTAL_ROWS * 100) + timeBonus;
       if (!scoreRecorded.current) {
-          const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
-          const score = (TOTAL_ROWS * 100) + timeBonus;
           addScore(score);
           setFinalScore(score);
           scoreRecorded.current = true;
+          if (onComplete) onComplete(score, "victory");
       }
       setUiPhase("victory");
     }
 
     const quality: "high" | "low" = "high";
     renderFrame(ctx, gs, assets, quality);
-  }, [hudSync, addScore]);
+  }, [hudSync, addScore, onComplete]);
 
   useGameLoop(tick, uiPhase === "playing");
 
@@ -1225,7 +1456,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
         width: "100%",
         height: "100%",
         minHeight: 400,
-        background: VOID_COLOR,
+        background: "radial-gradient(ellipse at bottom, #040308 0%, #000000 100%)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1237,10 +1468,11 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
         ref={canvasRef}
         style={{
           display: "block",
-          imageRendering: "pixelated",
-          width: "100%", 
-          height: "100%", 
-          objectFit: "contain" 
+          position: "absolute",
+          inset: 0,
+          width:  "100%",
+          height: "100%",
+          background: "#000",
         }}
       />
 
@@ -1261,7 +1493,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
       {uiPhase === "intro" && <IntroScreen onStart={startGame} />}
 
-      {/* Unified ResultScreen Implementation */}
       {(uiPhase === "gameover" || uiPhase === "victory") && (
         <ResultScreen 
           outcome={uiPhase === "victory" ? "victory" : "eliminated"} 

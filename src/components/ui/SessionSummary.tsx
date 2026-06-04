@@ -36,7 +36,8 @@ export default function SessionSummary({
 }: SessionSummaryProps) {
   const sessionHistory = useGameStore((s) => s.sessionHistory);
   const sessionId      = useGameStore((s) => s.sessionId);
-  const { survived, total } = useGameStore(selectSessionStats);
+  const survived = useGameStore((s) => selectSessionStats(s).survived);
+const total    = useGameStore((s) => selectSessionStats(s).total);
 
   const [nameChars, setNameChars] = useState<string[]>(["A", "A", "A"]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -45,6 +46,23 @@ export default function SessionSummary({
 
   const isWin = survived === 3;
   const accentColor = isWin ? "#FFD700" : "#FF0066";
+
+  const handleSave = useCallback(() => {
+    if (saved || !sessionId) return;
+    const name  = sanitizeName(nameChars.join(""));
+    const best  = sessionHistory.reduce((mx: number, e: SessionEntry) => Math.max(mx, e.score), 0);
+    const board = addLeaderboardEntry({
+      name,
+      totalScore:     total,
+      gamesSurvived:  survived,
+      bestSingleGame: best,
+      date:           new Date().toISOString(),
+      sessionId,
+    } as LeaderboardEntry);
+    const idx = board.findIndex((entry: LeaderboardEntry) => entry.sessionId === sessionId);
+    setRank(idx === -1 ? null : idx + 1);
+    setSaved(true);
+  }, [saved, sessionId, nameChars, sessionHistory, total, survived]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -81,24 +99,7 @@ export default function SessionSummary({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIdx, saved, nameChars]);
-
-  const handleSave = useCallback(() => {
-    if (saved || !sessionId) return;
-    const name  = sanitizeName(nameChars.join(""));
-    const best  = sessionHistory.reduce((mx: number, e: SessionEntry) => Math.max(mx, e.score), 0);
-    const board = addLeaderboardEntry({
-      name,
-      totalScore:     total,
-      gamesSurvived:  survived,
-      bestSingleGame: best,
-      date:           new Date().toISOString(),
-      sessionId,
-    } as LeaderboardEntry);
-    const idx = board.findIndex((entry: LeaderboardEntry) => entry.sessionId === sessionId);
-    setRank(idx === -1 ? null : idx + 1);
-    setSaved(true);
-  }, [saved, sessionId, nameChars, sessionHistory, total, survived]);
+  }, [activeIdx, saved, nameChars, handleSave]);
 
   const cycleChar = useCallback((idx: number, dir: 1 | -1) => {
     setNameChars((prev) => {
@@ -168,12 +169,12 @@ export default function SessionSummary({
               <div style={styles.nameHint}>↑ ↓ to change · → to advance · ENTER to save</div>
               <div style={styles.nameRow}>
                 {nameChars.map((ch, i) => (
-                  <button key={i} onClick={() => setActiveIdx(i)} style={{ ...styles.nameChar, ...(i === activeIdx ? styles.nameCharActive : {}) }}>
-                    <button onClick={(e) => { e.stopPropagation(); cycleChar(i, 1); }} style={styles.charArrow}>▲</button>
-                    <span style={{ color: i === activeIdx ? accentColor : "#fff" }}>{ch}</span>
-                    <button onClick={(e) => { e.stopPropagation(); cycleChar(i, -1); }} style={styles.charArrow}>▼</button>
-                  </button>
-                ))}
+  <div key={i} onClick={() => setActiveIdx(i)} style={{ ...styles.nameChar, ...(i === activeIdx ? styles.nameCharActive : {}) }}>
+    <button onClick={(e) => { e.stopPropagation(); cycleChar(i, 1); }} style={styles.charArrow}>▲</button>
+    <span style={{ color: i === activeIdx ? accentColor : "#fff" }}>{ch}</span>
+    <button onClick={(e) => { e.stopPropagation(); cycleChar(i, -1); }} style={styles.charArrow}>▼</button>
+  </div>
+))}
               </div>
               <button onClick={handleSave} style={{ ...styles.saveBtn, background: accentColor }}>SAVE SCORE</button>
             </motion.div>
@@ -215,8 +216,8 @@ const styles: Record<string, React.CSSProperties> = {
   nameLabel: { fontSize: 9, letterSpacing: "0.32em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" },
   nameHint: { fontSize: 9, letterSpacing: "0.12em", color: "rgba(255,255,255,0.22)", textTransform: "uppercase" },
   nameRow: { display: "flex", gap: 12, marginTop: 4 },
-  nameChar: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, letterSpacing: "0.1em", lineHeight: 1, width: 64, height: 90, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 2, cursor: "pointer", padding: "4px 0", transition: "border-color 0.15s", justifyContent: "space-between" },
-  nameCharActive: { borderColor: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.07)" },
+  nameChar: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, letterSpacing: "0.1em", lineHeight: 1, width: 64, height: 90, border: "2px solid rgba(255,255,255,0.2)", borderRadius: 2, cursor: "pointer", padding: "4px 0", transition: "border-color 0.15s", justifyContent: "space-between" },
+  nameCharActive: {border: "2px solid var(--color-accent)", boxShadow: "0 0 12px var(--color-accent)", },
   charArrow: { fontSize: 10, color: "rgba(255,255,255,0.3)", background: "transparent", border: "none", cursor: "pointer", padding: "2px 16px", lineHeight: 1, fontFamily: "monospace" },
   saveBtn: { width: "100%", fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.2em", color: "#000", border: "none", padding: "12px 0", borderRadius: 2, cursor: "pointer", marginTop: 4, textTransform: "uppercase" },
   savedBlock: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "24px", background: "rgba(13,15,26,0.8)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 3 },

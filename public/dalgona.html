@@ -24,65 +24,90 @@
   --glow-amber:     rgba(200,120,20,0.35);
   --danger:         #ff4444;
   --success-color:  #ffd93d;
-  --pink:           #FF0066;  /* FIX 6.6: product design-system pink */
-  --pink-shadow:    #b20047;  /* FIX 6.6: updated shadow */
-  --teal:           #00FFB2;  /* FIX 6.6: product design-system teal */
-  --teal-shadow:    #00a87a;  /* FIX 6.6: updated shadow */
+  --pink:           #FF0066;
+  --pink-shadow:    #b20047;
+  --teal:           #00FFB2;
+  --teal-shadow:    #00a87a;
   --font-display:   'Barlow Condensed', 'Impact', sans-serif;
   --font-mono:      'DM Mono', 'Courier New', monospace;
   --ease-snap:      cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-/* ── Foundation ─────────────────────────────────────────────── */
 html, body {
   width: 100%;
   height: 100%;
-  height: 100dvh;
   background: var(--bg-deep);
   overflow: hidden;
   font-family: var(--font-mono);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
-
-/* ── Canvas root ─────────────────────────────────────────────── */
 #root {
-  width: 100%; height: 100%; height: 100dvh;
-  display: flex; align-items: center; justify-content: center;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 55%,
-      rgba(120,55,8,0.18) 0%,
-      rgba(60,25,3,0.10) 45%,
-      transparent 75%),
-    var(--bg-deep);
+  width: 100vw; height: 100dvh;
+  position: relative;
+  background: var(--bg-deep);
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-canvas { display: block; touch-action: none; cursor: crosshair; }
-
-/* ── Film grain overlay ──────────────────────────────────────── */
-#grain {
-  position: fixed; inset: 0; pointer-events: none; z-index: 6;
-  opacity: 0.028;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  mix-blend-mode: overlay;
-}
-
-/* ── UI overlay ───────────────────────────────────────────────── */
-#ui-overlay {
-  position: fixed; inset: 0; pointer-events: none; z-index: 10;
-  display: flex; flex-direction: column;
+/* ── Cinematic Countdown Overlay ─────────────────────── */
+#cinematic-countdown {
+  position: fixed; inset: 0; z-index: 50;
+  display: none;
   align-items: center; justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,
+    rgba(0,0,0,0.0) 0%,
+    rgba(0,0,0,0.65) 70%,
+    rgba(0,0,0,0.92) 100%);
+}
+#cinematic-countdown.show { display: flex; }
+#cinematic-countdown .num {
+  font-family: var(--font-display);
+  font-size: clamp(180px, 38vw, 480px);
+  font-weight: 900;
+  color: #fff;
+  line-height: 0.85;
+  text-shadow:
+    0 0 80px rgba(255,80,0,0.9),
+    0 0 160px rgba(255,30,30,0.55),
+    0 8px 0 rgba(0,0,0,0.6);
+  animation: countPulse 1s var(--ease-snap) both;
+  filter: drop-shadow(0 6px 24px rgba(255,80,0,0.5));
+}
+#cinematic-countdown .num.go {
+  color: var(--teal);
+  text-shadow:
+    0 0 80px rgba(0,255,178,0.95),
+    0 0 200px rgba(0,255,178,0.6),
+    0 8px 0 rgba(0,0,0,0.5);
+}
+@keyframes countPulse {
+  0%   { transform: scale(2.6); opacity: 0; letter-spacing: 0.6em; }
+  35%  { transform: scale(1.0); opacity: 1; letter-spacing: 0; }
+  85%  { transform: scale(1.0); opacity: 1; }
+  100% { transform: scale(0.55); opacity: 0; }
 }
 
-/* ── Phase screens ────────────────────────────────────────────── */
+/* ── Screen UI ───────────────────────────────────────────────── */
 .phase-screen {
   display: none;
   flex-direction: column;
   align-items: center;
   pointer-events: auto;
   width: clamp(280px, 88vw, 460px);
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
 }
 
 .phase-screen.active {
@@ -91,11 +116,10 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
 }
 
 @keyframes screenIn {
-  from { opacity: 0; transform: scale(0.92) translateY(16px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0); }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92) translateY(16px); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1)    translateY(0); }
 }
 
-/* ── Screen card ─────────────────────────────────────────────── */
 .screen-card {
   width: 100%;
   display: flex;
@@ -114,7 +138,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   overflow: hidden;
 }
 
-/* Ambient glow behind card */
 .screen-card::before {
   content: '';
   position: absolute;
@@ -124,7 +147,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   pointer-events: none;
 }
 
-/* Top amber shimmer line */
 .screen-card::after {
   content: '';
   position: absolute;
@@ -134,7 +156,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
     rgba(245,200,66,0.55) 60%, transparent 100%);
 }
 
-/* Corner tick marks */
 .corner-tick {
   position: absolute;
   width: 10px; height: 10px;
@@ -146,7 +167,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
 .corner-tick.bl { bottom: 6px; left: 6px;  border-width: 0 0 1px 1px; }
 .corner-tick.br { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
 
-/* ── Episode badge ──────────────────────────────────────────── */
 .episode-badge {
   font-family: var(--font-mono);
   font-size: clamp(8px, 1.4vw, 10px);
@@ -160,13 +180,10 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   z-index: 1;
 }
 
-/* ── Shape badge ──────────────────────────────────────────────── */
 .shape-badge {
   font-size: clamp(52px, 13vw, 100px);
   color: var(--amber);
-  text-shadow:
-    0 0 30px rgba(245,200,66,0.55),
-    0 0 70px rgba(220,140,20,0.25);
+  text-shadow: 0 0 30px rgba(245,200,66,0.55), 0 0 70px rgba(220,140,20,0.25);
   line-height: 1;
   filter: drop-shadow(0 3px 10px rgba(160,80,10,0.5));
   position: relative;
@@ -179,7 +196,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   50%     { text-shadow: 0 0 42px rgba(245,200,66,0.72), 0 0 90px rgba(220,140,20,0.35); }
 }
 
-/* ── Title ────────────────────────────────────────────────────── */
 .title-big {
   font-family: var(--font-display);
   font-size: clamp(36px, 9vw, 76px);
@@ -188,23 +204,18 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   text-transform: uppercase;
   line-height: 1;
   color: var(--amber);
-  text-shadow:
-    0 2px 0 var(--caramel),
-    0 0 40px rgba(245,200,66,0.22);
+  text-shadow: 0 2px 0 var(--caramel), 0 0 40px rgba(245,200,66,0.22);
   position: relative; z-index: 1;
 }
 
-/* ── Divider ──────────────────────────────────────────────────── */
 .divider {
   width: 55%;
   height: 1px;
-  background: linear-gradient(90deg,
-    transparent 0%, rgba(200,130,30,0.35) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(200,130,30,0.35) 50%, transparent 100%);
   margin: clamp(2px, 0.8vh, 6px) 0;
   position: relative; z-index: 1;
 }
 
-/* ── Subtitle ─────────────────────────────────────────────────── */
 .subtitle {
   font-family: var(--font-mono);
   font-size: clamp(9px, 1.7vw, 12px);
@@ -217,23 +228,18 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   position: relative; z-index: 1;
 }
 
-/* ── Countdown ────────────────────────────────────────────────── */
 .countdown-num {
   font-family: var(--font-display);
   font-size: clamp(68px, 20vw, 148px);
   font-weight: 900;
   color: #fff;
-  text-shadow:
-    0 0 50px rgba(255,255,255,0.45),
-    0 4px 0 rgba(0,0,0,0.5);
+  text-shadow: 0 0 50px rgba(255,255,255,0.45), 0 4px 0 rgba(0,0,0,0.5);
   line-height: 1;
   min-width: 2ch;
   text-align: center;
   position: relative; z-index: 1;
-  transition: transform 0.1s;
 }
 
-/* ── Buttons ──────────────────────────────────────────────────── */
 .btn-row {
   display: flex;
   gap: clamp(8px, 2vw, 16px);
@@ -255,12 +261,10 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   transition: filter 0.12s, transform 0.1s, box-shadow 0.1s;
 }
 
-/* Gloss sheen */
 .btn::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 45%;
+  top: 0; left: 0; right: 0; height: 45%;
   background: rgba(255,255,255,0.13);
   pointer-events: none;
 }
@@ -273,16 +277,13 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   color: #fff;
   box-shadow: 0 4px 0 var(--teal-shadow), 0 6px 22px rgba(3,122,118,0.35);
 }
-.btn-green:active { box-shadow: 0 1px 0 var(--teal-shadow), 0 2px 8px rgba(3,122,118,0.2); }
 
 .btn-pink {
   background: var(--pink);
   color: #fff;
   box-shadow: 0 4px 0 var(--pink-shadow), 0 6px 22px rgba(237,27,118,0.35);
 }
-.btn-pink:active { box-shadow: 0 1px 0 var(--pink-shadow), 0 2px 8px rgba(237,27,118,0.2); }
 
-/* ── Result title ─────────────────────────────────────────────── */
 .result-title {
   font-family: var(--font-display);
   font-size: clamp(44px, 11vw, 92px);
@@ -304,8 +305,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   position: relative; z-index: 1;
 }
 
-/* ── HUD bar ──────────────────────────────────────────────────── */
-/* FIX 6.6 — Teal accent connects Dalgona to the product design system */
 .hud-bar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -313,22 +312,15 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding:
-    10px
-    max(clamp(14px, 3vw, 28px), env(safe-area-inset-right, 0px))
-    calc(10px + env(safe-area-inset-bottom, 0px))
-    max(clamp(14px, 3vw, 28px), env(safe-area-inset-left, 0px));
-  background: linear-gradient(180deg,
-    rgba(8,4,0,0) 0%,
-    rgba(8,4,0,0.82) 40%,
-    rgba(6,3,0,0.92) 100%);
+  padding: 10px max(clamp(14px, 3vw, 28px), env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(clamp(14px, 3vw, 28px), env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg, rgba(8,4,0,0) 0%, rgba(8,4,0,0.82) 40%, rgba(6,3,0,0.92) 100%);
   border-top: 1px solid rgba(200,130,30,0.10);
   pointer-events: none;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  z-index: 40;
 }
 
-/* FIX 6.6: hud-item with teal border accent */
 .hud-item {
   border: 1px solid rgba(0,255,178,0.25);
   border-radius: 3px;
@@ -346,18 +338,15 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   text-transform: uppercase;
 }
 
-/* FIX 6.6: HUD value digits in product teal */
 .hud-value {
   color: #00FFB2 !important;
   font-family: var(--font-display);
   font-size: clamp(14px, 2.8vw, 19px);
   font-weight: 700;
-  color: rgba(255,248,220,0.95);
   letter-spacing: 0.04em;
   line-height: 1;
 }
 
-/* ── Integrity track ──────────────────────────────────────────── */
 .progress-track {
   width: clamp(90px, 16vw, 150px);
   height: 5px;
@@ -375,7 +364,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   box-shadow: 0 0 7px rgba(245,200,66,0.45);
 }
 
-/* ── Warning text ─────────────────────────────────────────────── */
 .integrity-warning {
   position: fixed;
   bottom: 22%;
@@ -391,9 +379,9 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   opacity: 0;
   transition: opacity 0.28s;
   text-transform: uppercase;
+  z-index: 40;
 }
 
-/* ── Needle guide ─────────────────────────────────────────────── */
 .needle-guide {
   position: fixed;
   top: 50%;
@@ -406,6 +394,7 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.5s;
+  z-index: 40;
 }
 
 .guide-line {
@@ -417,19 +406,17 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   font-weight: 300;
 }
 
-/* ── Vignette ─────────────────────────────────────────────────── */
 #vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 5;
   background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0,0,0,0) 100%);
   transition: background 0.3s;
 }
 
-/* ── Back button ──────────────────────────────────────────────── */
 #back-btn {
   position: fixed;
   top: max(12px, env(safe-area-inset-top, 12px));
   left: max(12px, env(safe-area-inset-left, 12px));
-  z-index: 20;
+  z-index: 110;
   font-family: var(--font-display);
   font-size: clamp(10px, 1.8vw, 12px);
   font-weight: 900;
@@ -457,8 +444,8 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
 <div id="root"><canvas id="c"></canvas></div>
 <div id="vignette"></div>
 <div id="grain"></div>
+<div id="cinematic-countdown"><div class="num" id="cinematic-num">3</div></div>
 
-<!-- INTRO ─────────────────────────────────────────────────────── -->
 <div id="screen-intro" class="phase-screen">
   <div class="screen-card">
     <span class="corner-tick tl"></span>
@@ -477,7 +464,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   </div>
 </div>
 
-<!-- SUCCESS ─────────────────────────────────────────────────────── -->
 <div id="screen-success" class="phase-screen">
   <div class="screen-card">
     <span class="corner-tick tl"></span>
@@ -494,7 +480,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   </div>
 </div>
 
-<!-- ELIMINATED ──────────────────────────────────────────────────── -->
 <div id="screen-eliminated" class="phase-screen">
   <div class="screen-card">
     <span class="corner-tick tl"></span>
@@ -511,7 +496,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
   </div>
 </div>
 
-<!-- HUD (playing) ───────────────────────────────────────────────── -->
 <div class="hud-bar" id="hud" style="display:none;">
   <div class="hud-item">
     <div class="hud-label">Integrity</div>
@@ -542,8 +526,6 @@ canvas { display: block; touch-action: none; cursor: crosshair; }
 <script>
 // ═══════════════════════════════════════════════════════
 // DALGONA CANDY — CINEMATIC PHYSICS SYSTEM
-// Visual redesign: enhanced rendering only. All gameplay
-// logic, physics, and Zustand integration preserved.
 // ═══════════════════════════════════════════════════════
 
 const canvas = document.getElementById('c');
@@ -552,19 +534,18 @@ const ctx = canvas.getContext('2d');
 // ── World dimensions ──────────────────────────────────
 const WORLD_W = 420;
 const WORLD_H = 780;
-// FIX 6.4 — Increase candy to ~70% of canvas height (780*0.7 ≈ 546 → use 380 for radius feel)
 const CANDY_W = 380;
 const CANDY_H = 380;
 const CANDY_X = (WORLD_W - CANDY_W) / 2;
 const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 20;
 
-// ── Physics constants ─────────────────────────────────
-const BASE_STRESS = 0.00055;
-const INSTABILITY_MULT = 0.008;
-const EDGE_TO_INTEGRITY = 0.30;
-const FRACTURE_THRESHOLD = 0.52;
-const CARVE_RADIUS = 16;
-const ON_EDGE_TOL = 26;
+// ── Physics constants (REBALANCED — HARDER) ──────────
+const BASE_STRESS = 0.00120;
+const INSTABILITY_MULT = 0.018;
+const EDGE_TO_INTEGRITY = 0.48;
+const FRACTURE_THRESHOLD = 0.40;
+const CARVE_RADIUS = 14;
+const ON_EDGE_TOL = 22;
 const COMPLETION_WIN = 0.95;
 const SCRAPE_AUDIO_MS = 90;
 
@@ -585,20 +566,12 @@ let structuralStrength = new Float32Array(GRID * GRID).fill(1);
 let carvedCells = new Set();
 
 function cellIdx(gx, gy) { return gy * GRID + gx; }
-function worldToGrid(wx, wy) {
-  const gx = Math.floor((wx / cssScale - CANDY_X) / CELL);
-  const gy = Math.floor((wy / cssScale - CANDY_Y) / CELL);
-  return {
-    gx: Math.max(0, Math.min(GRID - 1, gx)),
-    gy: Math.max(0, Math.min(GRID - 1, gy))
-  };
-}
+
 let shapeId = 'triangle';
 let scale = 1;
-let cssScale = 1;
 
 let needleDown = false;
-let needleX = 0, needleY = 0;
+let needleX = 0, needleY = 0; 
 let needlePrevX = 0, needlePrevY = 0;
 let needleVel = 0;
 let lastScrapeAudio = 0;
@@ -621,7 +594,6 @@ let crackOffscreen = null;
 let frame = 0;
 let rafId = null;
 
-// Ambient dust moats for atmosphere
 let atmosphericDust = [];
 for (let i = 0; i < 40; i++) {
   atmosphericDust.push({
@@ -705,7 +677,6 @@ function playSnap() {
   } catch(e){}
 }
 
-// ── Shape definitions ─────────────────────────────────
 const SHAPES = {
   triangle: () => [
     {nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}
@@ -740,7 +711,6 @@ const SHAPES = {
 const SHAPE_ICONS = { triangle:'▲', circle:'●', star:'★', umbrella:'☂' };
 const SHAPE_NAMES = { triangle:'TRIANGLE', circle:'CIRCLE', star:'STAR', umbrella:'UMBRELLA' };
 
-// ── Geometry helpers ──────────────────────────────────
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
 function lerp(a,b,t){return a+(b-a)*clamp(t,0,1);}
 function dist(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
@@ -764,15 +734,6 @@ function distToSegment(p, a, b){
   return dist(p,{x:a.x+t*dx,y:a.y+t*dy});
 }
 
-function distToOutline(p, path){
-  let minD=Infinity;
-  for(let i=0;i<path.length;i++){
-    minD=Math.min(minD, distToSegment(p, path[i], path[(i+1)%path.length]));
-  }
-  return minD;
-}
-
-// ── Stability ─────────────────────────────────────────
 function pushStab(mag){
   stabBuf[stabHead]=mag;
   stabHead=(stabHead+1)%STAB_BUF_SIZE;
@@ -792,18 +753,24 @@ function computeStability(){
   stability = 1/(1+(varSum/n)/120);
 }
 
-// ── Canvas sizing ─────────────────────────────────────
+// ── Canvas sizing — FULLSCREEN, NO BLACK BARS ─────────
 function resize(){
-  const vw=window.innerWidth, vh=window.innerHeight;
-  const fitScale=Math.min(vw/WORLD_W, vh/WORLD_H);
-  cssScale=fitScale;
-  canvas.style.width=`${WORLD_W*fitScale}px`;
-  canvas.style.height=`${WORLD_H*fitScale}px`;
-  const dpr=Math.min(window.devicePixelRatio||1,2);
-  scale=fitScale*dpr;
-  canvas.width=Math.round(WORLD_W*scale);
-  canvas.height=Math.round(WORLD_H*scale);
-  if(shapeId) shapePath=buildShapePath(shapeId);
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  const fitScale = Math.max(vw / WORLD_W, vh / WORLD_H);
+  scale = fitScale * dpr;
+
+  canvas.style.width  = vw + 'px';
+  canvas.style.height = vh + 'px';
+  canvas.width  = Math.round(vw * dpr);
+  canvas.height = Math.round(vh * dpr);
+
+  window.__dalgonaOffsetX = (canvas.width  - WORLD_W * scale) / 2;
+  window.__dalgonaOffsetY = (canvas.height - WORLD_H * scale) / 2;
+
+  if (shapeId) shapePath = buildShapePath(shapeId);
   rebuildOffscreens();
 }
 
@@ -819,20 +786,17 @@ function rebuildOffscreens(){
   crackOffscreen.height = canvas.height;
 }
 
-// ── ENHANCED: Draw candy base ─────────────────────────
 function drawCandyBase(c2d, W, H){
-  // Layer 1: Rich multi-stop caramel gradient
   const grad = c2d.createLinearGradient(W*0.08, H*0.02, W*0.92, H*0.98);
-  grad.addColorStop(0,    '#f0c040');   // top-left warm highlight
-  grad.addColorStop(0.15, '#e8a428');   // main amber
-  grad.addColorStop(0.38, '#d08418');   // deep amber
-  grad.addColorStop(0.62, '#b86414');   // caramel core
-  grad.addColorStop(0.82, '#a05210');   // burnt caramel
-  grad.addColorStop(1,    '#804008');   // dark edge
+  grad.addColorStop(0,    '#f0c040');   
+  grad.addColorStop(0.15, '#e8a428');   
+  grad.addColorStop(0.38, '#d08418');   
+  grad.addColorStop(0.62, '#b86414');   
+  grad.addColorStop(0.82, '#a05210');   
+  grad.addColorStop(1,    '#804008');   
   c2d.fillStyle = grad;
   c2d.fillRect(0, 0, W, H);
 
-  // Layer 2: Specular oval (top-left quadrant)
   const spec = c2d.createRadialGradient(W*0.3, H*0.22, 0, W*0.3, H*0.25, W*0.42);
   spec.addColorStop(0,   'rgba(255,252,200,0.38)');
   spec.addColorStop(0.35,'rgba(255,245,170,0.18)');
@@ -841,7 +805,6 @@ function drawCandyBase(c2d, W, H){
   c2d.fillStyle = spec;
   c2d.fillRect(0, 0, W, H);
 
-  // Layer 3: Secondary warm glow (bottom-right)
   const warmGlow = c2d.createRadialGradient(W*0.74, H*0.76, 0, W*0.74, H*0.76, W*0.38);
   warmGlow.addColorStop(0,   'rgba(255,190,60,0.14)');
   warmGlow.addColorStop(0.5, 'rgba(255,160,30,0.07)');
@@ -849,7 +812,6 @@ function drawCandyBase(c2d, W, H){
   c2d.fillStyle = warmGlow;
   c2d.fillRect(0, 0, W, H);
 
-  // Layer 4: Edge depth shadow
   const edgeGrad = c2d.createRadialGradient(W/2, H/2, W*0.22, W/2, H/2, W*0.74);
   edgeGrad.addColorStop(0,   'rgba(0,0,0,0)');
   edgeGrad.addColorStop(0.65,'rgba(0,0,0,0)');
@@ -857,13 +819,11 @@ function drawCandyBase(c2d, W, H){
   c2d.fillStyle = edgeGrad;
   c2d.fillRect(0, 0, W, H);
 
-  // Layer 5: Fine sugar grain texture
   for (let i = 0; i < 700; i++) {
     const tx = Math.random() * W;
     const ty = Math.random() * H;
     const ts = Math.random() * 1.8 + 0.3;
     const alpha = Math.random() * 0.10 + 0.01;
-    // Vary between bright sparkle and dark crystal
     if (Math.random() > 0.55) {
       c2d.fillStyle = `rgba(255,248,180,${alpha})`;
     } else {
@@ -872,7 +832,6 @@ function drawCandyBase(c2d, W, H){
     c2d.fillRect(tx, ty, ts, ts);
   }
 
-  // Layer 6: Fine surface scratches
   for (let i = 0; i < 18; i++) {
     const x1 = Math.random() * W;
     const y1 = Math.random() * H;
@@ -886,7 +845,6 @@ function drawCandyBase(c2d, W, H){
     c2d.stroke();
   }
 
-  // Layer 7: Subtle horizontal banding (sugar layering artifact)
   for (let i = 0; i < 5; i++) {
     const bandY = H * (0.15 + i * 0.17);
     c2d.fillStyle = `rgba(255,220,100,${0.025 + Math.random()*0.015})`;
@@ -894,7 +852,6 @@ function drawCandyBase(c2d, W, H){
   }
 }
 
-// ── Particle emitter ──────────────────────────────────
 function emitDust(x,y,count=4){
   for(let i=0;i<count;i++){
     const a=Math.random()*Math.PI*2;
@@ -920,14 +877,12 @@ function emitCrackSpark(x,y,severity){
   }
 }
 
-// ── Pick random shape ─────────────────────────────────
 function pickShape(exclude){
   const all=['triangle','circle','star','umbrella'];
   const pool=exclude?all.filter(s=>s!==exclude):all;
   return pool[Math.floor(Math.random()*pool.length)];
 }
 
-// ── Reset / init ──────────────────────────────────────
 function initGame(id){
   shapeId = id || pickShape();
   shapePath = buildShapePath(shapeId);
@@ -954,33 +909,65 @@ function initGame(id){
 
 // ── Phase transitions ─────────────────────────────────
 function setPhase(p){
-  phase=p;
+  phase = p;
   document.getElementById('screen-intro').classList.remove('active');
   document.getElementById('screen-success').classList.remove('active');
   document.getElementById('screen-eliminated').classList.remove('active');
-  document.getElementById('hud').style.display='none';
-  document.getElementById('needle-guide').style.opacity='0';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('needle-guide').style.opacity = '0';
+  document.getElementById('cinematic-countdown').classList.remove('show');
 
-  if(p==='intro'){
-    document.getElementById('screen-intro').classList.add('active');
-    document.getElementById('shape-icon').textContent=SHAPE_ICONS[shapeId];
-    document.getElementById('shape-name-title').textContent=SHAPE_NAMES[shapeId];
-    document.getElementById('countdown-display').textContent='3';
-    countdownVal=3; countdownTimer=0;
-  } else if(p==='playing'){
-    document.getElementById('hud').style.display='flex';
-    document.getElementById('hud-shape').textContent=SHAPE_NAMES[shapeId];
-    document.getElementById('needle-guide').style.opacity='1';
-    setTimeout(()=>document.getElementById('needle-guide').style.opacity='0', 3000);
-  } else if(p==='success'){
+  if (p === 'intro') {
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('hud-shape').textContent = SHAPE_NAMES[shapeId];
+    countdownVal = 3; countdownTimer = 0;
+    showCinematicCount(3);
+    phase = 'countdown';
+  } else if (p === 'playing') {
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('hud-shape').textContent = SHAPE_NAMES[shapeId];
+    document.getElementById('needle-guide').style.opacity = '1';
+    setTimeout(() => {
+      const ng = document.getElementById('needle-guide');
+      if (ng) ng.style.opacity = '0';
+    }, 3000);
+  } else if (p === 'success') {
     document.getElementById('screen-success').classList.add('active');
-    document.getElementById('success-sub').textContent=
-      `Shape preserved · Integrity ${Math.round(candyIntegrity*100)}%`;
+    document.getElementById('success-sub').textContent =
+      `Shape preserved · Integrity ${Math.round(candyIntegrity * 100)}%`;
     sendGameResult({ type: 'DALGONA_SUCCESS' });
-  } else if(p==='eliminated'){
+  } else if (p === 'eliminated') {
     document.getElementById('screen-eliminated').classList.add('active');
     sendGameResult({ type: 'DALGONA_ELIMINATED', reason: 'candy-snapped' });
   }
+}
+
+function showCinematicCount(n) {
+  const wrap = document.getElementById('cinematic-countdown');
+  const num  = document.getElementById('cinematic-num');
+  if (!wrap || !num) return;
+  wrap.classList.add('show');
+  num.classList.remove('go');
+  num.textContent = String(n);
+  num.style.animation = 'none';
+  void num.offsetWidth;
+  num.style.animation = '';
+  if (n > 0) playTick(440 + (3 - n) * 110, 0.12, 0.35);
+}
+
+function showCinematicGo() {
+  const wrap = document.getElementById('cinematic-countdown');
+  const num  = document.getElementById('cinematic-num');
+  if (!wrap || !num) return;
+  wrap.classList.add('show');
+  num.classList.add('go');
+  num.textContent = 'GO!';
+  num.style.animation = 'none';
+  void num.offsetWidth;
+  num.style.animation = '';
+  playTick(880, 0.25, 0.45);
+  playTick(1320, 0.20, 0.35);
+  setTimeout(() => wrap.classList.remove('show'), 950);
 }
 
 function restartGame(){
@@ -989,66 +976,6 @@ function restartGame(){
   setPhase('intro');
 }
 
-// ── Pointer → canvas coords ────────────────────────────
-function toCanvas(clientX, clientY){
-  // Return CSS pixels (device-independent). DPR is intentionally NOT applied
-  // here; world conversion divides by cssScale (= fitScale), render multiplies
-  // by cssScale. This removes the ×devicePixelRatio touch-offset bug.
-  const rect=canvas.getBoundingClientRect();
-  return {
-    x:clientX-rect.left,
-    y:clientY-rect.top
-  };
-}
-
-// ── Input handlers ────────────────────────────────────
-canvas.addEventListener('pointerdown', e=>{
-  e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
-  const pos=toCanvas(e.clientX,e.clientY);
-  needleDown=true;
-  needleX=pos.x; needleY=pos.y;
-  needlePrevX=pos.x; needlePrevY=pos.y;
-  needleVel=0;
-  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
-  getAudio();
-
-  if(phase==='playing'){
-    const worldX=needleX/cssScale, worldY=needleY/cssScale;
-    const inSlab=(
-      worldX>=CANDY_X-6 && worldX<=CANDY_X+CANDY_W+6 &&
-      worldY>=CANDY_Y-6 && worldY<=CANDY_Y+CANDY_H+6
-    );
-    if(!inSlab){ triggerInstantFail('initial-click-outside-slab'); return; }
-    // shapePath is in buffer space (×scale); lift the CSS-space pos to buffer
-    // space so the geometric distance is comparable, then test in world units.
-    const bufPos={x:needleX*scale/cssScale, y:needleY*scale/cssScale};
-    if(distToOutline(bufPos,shapePath)>=ON_EDGE_TOL*scale){
-      triggerInstantFail('initial-click-off-path'); return;
-    }
-  }
-}, {passive:false});
-
-canvas.addEventListener('pointermove', e=>{
-  e.preventDefault();
-  const pos=toCanvas(e.clientX,e.clientY);
-  needlePrevX=needleX; needlePrevY=needleY;
-  needleX=pos.x; needleY=pos.y;
-  // Velocity in buffer-space units (×scale/cssScale) so existing scale-based
-  // thresholds (needleVel/(scale*N)) stay calibrated after the CSS-coord switch.
-  const k=scale/cssScale;
-  const dx=(needleX-needlePrevX)*k, dy=(needleY-needlePrevY)*k;
-  const mag=Math.sqrt(dx*dx+dy*dy);
-  needleVel=mag;
-  pushStab(mag);
-
-  if(needleDown && phase==='playing') processCarve();
-}, {passive:false});
-
-canvas.addEventListener('pointerup', e=>{ needleDown=false; needleVel=0; });
-canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
-
-// ── postMessage bridge helpers ─────────────────────────
 function sendBridgeMessage(msg){
   try{ window.parent.postMessage(msg,'*'); }catch(e){}
 }
@@ -1058,80 +985,118 @@ function sendGameResult(msg){
   sendBridgeMessage(msg);
 }
 
-// ── Instant failure ───────────────────────────────────
-function triggerInstantFail(reason){
-  if(phase!=='playing') return;
-  playSnap();
-  shakeIntensity=22;
-  const _sk=scale/cssScale;
-  for(let i=0;i<3;i++) emitCrackSpark(needleX*_sk,needleY*_sk,1.0);
-  const {gx,gy}=worldToGrid(needleX,needleY);
-  const blastR=5;
-  for(let dy=-blastR;dy<=blastR;dy++){
-    for(let dx=-blastR;dx<=blastR;dx++){
-      const nx=gx+dx, ny=gy+dy;
-      if(nx<0||ny<0||nx>=GRID||ny>=GRID) continue;
-      if(Math.sqrt(dx*dx+dy*dy)>blastR) continue;
-      const idx=cellIdx(nx,ny);
-      edgeStressGrid[idx]=1.0;
-      structuralStrength[idx]=0;
-      fracturePoints.push({
-        x:(CANDY_X+nx*CELL+CELL/2)*scale,
-        y:(CANDY_Y+ny*CELL+CELL/2)*scale,
-        radius:4*scale, maxRadius:(14+10)*scale,
-        age:0, severity:1.0,
-        spokeAngles:Array.from({length:8},(_,k)=>(k/8)*Math.PI*2+Math.random()*0.5)
-      });
-    }
-  }
-  phase='snap';
-  setTimeout(()=>setPhase('eliminated'), 800);
+// Fixed coordinate math
+function toCanvas(clientX, clientY) {
+  const rect  = canvas.getBoundingClientRect();
+  const ratio = canvas.width / rect.width;
+  return {
+    x: (clientX - rect.left) * ratio,
+    y: (clientY - rect.top)  * ratio
+  };
 }
 
-// ── Sequential-arc win validation ─────────────────────
-function checkWin(){
-  const total=shapePath.length;
-  if(carvedSegments.size<total*COMPLETION_WIN) return false;
-  const carved=new Array(total).fill(false);
-  for(const idx of carvedSegments) carved[idx]=true;
-  let best=0, run=0;
-  for(let i=0;i<total*2;i++){
-    if(carved[i%total]){ run++; best=Math.max(best,run); }
-    else { run=0; }
+function distToOutline(p, path){
+  let minD = Infinity;
+  for(let i=0; i<path.length; i++){
+    minD = Math.min(minD, distToSegment(p, path[i], path[(i+1)%path.length]));
   }
-  best=Math.min(best,total);
-  return best/total>=COMPLETION_WIN;
+  return minD;
 }
 
-// ── Core carving logic ────────────────────────────────
+function worldToGrid(bx, by) {
+  const gx = Math.floor((bx / scale - CANDY_X) / CELL);
+  const gy = Math.floor((by / scale - CANDY_Y) / CELL);
+  return {
+    gx: Math.max(0, Math.min(GRID - 1, gx)),
+    gy: Math.max(0, Math.min(GRID - 1, gy))
+  };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  
+  const rawPos = toCanvas(e.clientX, e.clientY);
+  const ox = window.__dalgonaOffsetX || 0;
+  const oy = window.__dalgonaOffsetY || 0;
+  
+  needleDown = true;
+  needleX = rawPos.x - ox; 
+  needleY = rawPos.y - oy;
+  needlePrevX = needleX; 
+  needlePrevY = needleY;
+  needleVel = 0;
+  
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  getAudio();
+  // No fail on initial click — player positions the needle freely.
+  // Path-tolerance validation only fires during active carving (pointermove).
+}, {passive:false});
+
+canvas.addEventListener('pointermove', e => {
+  e.preventDefault();
+  const rawPos = toCanvas(e.clientX, e.clientY);
+  const ox = window.__dalgonaOffsetX || 0;
+  const oy = window.__dalgonaOffsetY || 0;
+
+  needlePrevX = needleX; 
+  needlePrevY = needleY;
+  needleX = rawPos.x - ox; 
+  needleY = rawPos.y - oy;
+  
+  const dx = needleX - needlePrevX;
+  const dy = needleY - needlePrevY;
+  const mag = Math.sqrt(dx * dx + dy * dy);
+  needleVel = mag;
+  pushStab(mag);
+
+  if(needleDown && phase === 'playing') processCarve();
+}, {passive:false});
+
+canvas.addEventListener('pointerup', e=>{ needleDown=false; needleVel=0; });
+canvas.addEventListener('pointercancel', e=>{ needleDown=false; });
+
 function processCarve(){
-  // needleX/Y are CSS pixels; lift to buffer space (×scale/cssScale) so they
-  // are comparable to shapePath, which is stored in buffer space.
-  const pos={x:needleX*scale/cssScale, y:needleY*scale/cssScale};
-  const worldX=needleX/cssScale, worldY=needleY/cssScale;
-  const SLAB_MARGIN=6;
-  const inSlab=(
-    worldX>=CANDY_X-SLAB_MARGIN && worldX<=CANDY_X+CANDY_W+SLAB_MARGIN &&
-    worldY>=CANDY_Y-SLAB_MARGIN && worldY<=CANDY_Y+CANDY_H+SLAB_MARGIN
+  const pos = {x: needleX, y: needleY};
+  const worldX = needleX / scale;
+  const worldY = needleY / scale;
+  
+  const SLAB_MARGIN = 6;
+  const inSlab = (
+    worldX >= CANDY_X - SLAB_MARGIN && worldX <= CANDY_X + CANDY_W + SLAB_MARGIN &&
+    worldY >= CANDY_Y - SLAB_MARGIN && worldY <= CANDY_Y + CANDY_H + SLAB_MARGIN
   );
+  
+  // Physically left the candy entirely — immediate fail.
   if(!inSlab){ triggerInstantFail('needle-left-slab'); return; }
 
-  const edgeDist=distToOutline(pos,shapePath);
-  const onEdge=edgeDist<ON_EDGE_TOL*scale;
-  if(!onEdge){ triggerInstantFail('off-path'); return; }
+  const edgeDist = distToOutline(pos, shapePath);
+  const onEdge = edgeDist < ON_EDGE_TOL * scale;
 
-  if(needleVel<0.3) return;
+  // Off the trace line: apply heavy progressive damage instead of instant kill.
+  // Deep deviations drain integrity fast; small drifts just raise stress.
+  if(!onEdge){
+    const excess = clamp((edgeDist - ON_EDGE_TOL * scale) / (scale * 30), 0, 1);
+    const { gx: ogx, gy: ogy } = worldToGrid(needleX, needleY);
+    const oidx = cellIdx(ogx, ogy);
+    edgeStressGrid[oidx] = Math.min(1, edgeStressGrid[oidx] + 0.06 * excess);
+    candyIntegrity = Math.max(0, candyIntegrity - 0.09 * excess);
+    shakeIntensity = Math.max(shakeIntensity, 5 * excess);
+    if(candyIntegrity <= 0){ triggerInstantFail('off-path-damage'); }
+    return;
+  }
 
-  for(let i=0;i<shapePath.length;i++){
-    const a=shapePath[i], b=shapePath[(i+1)%shapePath.length];
-    if(distToSegment(pos,a,b)<CARVE_RADIUS*scale){
+  if(needleVel < 0.3) return;
+
+  for(let i=0; i<shapePath.length; i++){
+    const a = shapePath[i], b = shapePath[(i+1)%shapePath.length];
+    if(distToSegment(pos, a, b) < CARVE_RADIUS * scale){
       carvedSegments.add(i);
-      lastCarvedSegment=i;
+      lastCarvedSegment = i;
     }
   }
 
   computeStability();
-
   const velocityFactor = clamp(needleVel / (scale * 12), 0, 1);
   const pressure = 0.30 * (1 + (1 - velocityFactor) * 0.5) * (1 + (1 - stability) * 0.4);
 
@@ -1153,7 +1118,7 @@ function processCarve(){
     }
   }
 
-  completionRatio=carvedSegments.size/shapePath.length;
+  completionRatio = carvedSegments.size / shapePath.length;
   if(checkWin()){
     playTick(880,0.3,0.3);
     setTimeout(()=>playTick(1100,0.3,0.3),200);
@@ -1161,15 +1126,14 @@ function processCarve(){
     return;
   }
 
-  if(Math.random()<0.4) emitDust(needleX*scale/cssScale, needleY*scale/cssScale, 2);
+  if(Math.random()<0.4) emitDust(needleX, needleY, 2);
 
-  const now=performance.now();
-  if(now-lastScrapeAudio>SCRAPE_AUDIO_MS){
-    lastScrapeAudio=now;
+  const now = performance.now();
+  if(now - lastScrapeAudio > SCRAPE_AUDIO_MS){
+    lastScrapeAudio = now;
     playScrape(clamp(needleVel/(scale*10),0,1));
   }
 
-  // HUD update
   const pct=Math.round(candyIntegrity*100);
   const bar=document.getElementById('integrity-bar');
   if(bar){
@@ -1193,7 +1157,36 @@ function processCarve(){
   }
 }
 
-// ── Particle update ────────────────────────────────────
+function triggerInstantFail(reason){
+  if(phase !== 'playing') return;
+  playSnap();
+  shakeIntensity = 22;
+  
+  for(let i=0; i<3; i++) emitCrackSpark(needleX, needleY, 1.0);
+  
+  const {gx,gy} = worldToGrid(needleX, needleY);
+  const blastR = 5;
+  for(let dy=-blastR; dy<=blastR; dy++){
+    for(let dx=-blastR; dx<=blastR; dx++){
+      const nx = gx+dx, ny = gy+dy;
+      if(nx<0 || ny<0 || nx>=GRID || ny>=GRID) continue;
+      if(Math.sqrt(dx*dx+dy*dy) > blastR) continue;
+      const idx = cellIdx(nx,ny);
+      edgeStressGrid[idx] = 1.0;
+      structuralStrength[idx] = 0;
+      fracturePoints.push({
+        x: (CANDY_X + nx * CELL + CELL / 2) * scale,
+        y: (CANDY_Y + ny * CELL + CELL / 2) * scale,
+        radius: 4 * scale, maxRadius: (14+10) * scale,
+        age: 0, severity: 1.0,
+        spokeAngles: Array.from({length:8}, (_,k)=>(k/8)*Math.PI*2+Math.random()*0.5)
+      });
+    }
+  }
+  phase = 'snap';
+  setTimeout(() => setPhase('eliminated'), 800);
+}
+
 function updateParticles(){
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i];
@@ -1204,541 +1197,459 @@ function updateParticles(){
   }
 }
 
-// ── ENHANCED: Main render ──────────────────────────────
 function render(){
   frame++;
 
-  // Camera shake decay
   shakeIntensity*=0.88;
   if(shakeIntensity>0.1){
     shakeX=(Math.random()-0.5)*shakeIntensity;
     shakeY=(Math.random()-0.5)*shakeIntensity*0.5;
   } else { shakeX=0; shakeY=0; }
 
-  // Vignette tension
   const tension=1-candyIntegrity;
   vignetteRed=lerp(vignetteRed, tension*0.7, 0.04);
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
+  ctx.translate(window.__dalgonaOffsetX || 0, window.__dalgonaOffsetY || 0);
   ctx.translate(shakeX, shakeY);
 
-  // ── ENHANCED Background ──────────────────────────────
-  // Base: very dark warm brown
-  ctx.fillStyle='#060300';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.4);
+  skyGrad.addColorStop(0, "#73a5c6"); 
+  skyGrad.addColorStop(1, "#a8cbe0"); 
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(-CANDY_X*2, -CANDY_Y*2, canvas.width*2, canvas.height * 0.4 + CANDY_Y*2);
 
-  // Atmospheric warm center glow
-  const atmGlow = ctx.createRadialGradient(
-    canvas.width/2, canvas.height*0.48, 0,
-    canvas.width/2, canvas.height*0.48, canvas.width*0.62
-  );
-  atmGlow.addColorStop(0,   `rgba(130,60,8,${0.22 + tension*0.08})`);
-  atmGlow.addColorStop(0.4, `rgba(70,28,4,${0.12 + tension*0.04})`);
-  atmGlow.addColorStop(0.8, 'rgba(25,8,1,0.05)');
-  atmGlow.addColorStop(1,   'rgba(0,0,0,0)');
-  ctx.fillStyle = atmGlow;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // Outer darkness vignette
-  const vigBg = ctx.createRadialGradient(
-    canvas.width/2, canvas.height/2, canvas.width*0.18,
-    canvas.width/2, canvas.height/2, canvas.width*0.88
-  );
-  vigBg.addColorStop(0, 'rgba(0,0,0,0)');
-  vigBg.addColorStop(0.7,'rgba(0,0,0,0.28)');
-  vigBg.addColorStop(1,  'rgba(0,0,0,0.72)');
-  ctx.fillStyle = vigBg;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // Subtle grain noise
-  if(frame % 2 === 0) {
-    for(let gi=0; gi<140; gi++){
-      const gx = Math.random() * canvas.width;
-      const gy = Math.random() * canvas.height;
-      ctx.fillStyle = `rgba(255,190,60,${Math.random()*0.016})`;
-      ctx.fillRect(gx,gy,1,1);
-    }
-  }
-
-  // ── Atmospheric ambient dust ─────────────────────────
-  for (const d of atmosphericDust) {
-    d.x += d.vx;
-    d.y += d.vy;
-    d.phase += 0.01;
-    if (d.y < -4) d.y = WORLD_H * scale + 4;
-    if (d.x < -4) d.x = WORLD_W * scale + 4;
-    if (d.x > WORLD_W * scale + 4) d.x = -4;
-
-    const flicker = d.alpha * (0.75 + Math.sin(d.phase)*0.25);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+  const clouds = [
+    { x: canvas.width * 0.15, y: canvas.height * 0.12, r: 25 * scale },
+    { x: canvas.width * 0.85, y: canvas.height * 0.08, r: 35 * scale },
+    { x: canvas.width * 0.50, y: canvas.height * 0.20, r: 30 * scale }
+  ];
+  clouds.forEach(c => {
     ctx.beginPath();
-    ctx.arc(d.x * scale / cssScale, d.y * scale / cssScale, d.r * scale, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(220,170,60,${flicker * 0.45})`;
+    ctx.arc(c.x - (window.__dalgonaOffsetX||0), c.y - (window.__dalgonaOffsetY||0), c.r, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  // ── Candy slab ──────────────────────────────────────
-  const cx=CANDY_X*scale, cy=CANDY_Y*scale;
-  const cw=CANDY_W*scale, ch=CANDY_H*scale;
-
-  // FIX 6.5 — Atmospheric guard silhouette: imposing pink figure stage-right
-  // Rendered BEFORE candy so it sits behind as atmospheric depth
-  {
-    const gAlpha = 0.28;
-    const gH = WORLD_H * 0.60 * scale;  // 60% of canvas height = imposing
-    const gW = gH * 0.40;               // ~2.5:1 aspect ratio for humanoid
-    const gX = WORLD_W * 0.78 * scale;  // stage-right
-    const gY = (WORLD_H - gH * 0.88) * scale;  // grounded
-
-    ctx.save();
-    ctx.globalAlpha = gAlpha;
-
-    // Body — hot pink (#FF0066) jumpsuit
-    ctx.fillStyle = "#FF0066";
-    // Legs
-    ctx.fillRect(gX - gW*0.20, gY + gH*0.55, gW*0.18, gH*0.45);
-    ctx.fillRect(gX + gW*0.02, gY + gH*0.55, gW*0.18, gH*0.45);
-    // Torso
-    ctx.fillRect(gX - gW*0.22, gY + gH*0.18, gW*0.44, gH*0.40);
-    // Arms
-    ctx.fillRect(gX - gW*0.38, gY + gH*0.20, gW*0.18, gH*0.34);
-    ctx.fillRect(gX + gW*0.20, gY + gH*0.20, gW*0.18, gH*0.34);
-    // Head (dark mask)
-    ctx.fillStyle = "#1a0a1e";
-    ctx.beginPath();
-    ctx.arc(gX, gY + gH*0.10, gW*0.22, 0, Math.PI*2);
-    ctx.fill();
-    // Mask circle insignia
-    ctx.fillStyle = "rgba(255,0,102,0.6)";
-    ctx.beginPath();
-    ctx.arc(gX, gY + gH*0.10, gW*0.10, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  // Warm glow halo behind candy
-  const candyHalo = ctx.createRadialGradient(cx+cw/2,cy+ch/2, 0, cx+cw/2,cy+ch/2, cw*0.82);
-  candyHalo.addColorStop(0,   `rgba(180,100,15,${0.18 + tension*0.14})`);
-  candyHalo.addColorStop(0.55,`rgba(100,50,8,${0.08 + tension*0.06})`);
-  candyHalo.addColorStop(1,   'rgba(0,0,0,0)');
-  ctx.fillStyle = candyHalo;
-  ctx.fillRect(cx-cw*0.35, cy-ch*0.35, cw*1.7, ch*1.7);
-
-  // Drop shadow
-  const glowAlpha=0.18+tension*0.28;
-  ctx.shadowColor=`rgba(160,80,5,${glowAlpha})`;
-  ctx.shadowBlur=50*scale;
-
-  // Draw candy body gradient
-  const integ=candyIntegrity;
-  const r=Math.round(lerp(180,220,integ)), g2=Math.round(lerp(100,145,integ)), b=Math.round(lerp(20,35,integ));
-  const bodyGrad=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
-  bodyGrad.addColorStop(0,`rgb(${r+24},${g2+18},${b+8})`);
-  bodyGrad.addColorStop(0.5,`rgb(${r},${g2},${b})`);
-  bodyGrad.addColorStop(1,`rgb(${r-20},${g2-14},${b-4})`);
-
-  // Rounded candy rect
-  ctx.fillStyle=bodyGrad;
-  ctx.beginPath();
-  const rad=10*scale;
-  ctx.moveTo(cx+rad,cy);
-  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
-  ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
-  ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
-  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
-  ctx.closePath(); ctx.fill();
-  ctx.shadowBlur=0;
-
-  // Candy offscreen texture
-  if(candyOffscreen){
-    ctx.save();
-    ctx.globalAlpha=0.88;
-    ctx.beginPath();
-    ctx.moveTo(cx+rad,cy);
-    ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
-    ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
-    ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
-    ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
-    ctx.closePath(); ctx.clip();
-    ctx.drawImage(candyOffscreen, cx, cy, cw, ch);
-    ctx.restore();
-  }
-
-  // Gloss layer
-  const gloss=ctx.createLinearGradient(cx,cy,cx,cy+ch*0.5);
-  gloss.addColorStop(0,'rgba(255,255,220,0.22)');
-  gloss.addColorStop(0.4,'rgba(255,248,200,0.08)');
-  gloss.addColorStop(1,'rgba(255,240,180,0)');
-  ctx.fillStyle=gloss;
-  ctx.beginPath();
-  ctx.moveTo(cx+rad,cy);
-  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
-  ctx.lineTo(cx+cw,cy+ch*0.5); ctx.lineTo(cx,cy+ch*0.5);
-  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
-  ctx.closePath(); ctx.fill();
-
-  // Candy edge rim light
-  ctx.strokeStyle='rgba(240,200,80,0.12)';
-  ctx.lineWidth=2*scale;
-  ctx.beginPath();
-  ctx.moveTo(cx+rad,cy);
-  ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
-  ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
-  ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
-  ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
-  ctx.closePath(); ctx.stroke();
-
-  // Stress crack discoloration
-  if(tension>0.08){
-    const stressGrad=ctx.createRadialGradient(cx+cw/2,cy+ch/2,0,cx+cw/2,cy+ch/2,cw*0.62);
-    stressGrad.addColorStop(0,`rgba(80,30,0,${tension*0.38})`);
-    stressGrad.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=stressGrad;
-    ctx.beginPath();
-    ctx.moveTo(cx+rad,cy);
-    ctx.lineTo(cx+cw-rad,cy); ctx.arcTo(cx+cw,cy,cx+cw,cy+rad,rad);
-    ctx.lineTo(cx+cw,cy+ch-rad); ctx.arcTo(cx+cw,cy+ch,cx+cw-rad,cy+ch,rad);
-    ctx.lineTo(cx+rad,cy+ch); ctx.arcTo(cx,cy+ch,cx,cy+ch-rad,rad);
-    ctx.lineTo(cx,cy+rad); ctx.arcTo(cx,cy,cx+rad,cy,rad);
-    ctx.closePath(); ctx.fill();
-  }
-
-  // ── Grid Stress Heatmap ─────────────────────────────
-  for (let gy = 0; gy < GRID; gy++) {
-    for (let gx = 0; gx < GRID; gx++) {
-      const idx = cellIdx(gx, gy);
-      const s = edgeStressGrid[idx];
-      if (s < 0.04) continue;
-      const wx = (CANDY_X + gx * CELL) * scale;
-      const wy = (CANDY_Y + gy * CELL) * scale;
-      const cellSize = CELL * scale;
-      const alpha = s * 0.55;
-      const red = Math.floor(s * 200);
-      ctx.fillStyle = `rgba(${red + 55}, 0, 0, ${alpha})`;
-      ctx.fillRect(wx, wy, cellSize, cellSize);
-    }
-  }
-
-  // ── Carved Path Cells ──────────────────────────────
-  ctx.fillStyle = 'rgba(255, 200, 60, 0.22)';
-  carvedCells.forEach(idx => {
-    const gx = idx % GRID;
-    const gy = Math.floor(idx / GRID);
-    const wx = (CANDY_X + gx * CELL) * scale;
-    const wy = (CANDY_Y + gy * CELL) * scale;
-    ctx.fillRect(wx + 1, wy + 1, CELL * scale - 2, CELL * scale - 2);
   });
 
-  // ── ENHANCED: Shape outline ─────────────────────────
-  if(shapePath.length>1){
-    // Outer glow halo of the dotted path
-    ctx.setLineDash([6*scale, 5*scale]);
+  const dirtGrad = ctx.createLinearGradient(0, canvas.height * 0.4, 0, canvas.height);
+  dirtGrad.addColorStop(0, "#e3c798"); 
+  dirtGrad.addColorStop(1, "#b59762"); 
+  ctx.fillStyle = dirtGrad;
+  ctx.fillRect(-CANDY_X*2, canvas.height * 0.4, canvas.width*2, canvas.height);
+
+  const guardX = canvas.width  * 0.84 - (shakeX * 0.35);
+  const guardY = canvas.height * 0.42;
+  const gs     = scale * 1.1;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(guardX, guardY + 130 * gs, 38 * gs, 9 * gs, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const suitGrad = ctx.createLinearGradient(
+    guardX - 28 * gs, guardY + 30 * gs,
+    guardX + 28 * gs, guardY + 110 * gs
+  );
+  suitGrad.addColorStop(0,    '#ff2a6e');
+  suitGrad.addColorStop(0.45, '#bd1e51');
+  suitGrad.addColorStop(1,    '#7a0d2f');
+  ctx.fillStyle = suitGrad;
+  ctx.beginPath();
+  ctx.moveTo(guardX - 26 * gs, guardY + 115 * gs);
+  ctx.lineTo(guardX - 19 * gs, guardY + 32  * gs);
+  ctx.lineTo(guardX + 19 * gs, guardY + 32  * gs);
+  ctx.lineTo(guardX + 26 * gs, guardY + 115 * gs);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,200,210,0.18)';
+  ctx.fillRect(guardX - 22 * gs, guardY + 34 * gs, 4 * gs, 78 * gs);
+
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(guardX - 24 * gs, guardY + 68 * gs, 48 * gs, 6 * gs);
+  ctx.fillStyle = '#7a7a7a';
+  ctx.fillRect(guardX - 4 * gs,  guardY + 69 * gs, 8 * gs, 4 * gs);
+
+  const headR = 19 * gs;
+  const headGrad = ctx.createRadialGradient(
+    guardX - 6 * gs, guardY + 4 * gs, 2 * gs,
+    guardX,          guardY + 10 * gs, headR
+  );
+  headGrad.addColorStop(0, '#2a2a2a');
+  headGrad.addColorStop(1, '#050505');
+  ctx.fillStyle = headGrad;
+  ctx.beginPath();
+  ctx.arc(guardX, guardY + 10 * gs, headR, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1 * gs;
+  ctx.beginPath();
+  ctx.arc(guardX - 2 * gs, guardY + 6 * gs, headR - 1, Math.PI * 1.05, Math.PI * 1.55);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2 * gs;
+  ctx.strokeRect(guardX - 7 * gs, guardY + 3 * gs, 14 * gs, 14 * gs);
+  ctx.shadowColor = 'rgba(255,255,255,0.6)';
+  ctx.shadowBlur = 6 * gs;
+  ctx.strokeRect(guardX - 7 * gs, guardY + 3 * gs, 14 * gs, 14 * gs);
+  ctx.shadowBlur = 0;
+
+  const tensionLevel = 1 - candyIntegrity;        
+  const isAiming     = tensionLevel > 0.35 || phase === 'snap' || phase === 'eliminated';
+  const isFiring     = phase === 'snap' || phase === 'eliminated';
+
+  ctx.fillStyle = '#7a0d2f';
+  if (isAiming) {
+    ctx.fillRect(guardX - 30 * gs, guardY + 36 * gs, 14 * gs, 8 * gs);
+    ctx.fillRect(guardX + 16 * gs, guardY + 36 * gs, 14 * gs, 8 * gs);
+  } else {
+    ctx.fillRect(guardX - 22 * gs, guardY + 40 * gs, 10 * gs, 26 * gs);
+    ctx.fillRect(guardX + 12 * gs, guardY + 40 * gs, 10 * gs, 26 * gs);
+  }
+
+  ctx.save();
+  ctx.translate(guardX, guardY + 38 * gs);
+  if (isAiming) {
+    const barrelLen = 56 * gs;
+    ctx.fillStyle = '#1a0e0a';
+    ctx.fillRect(-8 * gs, -5 * gs, 14 * gs, 10 * gs);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(6 * gs, -4 * gs, 16 * gs, 8 * gs);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(22 * gs, -2 * gs, barrelLen, 4 * gs);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(10 * gs, -8 * gs, 4 * gs, 4 * gs);
+
+    const tipX = 22 * gs + barrelLen;
+    const tipY = 0;
+    const muzzleAbsX = guardX + tipX;
+    const muzzleAbsY = guardY + 38 * gs + tipY;
+    const targetX   = canvas.width  / 2 + (isFiring ? 0 : Math.sin(frame * 0.06) * 40 * scale);
+    const targetY   = canvas.height / 2 + (isFiring ? 0 : Math.cos(frame * 0.04) * 25 * scale);
+
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,0,30,${isFiring ? 0.95 : 0.55})`;
+    ctx.lineWidth = (isFiring ? 4 : 2) * scale;
+    ctx.shadowColor = 'rgba(255,0,30,0.85)';
+    ctx.shadowBlur = 14 * scale;
     ctx.beginPath();
-    ctx.moveTo(shapePath[0].x, shapePath[0].y);
-    for(let i=1;i<shapePath.length;i++) ctx.lineTo(shapePath[i].x, shapePath[i].y);
+    ctx.moveTo(muzzleAbsX, muzzleAbsY);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,200,200,0.95)';
+    ctx.lineWidth = 1 * scale;
+    ctx.beginPath();
+    ctx.moveTo(muzzleAbsX, muzzleAbsY);
+    ctx.lineTo(targetX, targetY);
+    ctx.stroke();
+
+    const dotR = (isFiring ? 7 : 4) * scale;
+    ctx.fillStyle = 'rgba(255,40,40,0.95)';
+    ctx.shadowColor = 'rgba(255,0,0,1)';
+    ctx.shadowBlur = 18 * scale;
+    ctx.beginPath();
+    ctx.arc(targetX, targetY, dotR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    if (isFiring && frame % 4 < 2) {
+      ctx.fillStyle = 'rgba(255,220,80,0.85)';
+      ctx.beginPath();
+      ctx.arc(muzzleAbsX, muzzleAbsY, 12 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(-6 * gs, 4 * gs, 44 * gs, 6 * gs);
+    ctx.restore();
+  }
+
+  // ── Candy slab ───────────────────────────────────────────────────
+  if (candyOffscreen && phase !== 'intro') {
+    ctx.save();
+    const hbPulse = (phase === 'playing' && edgeStress > FRACTURE_THRESHOLD)
+      ? 1 + Math.sin(heartbeatPhase) * 0.016 * edgeStress : 1;
+    const cx = CANDY_X * scale + (CANDY_W * scale * (1 - hbPulse)) / 2;
+    const cy = CANDY_Y * scale + (CANDY_H * scale * (1 - hbPulse)) / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(hbPulse, hbPulse);
+    ctx.drawImage(candyOffscreen, 0, 0);
+    if (edgeStress > 0.3) {
+      const burnAlpha = clamp((edgeStress - 0.3) / 0.7, 0, 1) * 0.48;
+      ctx.fillStyle = `rgba(60,10,0,${burnAlpha})`;
+      ctx.fillRect(0, 0, CANDY_W * scale, CANDY_H * scale);
+    }
+    ctx.restore();
+  }
+
+  // ── Fracture cracks ───────────────────────────────────────────────
+  for (let fi = 0; fi < fracturePoints.length; fi++) {
+    const fp = fracturePoints[fi];
+    const progress = fp.age / 90;
+    const alpha = clamp((1 - progress) * fp.severity, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (let ai = 0; ai < fp.spokeAngles.length; ai++) {
+      const angle = fp.spokeAngles[ai];
+      const len = fp.radius;
+      ctx.strokeStyle = `rgba(25,6,0,${alpha * 0.95})`;
+      ctx.lineWidth = lerp(3.5, 0.4, progress) * scale;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fp.x, fp.y);
+      ctx.lineTo(fp.x + Math.cos(angle) * len, fp.y + Math.sin(angle) * len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Shape outline ─────────────────────────────────────────────────
+  if ((phase === 'playing' || phase === 'countdown') && shapePath.length) {
+    ctx.save();
+    // Faint dotted guide for uncarved path
+    ctx.setLineDash([6 * scale, 5 * scale]);
+    ctx.lineDashOffset = frame * 0.45;
+    ctx.strokeStyle = 'rgba(55,25,3,0.48)';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
     ctx.closePath();
-    ctx.strokeStyle=`rgba(255,200,60,0.07)`;
-    ctx.lineWidth=6*scale;
     ctx.stroke();
-
-    // Dotted guide line
-    const shimmerAlpha=0.18+Math.sin(frame*0.04)*0.07;
-    ctx.strokeStyle=`rgba(255,220,100,${shimmerAlpha})`;
-    ctx.lineWidth=2.5*scale;
-    ctx.stroke();
+    // Glowing amber for carved segments
     ctx.setLineDash([]);
-
-    // Carved segments — bright amber glow trail
-    ctx.lineCap='round';
-    for(const idx of carvedSegments){
-      const a=shapePath[idx], b=shapePath[(idx+1)%shapePath.length];
-      // Outer glow
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle='rgba(255,200,60,0.18)';
-      ctx.lineWidth=10*scale; ctx.stroke();
-      // Mid glow
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle='rgba(255,215,70,0.38)';
-      ctx.lineWidth=5*scale; ctx.stroke();
-      // Core line
-      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-      ctx.strokeStyle='rgba(255,230,80,0.92)';
-      ctx.lineWidth=2.5*scale; ctx.stroke();
+    ctx.lineDashOffset = 0;
+    ctx.shadowColor = 'rgba(245,180,20,0.8)';
+    ctx.shadowBlur = 9 * scale;
+    ctx.strokeStyle = 'rgba(245,210,50,0.94)';
+    ctx.lineWidth = 3.5 * scale;
+    ctx.lineCap = 'round';
+    for (let si = 0; si < shapePath.length; si++) {
+      if (carvedSegments.has(si)) {
+        const a = shapePath[si];
+        const b = shapePath[(si + 1) % shapePath.length];
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
     }
-    ctx.lineCap='butt'; ctx.lineWidth=1;
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
-  // ── Fracture points ─────────────────────────────────
-  for(const fp of fracturePoints){
-    fp.age++;
-    fp.radius=Math.min(fp.radius+0.35*scale, fp.maxRadius);
-    const a=clamp(0.5+fp.severity*0.4,0,0.9);
+  // ── Particles ─────────────────────────────────────────────────────
+  for (let pi = 0; pi < particles.length; pi++) {
+    const p = particles[pi];
+    ctx.save();
+    ctx.globalAlpha = clamp(p.life, 0, 1);
+    ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
     ctx.beginPath();
-    ctx.arc(fp.x,fp.y,fp.radius,0,Math.PI*2);
-    ctx.strokeStyle=`rgba(60,25,0,${a})`;
-    ctx.lineWidth=1.5*scale; ctx.stroke();
-    for(let k=0;k<fp.spokeAngles.length;k++){
-      const angle=fp.spokeAngles[k]+fp.age*0.008;
-      const len=fp.radius*(1.5+Math.sin(fp.age*0.06+k*1.3)*0.4);
-      const bAngle=angle+(Math.random()-0.5)*0.4;
-      ctx.beginPath();
-      ctx.moveTo(fp.x,fp.y);
-      ctx.lineTo(fp.x+Math.cos(bAngle)*len*0.6, fp.y+Math.sin(bAngle)*len*0.6);
-      ctx.strokeStyle=`rgba(40,15,0,${a*0.5})`;
-      ctx.lineWidth=0.6*scale; ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(fp.x,fp.y);
-      ctx.lineTo(fp.x+Math.cos(angle)*len, fp.y+Math.sin(angle)*len);
-      ctx.strokeStyle=`rgba(50,20,0,${a*0.8})`;
-      ctx.lineWidth=0.9*scale; ctx.stroke();
-    }
-    if(fp.severity>0.6){
-      ctx.beginPath();
-      ctx.arc(fp.x,fp.y,fp.radius*1.5,0,Math.PI*2);
-      const g=ctx.createRadialGradient(fp.x,fp.y,0,fp.x,fp.y,fp.radius*1.5);
-      g.addColorStop(0,`rgba(255,80,0,${0.14*fp.severity})`);
-      g.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=g; ctx.fill();
-    }
-  }
-
-  // ── Particles ───────────────────────────────────────
-  for(const p of particles){
-    const a=p.life;
-    ctx.fillStyle=`rgba(${p.r},${p.g},${p.b},${a})`;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.size*(0.5+a*0.5),0,Math.PI*2);
+    ctx.arc(p.x, p.y, Math.max(0.5, p.size * scale * 0.55), 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
-  // ── ENHANCED: Needle cursor ──────────────────────────
-  if((phase==='playing'||phase==='snap') && needleDown){
-    // needleX/Y are CSS pixels; lift to buffer space for drawing.
-    const nx=needleX*scale/cssScale, ny=needleY*scale/cssScale;
-    // Outer glow ring
-    ctx.beginPath();
-    ctx.arc(nx,ny,CARVE_RADIUS*scale*1.6,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,240,180,0.08)';
-    ctx.lineWidth=4*scale; ctx.stroke();
-    // Main ring
-    ctx.beginPath();
-    ctx.arc(nx,ny,CARVE_RADIUS*scale,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,240,180,0.55)';
-    ctx.lineWidth=1.5*scale; ctx.stroke();
-    // Needle body
-    ctx.beginPath();
-    ctx.moveTo(nx, ny-CARVE_RADIUS*scale*0.5);
-    ctx.lineTo(nx, ny+CARVE_RADIUS*scale*2.5);
-    ctx.strokeStyle='rgba(220,210,190,0.75)';
-    ctx.lineWidth=1.5*scale; ctx.stroke();
-    // Gleam on needle
-    ctx.beginPath();
-    ctx.moveTo(nx-0.5*scale, ny-CARVE_RADIUS*scale*0.4);
-    ctx.lineTo(nx-0.5*scale, ny+CARVE_RADIUS*scale*0.8);
-    ctx.strokeStyle='rgba(255,255,240,0.4)';
-    ctx.lineWidth=1*scale; ctx.stroke();
-    // Contact dot
-    ctx.beginPath();
-    ctx.arc(nx,ny,3*scale,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,248,200,0.95)';
-    ctx.fill();
-    // Velocity trail
-    if(needleVel>1){
-      const k=scale/cssScale;
+  // ── Needle cursor ─────────────────────────────────────────────────
+  if (phase === 'playing') {
+    const nx = needleX, ny = needleY;
+    const pulseR = (7 + Math.sin(frame * 0.14) * 1.5) * scale;
+    ctx.save();
+    ctx.strokeStyle = needleDown ? 'rgba(245,200,66,0.92)' : 'rgba(245,200,66,0.45)';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.beginPath(); ctx.arc(nx, ny, pulseR, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = needleDown ? 'rgba(255,240,100,1)' : 'rgba(245,200,66,0.7)';
+    ctx.beginPath(); ctx.arc(nx, ny, 2.5 * scale, 0, Math.PI * 2); ctx.fill();
+    if (needleDown) {
+      ctx.strokeStyle = 'rgba(245,200,66,0.5)';
+      ctx.lineWidth = 1 * scale;
+      const cr = 13 * scale, ci = 8 * scale;
       ctx.beginPath();
-      ctx.moveTo(needlePrevX*k,needlePrevY*k);
-      ctx.lineTo(needleX*k,needleY*k);
-      ctx.strokeStyle=`rgba(255,210,80,${clamp(needleVel/(scale*8),0,0.45)})`;
-      ctx.lineWidth=2*scale; ctx.stroke();
+      ctx.moveTo(nx-cr,ny); ctx.lineTo(nx-ci,ny);
+      ctx.moveTo(nx+ci,ny); ctx.lineTo(nx+cr,ny);
+      ctx.moveTo(nx,ny-cr); ctx.lineTo(nx,ny-ci);
+      ctx.moveTo(nx,ny+ci); ctx.lineTo(nx,ny+cr);
+      ctx.stroke();
     }
+    ctx.restore();
   }
 
-  // ── ENHANCED: Integrity arc ──────────────────────────
-  if(phase==='playing'){
-    const arcCX=canvas.width/2;
-    const arcCY=(CANDY_Y+CANDY_H+55)*scale;
-    const arcR=26*scale;
-
-    // Track
-    ctx.beginPath();
-    ctx.arc(arcCX,arcCY,arcR,-Math.PI/2,Math.PI*2-Math.PI/2);
-    ctx.strokeStyle='rgba(255,255,255,0.06)';
-    ctx.lineWidth=5*scale; ctx.stroke();
-
-    // Colored fill
-    const arcColor=integ>0.5?'#ffd93d':integ>0.25?'#ff9900':'#ff4444';
-    ctx.beginPath();
-    ctx.arc(arcCX,arcCY,arcR,-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
-    ctx.strokeStyle=arcColor;
-    ctx.lineWidth=5*scale;
-    ctx.shadowColor=arcColor;
-    ctx.shadowBlur=8*scale;
-    ctx.stroke();
-    ctx.shadowBlur=0;
-
-    // Heartbeat pulse on arc
-    if(integ<0.4){
-      heartbeatPhase+=0.08;
-      const pulse=Math.sin(heartbeatPhase*3)*0.5+0.5;
-      ctx.beginPath();
-      ctx.arc(arcCX,arcCY,arcR+(pulse*4*scale),-Math.PI/2,-Math.PI/2+integ*Math.PI*2);
-      ctx.strokeStyle=`rgba(255,60,60,${pulse*0.32})`;
-      ctx.lineWidth=9*scale; ctx.stroke();
-    }
-
-    // Center text
-    ctx.fillStyle='rgba(255,230,150,0.78)';
-    ctx.font=`bold ${Math.round(10*scale)}px 'Barlow Condensed', sans-serif`;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`${Math.round(integ*100)}%`,arcCX,arcCY);
-  }
-
-  // ── Completion ring ──────────────────────────────────
-  if(phase==='playing'){
-    const rx=(CANDY_X+CANDY_W+28)*scale;
-    const ry=(CANDY_Y+22)*scale;
-    const rr=17*scale;
-    ctx.beginPath();
-    ctx.arc(rx,ry,rr,-Math.PI/2,Math.PI*2-Math.PI/2);
-    ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.lineWidth=3*scale; ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(rx,ry,rr,-Math.PI/2,-Math.PI/2+completionRatio*Math.PI*2);
-    ctx.strokeStyle='rgba(255,210,60,0.82)';
-    ctx.lineWidth=3*scale;
-    ctx.shadowColor='rgba(255,200,50,0.6)';
-    ctx.shadowBlur=5*scale;
-    ctx.stroke();
-    ctx.shadowBlur=0;
-    ctx.fillStyle='rgba(255,228,120,0.68)';
-    ctx.font=`${Math.round(8*scale)}px 'DM Mono', monospace`;
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(`${Math.round(completionRatio*100)}%`,rx,ry);
-  }
-
-  // ── Snap flash ──────────────────────────────────────
-  if(phase==='snap'){
-    const flashA=clamp(1-(frame%20)/20,0,0.72);
-    ctx.fillStyle=`rgba(180,0,0,${flashA})`;
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
-
-  // ── Tension vignette ────────────────────────────────
-  if(vignetteRed>0.02){
-    const vig=ctx.createRadialGradient(
-      canvas.width/2,canvas.height/2, canvas.height*0.1,
-      canvas.width/2,canvas.height/2, canvas.width*0.75
-    );
-    vig.addColorStop(0,'rgba(0,0,0,0)');
-    vig.addColorStop(1,`rgba(120,0,0,${vignetteRed})`);
-    ctx.fillStyle=vig; ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
-
+  // End world-space transform
   ctx.restore();
 
-  // DOM vignette element
-  const vEl=document.getElementById('vignette');
-  if(vEl && phase==='playing' && edgeStress>0.3){
-    const vs=clamp((edgeStress-0.3)/0.7,0,0.52);
-    vEl.style.background=`radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, rgba(80,0,0,${vs}) 100%)`;
-  } else if(vEl){ vEl.style.background='none'; }
+  // ── Screen-space overlays (after ctx.restore so no offset applied) ─
+  // Danger vignette
+  if (vignetteRed > 0.01) {
+    const vGrad = ctx.createRadialGradient(
+      canvas.width/2, canvas.height/2, canvas.width * 0.18,
+      canvas.width/2, canvas.height/2, canvas.width * 0.72
+    );
+    vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vGrad.addColorStop(1, `rgba(120,0,0,${vignetteRed * 0.72})`);
+    ctx.fillStyle = vGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Snap blood splatter
+  if (phase === 'snap') {
+    const t = (frame % 24) / 24;
+    ctx.fillStyle = `rgba(140,0,0,${0.55 * (1 - t)})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(70,0,0,0.92)';
+    for (let i = 0; i < 14; i++) {
+      const bX = canvas.width  / 2 + (Math.random() - 0.5) * 260 * scale;
+      const bY = canvas.height / 2 + (Math.random() - 0.5) * 200 * scale;
+      const bR = (Math.random() * 36 + 8) * scale;
+      ctx.beginPath(); ctx.arc(bX, bY, bR, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(110,0,0,0.85)';
+    for (let i = 0; i < 10; i++) {
+      const bX = canvas.width / 2 + (Math.random() - 0.5) * 380 * scale;
+      const bY = canvas.height / 2 + (Math.random() - 0.5) * 250 * scale;
+      const bR = (Math.random() * 42 + 10) * scale;
+      ctx.beginPath(); ctx.arc(bX, bY, bR, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+// ═══════════════════════════════════════════════════════
+// MISSING SECTION — reconstructed from physics constants
+// and game design intent.
+// ═══════════════════════════════════════════════════════
+
+// ── Win condition ─────────────────────────────────────
+function checkWin() {
+  return completionRatio >= COMPLETION_WIN && candyIntegrity > 0;
 }
 
-// ── Game loop ─────────────────────────────────────────
-let lastTime=0;
-function loop(ts){
-  const dt=Math.min((ts-lastTime)/1000, 0.05);
-  lastTime=ts;
+// ── Physics update (called each frame while playing) ──
+function updatePhysics(dt) {
+  if (phase !== 'playing') return;
 
-  if(phase==='intro'){
-    countdownTimer+=dt;
-    if(countdownTimer>=1){
-      countdownTimer=0; countdownVal--;
-      const el=document.getElementById('countdown-display');
-      if(el) el.textContent=countdownVal>0?countdownVal:'GO!';
-      if(countdownVal>0) playTick(660,0.07,0.2);
-      else { playTick(880,0.15,0.3); setTimeout(()=>setPhase('playing'),300); }
+  // Natural stress decay when needle is lifted
+  const decayRate = needleDown ? 0.0006 : 0.0018;
+  for (let i = 0; i < GRID * GRID; i++) {
+    edgeStressGrid[i] = Math.max(0, edgeStressGrid[i] - decayRate * dt / 16);
+  }
+
+  // Passive micro-instability while pressing (perfectly still hands don't exist)
+  if (needleDown && stabCount > 0) {
+    const wobble = BASE_STRESS * (1 + (1 - stability) * INSTABILITY_MULT) * dt / 16;
+    const { gx, gy } = worldToGrid(needleX, needleY);
+    const idx = cellIdx(gx, gy);
+    edgeStressGrid[idx] = Math.min(1, edgeStressGrid[idx] + wobble);
+  }
+
+  // Derive aggregate edge stress (max of all cells)
+  let maxStress = 0;
+  for (let i = 0; i < GRID * GRID; i++) {
+    if (edgeStressGrid[i] > maxStress) maxStress = edgeStressGrid[i];
+  }
+  edgeStress = lerp(edgeStress, maxStress, 0.10);
+
+  // Integrity drain above fracture threshold
+  if (edgeStress > FRACTURE_THRESHOLD) {
+    const drain = (edgeStress - FRACTURE_THRESHOLD) * EDGE_TO_INTEGRITY * 0.0025 * dt / 16;
+    candyIntegrity = Math.max(0, candyIntegrity - drain);
+    heartbeatPhase += 0.10 * dt / 16;
+  }
+
+  // Emit micro-fracture visuals at hottest cell
+  if (edgeStress > 0.58 && Math.random() < 0.022 * dt / 16) {
+    let hotIdx = -1, hotVal = 0;
+    for (let i = 0; i < GRID * GRID; i++) {
+      if (edgeStressGrid[i] > hotVal) { hotVal = edgeStressGrid[i]; hotIdx = i; }
+    }
+    if (hotIdx >= 0 && hotVal > 0.58) {
+      const fgx = hotIdx % GRID;
+      const fgy = Math.floor(hotIdx / GRID);
+      const fx = (CANDY_X + fgx * CELL + CELL / 2) * scale;
+      const fy = (CANDY_Y + fgy * CELL + CELL / 2) * scale;
+      emitCrackSpark(fx, fy, hotVal * 0.3);
+      if (hotVal > 0.82) playMicrocrack(hotVal);
+      fracturePoints.push({
+        x: fx, y: fy,
+        radius: 2 * scale,
+        maxRadius: (5 + 9 * hotVal) * scale,
+        age: 0, severity: hotVal,
+        spokeAngles: Array.from({ length: 3 + Math.floor(Math.random() * 4) },
+          () => Math.random() * Math.PI * 2)
+      });
     }
   }
 
-  if(phase==='playing'||phase==='snap'){
-    updateParticles();
-
-    if (frame % 3 === 0) {
-      const next = new Float32Array(edgeStressGrid);
-      for (let gy = 1; gy < GRID - 1; gy++) {
-        for (let gx = 1; gx < GRID - 1; gx++) {
-          const idx = cellIdx(gx, gy);
-          const cur = edgeStressGrid[idx];
-          if (cur < 0.01) continue;
-          const avg = (
-            edgeStressGrid[cellIdx(gx + 1, gy)] +
-            edgeStressGrid[cellIdx(gx - 1, gy)] +
-            edgeStressGrid[cellIdx(gx, gy + 1)] +
-            edgeStressGrid[cellIdx(gx, gy - 1)]
-          ) / 4;
-          next[idx] = Math.max(0, cur * 0.97 + (avg - cur) * 0.08);
-        }
-      }
-      edgeStressGrid = next;
-    }
-
-    let totalWeak = 0;
-    let maxStress = 0;
-    for (let gy = 1; gy < GRID - 1; gy++) {
-      for (let gx = 1; gx < GRID - 1; gx++) {
-        const idx = cellIdx(gx, gy);
-        const s = edgeStressGrid[idx];
-        const strength = structuralStrength[idx];
-        maxStress = Math.max(maxStress, s);
-        totalWeak += (1 - strength);
-        const threshold = 0.55 - (1 - strength) * 0.2;
-        if (s > threshold && Math.random() < (s - threshold) * 0.06 && phase === 'playing') {
-          const severity = Math.min(1, (s - threshold) * 2.5);
-          const wx = (CANDY_X + gx * CELL + CELL / 2) * scale;
-          const wy = (CANDY_Y + gy * CELL + CELL / 2) * scale;
-          fracturePoints.push({
-            x: wx, y: wy,
-            radius: 4 * scale, maxRadius: (8 + severity * 18) * scale,
-            age: 0, severity,
-            spokeAngles: Array.from({length: Math.round(3 + severity * 5)}, (_, k) => (k / (3 + severity * 5)) * Math.PI * 2 + Math.random() * 0.5)
-          });
-          structuralStrength[idx] *= 0.7;
-          edgeStressGrid[idx] *= 0.5;
-          emitCrackSpark(wx, wy, severity);
-          playMicrocrack(severity);
-          shakeIntensity = Math.max(shakeIntensity, severity * 6);
-        }
-      }
-    }
-
-    edgeStress = maxStress;
-    candyIntegrity = Math.max(0, 1 - totalWeak / (GRID * GRID * 0.6));
-
-    if (candyIntegrity <= 0 && phase === 'playing') {
-      playSnap();
-      shakeIntensity = 20;
-      phase = 'snap';
-      setTimeout(() => setPhase('eliminated'), 800);
-    }
+  // Age + expand fracture points
+  for (let i = fracturePoints.length - 1; i >= 0; i--) {
+    const fp = fracturePoints[i];
+    fp.age++;
+    fp.radius = Math.min(fp.maxRadius, fp.radius + 0.55 * scale);
+    if (fp.age > 90) fracturePoints.splice(i, 1);
   }
 
-  render();
-  rafId=requestAnimationFrame(loop);
+  // Update HUD integrity bar
+  const pct = Math.round(candyIntegrity * 100);
+  const bar = document.getElementById('integrity-bar');
+  if (bar) {
+    const barColor = pct > 50 ? '#ffd93d' : pct > 25 ? '#ff9900' : '#ff4444';
+    bar.style.width = pct + '%';
+    bar.style.background = barColor;
+    bar.style.boxShadow = pct < 25 ? `0 0 8px ${barColor}99` : 'none';
+  }
+
+  // Break if integrity fully depleted
+  if (candyIntegrity <= 0) {
+    triggerInstantFail('integrity-depleted');
+  }
 }
 
-// ── Boot ──────────────────────────────────────────────
+// ── Countdown tick ────────────────────────────────────
+function updateCountdown(dt) {
+  if (phase !== 'countdown') return;
+  countdownTimer += dt;
+  if (countdownTimer >= 1000) {
+    countdownTimer -= 1000;
+    countdownVal--;
+    const disp = document.getElementById('countdown-display');
+    if (countdownVal > 0) {
+      showCinematicCount(countdownVal);
+      if (disp) disp.textContent = String(countdownVal);
+    } else {
+      showCinematicGo();
+      if (disp) disp.textContent = '';
+      // Small delay so "GO!" fully renders before play begins
+      setTimeout(() => setPhase('playing'), 430);
+    }
+  }
+}
+
+// ── Main game loop ────────────────────────────────────
+let lastTimestamp = 0;
+function loop(timestamp) {
+  // Cap dt at 50 ms to survive tab backgrounding
+  const dt = lastTimestamp ? Math.min(timestamp - lastTimestamp, 50) : 16;
+  lastTimestamp = timestamp;
+
+  updateCountdown(dt);
+  updatePhysics(dt);
+  updateParticles();
+
+  if (phase !== 'intro') render();
+
+  rafId = requestAnimationFrame(loop);
+}
+
+// ── Back / menu button ────────────────────────────────
+document.getElementById('back-btn').addEventListener('click', () => {
+  sendBridgeMessage({ type: 'DALGONA_MENU' });
+});
+
+// ── Boot sequence ─────────────────────────────────────
 window.addEventListener('resize', resize);
 resize();
 initGame(pickShape());
 setPhase('intro');
-lastTime=performance.now();
-rafId=requestAnimationFrame(loop);
-window.restartGame = restartGame;
-
-document.getElementById('back-btn').addEventListener('click',function(){
-  sendBridgeMessage({ type: 'DALGONA_MENU' });
-});
+rafId = requestAnimationFrame(loop);
 </script>
 </body>
 </html>
