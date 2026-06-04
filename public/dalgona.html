@@ -945,6 +945,13 @@ function initGame(id){
   lastCarvedSegment = -1;
   messageSent = false;
   bullets = [];
+
+  // Reset sequence timers
+  elimSequenceTimer = 0;
+  elimSequencePhase = 0;
+  victoryTimer = 0;
+  candySeparation = 0;
+
   rebuildOffscreens();
 }
 
@@ -1121,13 +1128,13 @@ function processCarve(){
     const { gx: ogx, gy: ogy } = worldToGrid(needleX, needleY);
     const oidx = cellIdx(ogx, ogy);
     edgeStressGrid[oidx] = Math.min(1, edgeStressGrid[oidx] + 0.06 * excess);
-    candyIntegrity = Math.max(0, candyIntegrity - 0.015 * excess);  // CHANGED: 0.09 -> 0.015
+    candyIntegrity = Math.max(0, candyIntegrity - 0.015 * excess);
     shakeIntensity = Math.max(shakeIntensity, 5 * excess);
     if(candyIntegrity <= 0){ triggerInstantFail('off-path-damage'); }
     return;
   }
 
-  if(needleVel < 0.15) return;  // CHANGED: 0.3 -> 0.15
+  if(needleVel < 0.15) return;
 
   for(let i=0; i<shapePath.length; i++){
     const a = shapePath[i], b = shapePath[(i+1)%shapePath.length];
