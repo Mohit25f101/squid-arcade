@@ -281,17 +281,18 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
-  // 1. Deep Cavern Abyss
+  // 1. Squid Game-style arena - Deep magenta/pink base
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#0a0a0f");
-  grad.addColorStop(0.5, "#060608");
+  grad.addColorStop(0, "#1a0810");
+  grad.addColorStop(0.3, "#0d0406");
+  grad.addColorStop(0.7, "#080204");
   grad.addColorStop(1, "#000000");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // 2. Heavy Industrial Girders & Structures
-  ctx.fillStyle = "#12141a";
-  ctx.strokeStyle = "#1a1e26";
+  // 2. Heavy Industrial Girders & Structures (darker, more ominous)
+  ctx.fillStyle = "#0f0a0d";
+  ctx.strokeStyle = "#1a0e14";
   ctx.lineWidth = 2;
   
   for (let i = 0; i < 6; i++) {
@@ -311,12 +312,20 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
     ctx.stroke();
   }
 
-  // 3. Atmospheric Fog / Cinematic Depth Lighting
+  // 3. Atmospheric Fog - Magenta/Pink tinted for Squid Game feel
   const spotlight = ctx.createRadialGradient(w / 2, h * 0.2, 0, w / 2, h * 0.4, w * 0.9);
-  spotlight.addColorStop(0, "rgba(80, 160, 255, 0.12)");
-  spotlight.addColorStop(0.5, "rgba(50, 100, 180, 0.05)");
+  spotlight.addColorStop(0, "rgba(200, 60, 120, 0.08)");
+  spotlight.addColorStop(0.5, "rgba(140, 40, 80, 0.04)");
   spotlight.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = spotlight;
+  ctx.fillRect(0, 0, w, h);
+  
+  // 4. Additional depth layers (darker fog)
+  const fogGrad = ctx.createLinearGradient(0, h * 0.5, 0, h);
+  fogGrad.addColorStop(0, "rgba(0,0,0,0)");
+  fogGrad.addColorStop(0.6, "rgba(10,4,8,0.4)");
+  fogGrad.addColorStop(1, "rgba(5,2,4,0.7)");
+  ctx.fillStyle = fogGrad;
   ctx.fillRect(0, 0, w, h);
 
   return c;
@@ -380,7 +389,7 @@ function bakeVignette(w: number, h: number): HTMLCanvasElement | OffscreenCanvas
   const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.15, w / 2, h / 2, w * 0.8);
   grad.addColorStop(0, "rgba(0,0,0,0)");
   grad.addColorStop(0.6, "rgba(0,0,0,0.3)");
-  grad.addColorStop(1, "rgba(0,4,12,0.92)");
+  grad.addColorStop(1, "rgba(8,2,4,0.92)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
   return c;
@@ -562,7 +571,9 @@ function updatePlayer(gs: GameState, dtSec: number): void {
       const currentPanel = gs.panels[p.row - 1]?.[p.col];
       if (currentPanel?.safe && !gs.audioEvents.has(`land-${p.row}-${p.col}`)) {
         gs.audioEvents.add(`land-${p.row}-${p.col}`);
-        SoundManager.getInstance().play("jump"); // Safe panel land sound
+        SoundManager.getInstance().play("jump");
+      } else if (currentPanel && !currentPanel.safe && !gs.audioEvents.has(`tension-${p.row}`)) {
+        gs.audioEvents.add(`tension-${p.row}`);
       }
     }
 
@@ -651,15 +662,17 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
   gs.atmosphericT += dtSec * 0.4;
   gs.vignetteIntensity = lerp(gs.vignetteIntensity, gs.vignetteTarget, dtSec * 3);
 
+  // Ambient tension particles
   if (gs.phase === "playing" && getPool().availableCount > 10) {
     gs.ambientDripTimer -= dtSec;
     if (gs.ambientDripTimer <= 0) {
-      gs.ambientDripTimer = 0.8 + Math.random() * 0.6;
+      gs.ambientDripTimer = 1.2 + Math.random() * 0.8;
       const leftEdge = colWorldX(0);
       const rightEdge = colWorldX(2) + PANEL_W;
       const rx = leftEdge + Math.random() * (rightEdge - leftEdge);
       const ry = rowWorldY(gs.currentRow) - (Math.random() * 200 + 50);
-      emitBurst(gs, { x: rx, y: ry, count: 2, r: 60, g: 90, b: 140, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
+      // Pink/magenta tinted particles for tension
+      emitBurst(gs, { x: rx, y: ry, count: 2, r: 100, g: 40, b: 80, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
     }
   }
 
@@ -894,10 +907,12 @@ function renderPanel(
       ctx.fillRect(shimX, 0, 3, PANEL_H);
     }
   }
+  // Subtle glow and highlight
   ctx.fillStyle = `rgba(220,240,255,${glintVal})`;
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-
-  if (panel.safe && isPlayerOn) {
+  
+  // Hover highlight on current target
+  if (isPlayerOn) {
     const glowPulse = 0.6 + Math.sin(atmosphericT * 3) * 0.4;
     ctx.shadowColor = `rgba(${br}, ${bg + 100}, ${bb + 100}, ${glowPulse})`;
     ctx.shadowBlur = 35;
@@ -1411,13 +1426,19 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     if (gs.audioEvents.size > 0) {
       const sm = SoundManager.getInstance();
       for (const ev of gs.audioEvents) {
-        switch (ev) {
-          case "shatter":
-            sm.play("shatter", 0);
-            break;
-          case "victory":
-            sm.play("victory", 0);
-            break;
+        if (ev.startsWith("land-")) {
+          // Already played by SoundManager.getInstance().play("jump")
+        } else if (ev.startsWith("tension-")) {
+          // Tension ambience for unsafe panels - can be added later
+        } else {
+          switch (ev) {
+            case "shatter":
+              sm.play("shatter", 0);
+              break;
+            case "victory":
+              sm.play("victory", 0);
+              break;
+          }
         }
       }
       gs.audioEvents.clear();
