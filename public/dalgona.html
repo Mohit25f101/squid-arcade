@@ -698,38 +698,38 @@ function playSnap() {
 }
 
 const SHAPES = {
-  triangle: () => [
-    {nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}
-  ],
-  circle: () => {
-    const pts = [];
-    for (let i = 0; i < 80; i++) {
-      const a = (i/80)*Math.PI*2;
-      pts.push({nx: 0.5+Math.cos(a)*0.40, ny: 0.5+Math.sin(a)*0.40});
-    }
-    return pts;
-  },
-  star: () => {
-    const pts = [];
-    for (let i = 0; i < 10; i++) {
-      const a = (i/10)*Math.PI*2 - Math.PI/2;
-      const r = i%2===0 ? 0.43 : 0.19;
-      pts.push({nx: 0.5+Math.cos(a)*r, ny: 0.5+Math.sin(a)*r});
-    }
-    return pts;
-  },
+  triangle: () => [{nx:0.50,ny:0.10},{nx:0.88,ny:0.85},{nx:0.12,ny:0.85}],
   umbrella: () => [
-    {nx:0.50,ny:0.90},{nx:0.50,ny:0.76},{nx:0.44,ny:0.76},
-    {nx:0.44,ny:0.70},{nx:0.10,ny:0.70},{nx:0.10,ny:0.58},
-    {nx:0.16,ny:0.44},{nx:0.26,ny:0.34},{nx:0.38,ny:0.28},
-    {nx:0.50,ny:0.26},{nx:0.62,ny:0.28},{nx:0.74,ny:0.34},
-    {nx:0.84,ny:0.44},{nx:0.90,ny:0.58},{nx:0.90,ny:0.70},
-    {nx:0.56,ny:0.70},{nx:0.56,ny:0.76},{nx:0.50,ny:0.76}
+    {nx:0.50,ny:0.90},{nx:0.50,ny:0.76},{nx:0.44,ny:0.76},{nx:0.44,ny:0.70},{nx:0.10,ny:0.70},{nx:0.10,ny:0.58},
+    {nx:0.16,ny:0.44},{nx:0.26,ny:0.34},{nx:0.38,ny:0.28},{nx:0.50,ny:0.26},{nx:0.62,ny:0.28},{nx:0.74,ny:0.34},
+    {nx:0.84,ny:0.44},{nx:0.90,ny:0.58},{nx:0.90,ny:0.70},{nx:0.56,ny:0.70},{nx:0.56,ny:0.76},{nx:0.50,ny:0.76}
   ]
 };
+const SHAPE_ICONS = { triangle:'▲', umbrella:'☂' };
+const SHAPE_NAMES = { triangle:'TRIANGLE', umbrella:'UMBRELLA' };
 
-const SHAPE_ICONS = { triangle:'▲', circle:'●', star:'★', umbrella:'☂' };
-const SHAPE_NAMES = { triangle:'TRIANGLE', circle:'CIRCLE', star:'STAR', umbrella:'UMBRELLA' };
+// Procedurally generate 50+ Polygons and Stars!
+for(let sides=4; sides<=28; sides++) {
+  const id = `polygon_${sides}`;
+  SHAPES[id] = () => {
+    const pts = [];
+    for(let j=0; j<sides; j++) pts.push({nx: 0.5+Math.cos((j/sides)*Math.PI*2 - Math.PI/2)*0.4, ny: 0.5+Math.sin((j/sides)*Math.PI*2 - Math.PI/2)*0.4});
+    return pts;
+  };
+  SHAPE_ICONS[id] = '⬟'; SHAPE_NAMES[id] = `${sides}-SIDED POLYGON`;
+}
+for(let points=4; points<=30; points++) {
+  const id = `star_${points}`;
+  SHAPES[id] = () => {
+    const pts = [];
+    for(let j=0; j<points*2; j++) {
+       const r = j%2===0 ? 0.45 : 0.22;
+       pts.push({nx: 0.5+Math.cos((j/(points*2))*Math.PI*2 - Math.PI/2)*r, ny: 0.5+Math.sin((j/(points*2))*Math.PI*2 - Math.PI/2)*r});
+    }
+    return pts;
+  };
+  SHAPE_ICONS[id] = '★'; SHAPE_NAMES[id] = `${points}-POINT STAR`;
+}
 
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
 function lerp(a,b,t){return a+(b-a)*clamp(t,0,1);}
