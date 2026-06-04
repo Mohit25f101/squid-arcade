@@ -176,7 +176,6 @@ export interface GameStoreState {
   loadFromStorage: () => void;
   saveToStorage: () => void;
 
-  // ── Session & Navigation Management (Phase 7) ─────────────────────────────
   sessionId: string | null;
   sessionHistory: SessionEntry[];
   currentView: "menu" | "briefing" | "game" | "result" | "session-end" | "leaderboard";
@@ -298,13 +297,20 @@ export const useGameStore = create<GameStoreState>()(
         };
       }),
 
-    clearActiveGame: () =>
+    clearActiveGame: () => {
+      if (typeof window !== 'undefined') {
+        const { SoundManager } = require('@/managers/SoundManager');
+        const { musicManager } = require('@/managers/MusicManager');
+        SoundManager.getInstance().stopAll(300);
+        musicManager.stop(300);
+      }
       set({
         activeGame: "menu",
         runtimePhase: "idle",
         eliminationPayload: null,
         currentView: "menu",
-      }),
+      });
+    },
 
     bestScores: {},
     updateBestScore: (gameId, score) =>
@@ -454,7 +460,6 @@ export const useGameStore = create<GameStoreState>()(
       safeLocalSet(HIGHSCORE_KEY, String(hud.highScore));
     },
 
-    // ── Phase 7 Additions ────────────────────────────────────────────────────
     sessionId: null,
     sessionHistory: [],
     currentView: "menu",

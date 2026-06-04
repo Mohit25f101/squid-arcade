@@ -19,26 +19,27 @@ import {
   Line,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { Howl } from "howler";
 import { useGameStore } from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
+import { SoundManager } from "@/managers/SoundManager";
+import { MusicManager } from "@/managers/MusicManager";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * CONSTANTS — world layout, gameplay tunables
  * ────────────────────────────────────────────────────────────────────────────*/
 
-const FIELD_LEN          = 90;          // distance from start line to doll
+const FIELD_LEN          = 90;          
 const FIELD_WIDTH        = 30;
-const FINISH_Z           = -10;         // player Z when crossing finish (near doll)
+const FINISH_Z           = -10;         
 const START_Z            = FIELD_LEN - 10;
 const PLAYER_SPEED       = 8.0;
 const PLAYER_SPRINT_MULT = 1.55;
-const TURN_DURATION      = 0.55;        // seconds doll takes to spin around
-const GRACE_PERIOD       = 0.25;        // grace period when entering RED (seconds)
-const VELOCITY_DEADZONE  = 0.02;        // velocity threshold to ignore small drift
-const RED_DURATION_BASE  = 3.2;         // seconds doll stays facing players
+const TURN_DURATION      = 0.55;        
+const GRACE_PERIOD       = 0.25;        
+const VELOCITY_DEADZONE  = 0.02;        
+const RED_DURATION_BASE  = 3.2;         
 const RED_DURATION_MIN   = 2.0;
-const MOVE_THRESHOLD     = 0.05;        // m/sec — any motion above this in red = death
+const MOVE_THRESHOLD     = 0.05;        
 const NPC_COUNT          = 18;
 const ROUND_TIMER        = 90;
 
@@ -80,53 +81,6 @@ interface PlayerEntity {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * AUDIO
- * ────────────────────────────────────────────────────────────────────────────*/
-
-interface AudioHandles {
-  dollSong: Howl;
-  redLight: Howl;
-  greenLight: Howl;
-  elimination: Howl;
-  victory: Howl;
-  gasp: Howl;
-  heartbeat: Howl;
-  alarm: Howl;
-  beep: Howl;
-  go: Howl;
-  cheer: Howl;
-  step: Howl;
-  shatter: Howl;
-}
-
-function buildAudio(volumes: { master: number; sfx: number; music: number }): AudioHandles {
-  const mk = (src: string, vol: number, opts: Record<string, any> = {}) =>
-    new Howl({
-      src: [src],
-      volume: Math.max(0, Math.min(1, vol * volumes.master)),
-      html5: false,
-      preload: true,
-      ...opts,
-    } as ConstructorParameters<typeof Howl>[0]);
-
-  return {
-    dollSong:    mk("/audio/sfx/squid_game_doll_song.mp3", 1.0 * volumes.music),
-    redLight:    mk("/audio/sfx/red_light.mp3",            0.85 * volumes.sfx),
-    greenLight:  mk("/audio/sfx/green_light.mp3",          0.6  * volumes.sfx),
-    elimination: mk("/audio/sfx/elimination.mp3",          0.9  * volumes.sfx),
-    victory:     mk("/audio/sfx/victory.mp3",              0.9  * volumes.sfx),
-    gasp:        mk("/audio/sfx/gasp.mp3",                 0.7  * volumes.sfx),
-    heartbeat:   mk("/audio/sfx/heartbeat.mp3",            0.55 * volumes.sfx, { loop: true }),
-    alarm:       mk("/audio/sfx/alarm.mp3",                0.5  * volumes.sfx),
-    beep:        mk("/audio/sfx/beep.mp3",                 0.6  * volumes.sfx),
-    go:          mk("/audio/sfx/go.mp3",                   0.8  * volumes.sfx),
-    cheer:       mk("/audio/sfx/cheer.mp3",                0.7  * volumes.sfx),
-    step:        mk("/audio/sfx/step.mp3",                 0.25 * volumes.sfx),
-    shatter:     mk("/audio/sfx/shatter.mp3",              0.7  * volumes.sfx),
-  };
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
  * DOLL MODEL (PROCEDURAL) - ENHANCED YOUNG-HEE STYLE
  * ────────────────────────────────────────────────────────────────────────────*/
 
@@ -148,7 +102,6 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
   useFrame((state, dt) => {
     if (!group.current) return;
     
-    // Smooth interpolated body rotation
     const lerpSpeed = 0.06;
     group.current.rotation.y = THREE.MathUtils.lerp(
       group.current.rotation.y, 
@@ -156,7 +109,6 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
       lerpSpeed
     );
     
-    // Head rotation lags slightly behind body for creepy effect
     if (headRef.current) {
       const headTargetY = targetRotation * 1.15;
       headRef.current.rotation.y = THREE.MathUtils.lerp(
@@ -187,33 +139,26 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
 
   return (
     <group ref={group} position={position}>
-      {/* Body group */}
       <group ref={bodyRef}>
-        {/* Dress */}
         <mesh position={[0, 1.8, 0]}>
           <coneGeometry args={[1.5, 3.6, 32]} />
           <meshStandardMaterial color="#f9a03f" roughness={0.7} />
         </mesh>
-        {/* Shirt */}
         <mesh position={[0, 3.2, 0]}>
           <cylinderGeometry args={[0.7, 1.2, 1.0, 32]} />
           <meshStandardMaterial color="#fde74c" roughness={0.8} />
         </mesh>
       </group>
       
-      {/* Head group - rotates independently */}
       <group ref={headRef}>
-        {/* Head */}
         <mesh position={[0, 4.3, 0]}>
           <sphereGeometry args={[0.7, 32, 32]} />
           <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
         </mesh>
-        {/* Hair (Black) */}
         <mesh position={[0, 4.4, -0.1]}>
           <sphereGeometry args={[0.72, 32, 32]} />
           <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
         </mesh>
-        {/* Pigtails */}
         <mesh position={[-0.8, 4.2, -0.2]}>
           <sphereGeometry args={[0.3, 16, 16]} />
           <meshStandardMaterial color="#0a0a0a" />
@@ -222,7 +167,6 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
           <sphereGeometry args={[0.3, 16, 16]} />
           <meshStandardMaterial color="#0a0a0a" />
         </mesh>
-        {/* Eyes */}
         <mesh position={[-0.25, 4.4, 0.62]} rotation={[Math.PI/2, 0, 0]}>
           <cylinderGeometry args={[0.08, 0.08, 0.1, 16]} />
           <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={eyeIntensity} />
@@ -291,7 +235,6 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
     const speed = Math.abs(player.vz);
     const isSprinting = speed > 10;
     
-    // Determine animation state
     if (!player.alive) {
       animStateRef.current = "fall";
     } else if (player.finished) {
@@ -304,14 +247,12 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       animStateRef.current = "idle";
     }
 
-    // Fall animation
     if (!player.alive) {
       const t = Math.min(1, player.fallProgress);
       group.current.rotation.x = -player.fallAxis[0] * t * Math.PI / 2;
       group.current.rotation.z = -player.fallAxis[2] * t * Math.PI / 2;
       group.current.position.y = THREE.MathUtils.lerp(0, -0.35, t);
       
-      // Limbs collapse
       if (legLRef.current) legLRef.current.rotation.x = THREE.MathUtils.lerp(0, 1.2, t);
       if (legRRef.current) legRRef.current.rotation.x = THREE.MathUtils.lerp(0, -1.2, t);
       if (armLRef.current) armLRef.current.rotation.x = THREE.MathUtils.lerp(0, 1.8, t);
@@ -319,14 +260,12 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       return;
     }
 
-    // Reset rotation
     group.current.rotation.x = 0;
     group.current.rotation.z = 0;
 
     const t = state.clock.elapsedTime;
 
     if (animStateRef.current === "victory") {
-      // Victory pose
       group.current.position.y = 0.05 + Math.sin(t * 4) * 0.03;
       if (armLRef.current) armLRef.current.rotation.x = -2.8;
       if (armRRef.current) armRRef.current.rotation.x = -2.8;
@@ -336,11 +275,8 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       if (legRRef.current) legRRef.current.rotation.x = 0;
       if (headRef.current) headRef.current.rotation.x = -0.2;
     } else if (animStateRef.current === "freeze") {
-      // Instant freeze - hold position
       group.current.position.y = 0;
-      // Keep last pose frozen
     } else if (animStateRef.current === "idle") {
-      // Idle breathing
       animPhaseRef.current = t;
       const breathe = Math.sin(t * 2.5) * 0.015;
       group.current.position.y = breathe;
@@ -355,32 +291,26 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       if (legLRef.current) legLRef.current.rotation.x = THREE.MathUtils.lerp(legLRef.current.rotation.x, 0, 0.1);
       if (legRRef.current) legRRef.current.rotation.x = THREE.MathUtils.lerp(legRRef.current.rotation.x, 0, 0.1);
     } else if (animStateRef.current === "run" || animStateRef.current === "sprint") {
-      // Running/Sprinting animation
       const freq = animStateRef.current === "sprint" ? 14 : 11;
       animPhaseRef.current += delta * freq;
       
       const swingAmount = animStateRef.current === "sprint" ? 0.65 : 0.5;
       const swing = Math.sin(animPhaseRef.current) * swingAmount;
       
-      // Leg animation
       if (legLRef.current) legLRef.current.rotation.x = swing;
       if (legRRef.current) legRRef.current.rotation.x = -swing;
       
-      // Arm swing (opposite to legs)
       if (armLRef.current) armLRef.current.rotation.x = -swing * 0.75;
       if (armRRef.current) armRRef.current.rotation.x = swing * 0.75;
       
-      // Body bob
       const bob = Math.abs(Math.sin(animPhaseRef.current)) * (animStateRef.current === "sprint" ? 0.08 : 0.06);
       group.current.position.y = bob;
       
-      // Forward lean when sprinting
       if (torsoRef.current) {
         const lean = animStateRef.current === "sprint" ? -0.15 : -0.08;
         torsoRef.current.rotation.x = THREE.MathUtils.lerp(torsoRef.current.rotation.x, lean, 0.1);
       }
       
-      // Head bob
       if (headRef.current) {
         headRef.current.rotation.x = Math.sin(animPhaseRef.current * 2) * 0.04;
       }
@@ -389,18 +319,15 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 
   return (
     <group ref={group}>
-      {/* Legs */}
       <group ref={legLRef} position={[-0.14, 0.92, 0]}>
         <mesh position={[0, -0.42, 0]} castShadow>
           <cylinderGeometry args={[0.09, 0.085, 0.84, 12]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Knee detail */}
         <mesh position={[0, -0.2, 0]} castShadow>
           <sphereGeometry args={[0.1, 10, 10]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
         </mesh>
-        {/* Shoe */}
         <mesh position={[0, -0.87, 0.05]} castShadow>
           <boxGeometry args={[0.14, 0.08, 0.22]} />
           <meshStandardMaterial color="#f5f5f5" roughness={0.6} />
@@ -416,12 +343,10 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
           <cylinderGeometry args={[0.09, 0.085, 0.84, 12]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Knee detail */}
         <mesh position={[0, -0.2, 0]} castShadow>
           <sphereGeometry args={[0.1, 10, 10]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
         </mesh>
-        {/* Shoe */}
         <mesh position={[0, -0.87, 0.05]} castShadow>
           <boxGeometry args={[0.14, 0.08, 0.22]} />
           <meshStandardMaterial color="#f5f5f5" roughness={0.6} />
@@ -432,18 +357,15 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
         </mesh>
       </group>
 
-      {/* Torso */}
       <group ref={torsoRef}>
         <mesh position={[0, 1.25, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.45, 0.65, 0.26]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Jacket zipper */}
         <mesh position={[0, 1.25, 0.135]} castShadow>
           <boxGeometry args={[0.012, 0.6, 0.01]} />
           <meshStandardMaterial color="#0d5a4d" roughness={0.4} />
         </mesh>
-        {/* Chest pockets */}
         <mesh position={[-0.12, 1.35, 0.135]} castShadow>
           <boxGeometry args={[0.08, 0.1, 0.01]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
@@ -452,31 +374,26 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
           <boxGeometry args={[0.08, 0.1, 0.01]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
         </mesh>
-        {/* Waist band */}
         <mesh position={[0, 0.93, 0]} castShadow>
           <cylinderGeometry args={[0.24, 0.24, 0.08, 16]} />
           <meshStandardMaterial color="#0d5a4d" roughness={0.7} />
         </mesh>
       </group>
 
-      {/* Neck */}
       <mesh position={[0, 1.62, 0]} castShadow>
         <cylinderGeometry args={[0.08, 0.09, 0.12, 12]} />
         <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
       </mesh>
 
-      {/* Head */}
       <group ref={headRef} position={[0, 1.78, 0]}>
         <mesh castShadow receiveShadow>
           <sphereGeometry args={[0.19, 20, 20]} />
           <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
         </mesh>
-        {/* Hair */}
         <mesh position={[0, 0.08, 0]} castShadow>
           <sphereGeometry args={[0.195, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
           <meshStandardMaterial color="#2a2a2a" roughness={0.9} />
         </mesh>
-        {/* Eyes */}
         <mesh position={[-0.08, 0.04, 0.17]}>
           <sphereGeometry args={[0.02, 8, 8]} />
           <meshStandardMaterial color="#1a1a1a" />
@@ -487,24 +404,19 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
         </mesh>
       </group>
 
-      {/* Arms */}
       <group ref={armLRef} position={[-0.3, 1.48, 0]}>
-        {/* Upper arm */}
         <mesh position={[0, -0.22, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Elbow */}
         <mesh position={[0, -0.44, 0]} castShadow>
           <sphereGeometry args={[0.072, 10, 10]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
         </mesh>
-        {/* Forearm */}
         <mesh position={[0, -0.66, 0]} castShadow>
           <cylinderGeometry args={[0.065, 0.06, 0.4, 10]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Hand */}
         <mesh position={[0, -0.88, 0]} castShadow>
           <sphereGeometry args={[0.07, 10, 10]} />
           <meshStandardMaterial color="#ffe1d4" roughness={0.6} />
@@ -512,29 +424,24 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       </group>
 
       <group ref={armRRef} position={[0.3, 1.48, 0]}>
-        {/* Upper arm */}
         <mesh position={[0, -0.22, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Elbow */}
         <mesh position={[0, -0.44, 0]} castShadow>
           <sphereGeometry args={[0.072, 10, 10]} />
           <meshStandardMaterial color="#158070" roughness={0.8} />
         </mesh>
-        {/* Forearm */}
         <mesh position={[0, -0.66, 0]} castShadow>
           <cylinderGeometry args={[0.065, 0.06, 0.4, 10]} />
           <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
         </mesh>
-        {/* Hand */}
         <mesh position={[0, -0.88, 0]} castShadow>
           <sphereGeometry args={[0.07, 10, 10]} />
           <meshStandardMaterial color="#ffe1d4" roughness={0.6} />
         </mesh>
       </group>
       
-      {/* Player number badge */}
       <Html position={[0, 1.2, -0.15]} center distanceFactor={6} occlude={false}>
         <div
           style={{
@@ -551,7 +458,6 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
         </div>
       </Html>
 
-      {/* Blood pool when eliminated */}
       {!player.alive && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[0.6 + player.fallProgress * 0.45, 20]} />
@@ -592,16 +498,13 @@ function Guard({
     if (!group.current) return;
     const t = state.clock.elapsedTime;
 
-    // Breathing animation
     if (torsoRef.current && !isAiming) {
       const breathCycle = Math.sin(t * 1.5) * 0.012;
       torsoRef.current.scale.y = 1 + breathCycle;
       torsoRef.current.position.y = 1.3 + breathCycle * 0.5;
     }
 
-    // Aiming pose
     if (isAiming && leftArmRef.current && rightArmRef.current && rifleRef.current) {
-      // Raise arms to aim
       leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -1.4, 0.12);
       leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.3, 0.12);
       rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -1.4, 0.12);
@@ -609,12 +512,10 @@ function Guard({
       rifleRef.current.rotation.x = THREE.MathUtils.lerp(rifleRef.current.rotation.x, -Math.PI / 2, 0.12);
       rifleRef.current.position.z = THREE.MathUtils.lerp(rifleRef.current.position.z, 0.4, 0.12);
 
-      // Slight aiming sway
       if (torsoRef.current) {
         torsoRef.current.rotation.x = Math.sin(t * 2) * 0.01;
       }
     } else {
-      // Return to idle
       if (leftArmRef.current) {
         leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0.15, 0.1);
         leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.15, 0.1);
@@ -629,7 +530,6 @@ function Guard({
       }
     }
 
-    // Recoil animation when firing
     if (isFiring && rifleRef.current && torsoRef.current) {
       const recoilPhase = (Math.sin(t * 35) + 1) * 0.5;
       rifleRef.current.position.z -= recoilPhase * 0.08;
@@ -645,7 +545,6 @@ function Guard({
 
   return (
     <group ref={group} position={position} rotation={[0, rotationY, 0]}>
-      {/* Boots */}
       <mesh position={[-0.13, 0.08, 0]} castShadow>
         <boxGeometry args={[0.18, 0.16, 0.26]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
@@ -655,7 +554,6 @@ function Guard({
         <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
       </mesh>
 
-      {/* Legs */}
       <mesh position={[-0.13, 0.55, 0]} castShadow>
         <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
         <meshStandardMaterial color="#e34a8a" roughness={0.75} />
@@ -665,7 +563,6 @@ function Guard({
         <meshStandardMaterial color="#e34a8a" roughness={0.75} />
       </mesh>
 
-      {/* Pelvis/Belt */}
       <mesh position={[0, 1.0, 0]} castShadow>
         <cylinderGeometry args={[0.22, 0.25, 0.12, 16]} />
         <meshStandardMaterial color="#c43278" roughness={0.8} />
@@ -675,37 +572,31 @@ function Guard({
         <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
       </mesh>
 
-      {/* Torso */}
       <group ref={torsoRef}>
         <mesh position={[0, 1.3, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.5, 0.75, 0.28]} />
           <meshStandardMaterial color="#e34a8a" roughness={0.75} />
         </mesh>
-        {/* Chest details */}
         <mesh position={[0, 1.45, 0.145]} castShadow>
           <boxGeometry args={[0.3, 0.4, 0.02]} />
           <meshStandardMaterial color="#c43278" roughness={0.8} />
         </mesh>
-        {/* Zipper */}
         <mesh position={[0, 1.45, 0.16]} castShadow>
           <boxGeometry args={[0.015, 0.45, 0.01]} />
           <meshStandardMaterial color="#888888" roughness={0.3} metalness={0.6} />
         </mesh>
       </group>
 
-      {/* Neck */}
       <mesh position={[0, 1.75, 0]} castShadow>
         <cylinderGeometry args={[0.1, 0.11, 0.15, 12]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
       </mesh>
 
-      {/* Head - Black Mask */}
       <mesh position={[0, 1.95, 0]} castShadow receiveShadow>
         <sphereGeometry args={[0.24, 20, 20]} />
         <meshStandardMaterial color="#0a0a0a" roughness={0.3} metalness={0.1} />
       </mesh>
 
-      {/* Mask Shape Symbol (Square) */}
       <mesh position={[0, 1.95, 0.24]}>
         <planeGeometry args={[0.22, 0.22]} />
         <meshBasicMaterial color="#ffffff" />
@@ -715,7 +606,6 @@ function Guard({
         <meshBasicMaterial color="#0a0a0a" />
       </mesh>
 
-      {/* Left Arm */}
       <group ref={leftArmRef} position={[-0.35, 1.5, 0]}>
         <mesh position={[0, -0.3, 0]} castShadow>
           <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
@@ -725,14 +615,12 @@ function Guard({
           <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
           <meshStandardMaterial color="#e34a8a" roughness={0.75} />
         </mesh>
-        {/* Glove */}
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />
           <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
         </mesh>
       </group>
 
-      {/* Right Arm */}
       <group ref={rightArmRef} position={[0.35, 1.5, 0]}>
         <mesh position={[0, -0.3, 0]} castShadow>
           <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
@@ -742,47 +630,38 @@ function Guard({
           <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
           <meshStandardMaterial color="#e34a8a" roughness={0.75} />
         </mesh>
-        {/* Glove */}
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />
           <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
         </mesh>
       </group>
 
-      {/* Rifle */}
       <group ref={rifleRef} position={[0, 1.15, 0.2]} rotation={[Math.PI / 2.5, 0, 0]}>
-        {/* Stock */}
         <mesh position={[0, 0, -0.25]} castShadow>
           <boxGeometry args={[0.08, 0.15, 0.3]} />
           <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
         </mesh>
-        {/* Receiver */}
         <mesh position={[0, 0, 0]} castShadow>
           <boxGeometry args={[0.06, 0.1, 0.35]} />
           <meshStandardMaterial color="#2a2a2a" roughness={0.4} metalness={0.3} />
         </mesh>
-        {/* Barrel */}
         <mesh position={[0, 0, 0.35]} castShadow>
           <cylinderGeometry args={[0.022, 0.025, 0.5, 12]} />
           <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.5} />
         </mesh>
-        {/* Front sight */}
         <mesh position={[0, 0.04, 0.55]} castShadow>
           <boxGeometry args={[0.01, 0.03, 0.01]} />
           <meshStandardMaterial color="#333333" roughness={0.4} />
         </mesh>
-        {/* Magazine */}
         <mesh position={[0, -0.12, 0.05]} castShadow>
           <boxGeometry args={[0.04, 0.18, 0.1]} />
           <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
         </mesh>
-        {/* Scope */}
         <mesh position={[0, 0.08, 0.1]} castShadow>
           <cylinderGeometry args={[0.025, 0.025, 0.15, 16]} />
           <meshStandardMaterial color="#0a0a0a" roughness={0.2} metalness={0.4} />
         </mesh>
         
-        {/* Muzzle flash light */}
         <pointLight
           ref={muzzleFlashRef}
           position={[0, 0, 0.62]}
@@ -812,7 +691,6 @@ function GuardLasers() {
 
   useFrame((state) => {
     if (!group.current) return;
-    // Update will trigger slight sweep movement over time natively
     group.current.rotation.y = state.clock.elapsedTime * 0.001;
   });
 
@@ -915,7 +793,6 @@ function Arena({
         color="#000"
       />
       
-      {/* Guards at finish line */}
       <Guard 
         position={[-FIELD_WIDTH / 2 + 2, 0, FINISH_Z + 1.5]} 
         rotationY={Math.PI / 2} 
@@ -932,13 +809,11 @@ function Arena({
       <Guard position={[-FIELD_WIDTH / 2 + 4, 0, FINISH_Z - 2]} rotationY={Math.PI / 3} />
       <Guard position={[FIELD_WIDTH / 2 - 4, 0, FINISH_Z - 2]} rotationY={-Math.PI / 3} />
       
-      {/* Guards along walls */}
       <Guard position={[-FIELD_WIDTH / 2 + 1, 0, START_Z - 20]} rotationY={Math.PI / 2} />
       <Guard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
       <Guard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
       <Guard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
 
-      {/* Guard laser sights during RED LIGHT */}
       {isRed && <GuardLasers />}
     </group>
   );
@@ -1013,7 +888,6 @@ function FollowCamera({
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface SceneProps {
-  audioRef: React.MutableRefObject<AudioHandles | null>;
   onGameOver: (phase: GamePhase, score: number) => void;
   onHudUpdate: (data: {
     timeLeft: number;
@@ -1027,7 +901,7 @@ interface SceneProps {
   resetSignal: number;
 }
 
-function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: SceneProps) {
+function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: SceneProps) {
   const playersRef    = useRef<PlayerEntity[]>([]);
   const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
   const turnTRef      = useRef(0);     
@@ -1038,7 +912,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const timeLeftRef   = useRef(ROUND_TIMER);
   const scoreRef      = useRef(0);
   const shakeRef      = useRef(0);
-  const dollSongIdRef = useRef<number | null>(null);
   const lastStepRef   = useRef(0);
   const fakeOutChanceRef = useRef(0);
   const aliveCountRef    = useRef(NPC_COUNT + 1);
@@ -1049,9 +922,24 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const elimTimerRef  = useRef(0);
   const eliminationGuardRef = useRef<{ guardIdx: number; targetPos: [number, number, number] } | null>(null);
 
-  // Lightweight Gunshot Tracer references
   const shotLineRef = useRef<THREE.Line>(null);
   const shotTimerRef = useRef<number>(0);
+
+  const handleDollSongEnd = useCallback(() => {
+    if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
+      lightPhaseRef.current = LightPhase.WARNING;
+      turnTRef.current = 0;
+      SoundManager.getInstance().play("countdown_beep" as any);
+    }
+  }, []);
+
+  const startDollSong = useCallback(() => {
+    MusicManager.getInstance().play("rlgl_green", 0, handleDollSongEnd);
+  }, [handleDollSongEnd]);
+
+  const stopDollSong = useCallback(() => {
+    MusicManager.getInstance().stop(220);
+  }, []);
 
   useEffect(() => {
     const arr: PlayerEntity[] = [];
@@ -1108,9 +996,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     elimStateRef.current  = "idle";
     elimTimerRef.current  = 0;
     
-    // Reset sync state
     gamePhaseRef.current  = GamePhase.COUNTDOWN;
-    
     countdownRef.current  = 3;
     timeLeftRef.current   = ROUND_TIMER;
     scoreRef.current      = 0;
@@ -1125,65 +1011,18 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       shotLineRef.current.visible = false;
     }
 
-    const a = audioRef.current;
-    if (a) {
-      if (dollSongIdRef.current !== null) a.dollSong.stop(dollSongIdRef.current);
-      dollSongIdRef.current = null;
-      a.heartbeat.stop();
-    }
-  }, [resetSignal, audioRef]);
+    stopDollSong();
+    SoundManager.getInstance().stopLoop("heartbeat" as any, 0);
 
-  const startDollSong = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (dollSongIdRef.current !== null) {
-      a.dollSong.stop(dollSongIdRef.current);
-    }
-    const id = a.dollSong.play();
-    dollSongIdRef.current = typeof id === "number" ? id : null;
-  }, [audioRef]);
-
-  const stopDollSong = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (dollSongIdRef.current !== null) {
-      a.dollSong.fade(a.dollSong.volume(dollSongIdRef.current) as number, 0, 200, dollSongIdRef.current);
-      const id = dollSongIdRef.current;
-      setTimeout(() => a.dollSong.stop(id), 220);
-      dollSongIdRef.current = null;
-    }
-  }, [audioRef]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    const onEnd = () => {
-      if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
-        lightPhaseRef.current = LightPhase.WARNING;
-        turnTRef.current      = 0;
-        dollSongIdRef.current = null;
-        a.beep.play();
-      }
-    };
-    a.dollSong.on("end", onEnd);
-    return () => {
-      a.dollSong.off("end", onEnd);
-    };
-  }, [audioRef]);
+  }, [resetSignal, stopDollSong]);
 
   const countdownLastIntRef = useRef(3);
 
   useFrame((_, rawDt) => {
     if (pausedRef.current) return;
     const dt = Math.min(rawDt, 0.05);
-    
     const snap = inputManager.snapshot();
-
-    const a = audioRef.current;
-    if (!a) {
-      inputManager.endFrame();
-      return;
-    }
+    const sm = SoundManager.getInstance();
 
     const players = playersRef.current;
     const human   = players[0];
@@ -1192,7 +1031,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       return;
     }
 
-    // Animate structural bullet tracer line fading
     if (shotTimerRef.current > 0 && shotLineRef.current) {
       shotTimerRef.current -= dt;
       const mat = shotLineRef.current.material as THREE.LineBasicMaterial;
@@ -1207,12 +1045,12 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       const intNow = Math.ceil(countdownRef.current);
       if (intNow !== countdownLastIntRef.current) {
         countdownLastIntRef.current = intNow;
-        if (intNow > 0) a.beep.play();
+        if (intNow > 0) sm.play("countdown_beep" as any);
       }
       if (countdownRef.current <= 0) {
         gamePhaseRef.current = GamePhase.PLAYING;
         useGameStore.getState().setRuntimePhase("playing");
-        a.go.play();
+        sm.play("countdown_go" as any);
         startDollSong();
         lightPhaseRef.current = LightPhase.GREEN;
       }
@@ -1232,7 +1070,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     if (timeLeftRef.current <= 0) {
       gamePhaseRef.current = GamePhase.TIMEOUT;
       stopDollSong();
-      a.heartbeat.stop();
+      sm.stopLoop("heartbeat" as any, 300);
       onGameOver(GamePhase.TIMEOUT, Math.floor(scoreRef.current));
       inputManager.endFrame();
       return;
@@ -1249,8 +1087,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         redTimerRef.current = 0;
         graceTimerRef.current = 0;
         dollRotationRef.current = Math.PI;
-        a.redLight.play();
-        if (!a.heartbeat.playing()) a.heartbeat.play();
+        sm.play("scan_tone" as any);
+        sm.loop("heartbeat" as any);
       }
     } else if (lp === LightPhase.RED) {
       redTimerRef.current += dt;
@@ -1280,7 +1118,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         lastStepRef.current += dt;
         if (lastStepRef.current > 0.32) {
           lastStepRef.current = 0;
-          a.step.play();
+          sm.play("player_step" as any, 50, 0.1);
         }
       }
 
@@ -1292,9 +1130,9 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         gamePhaseRef.current = GamePhase.VICTORY; 
         
         stopDollSong();
-        a.heartbeat.stop();
-        a.victory.play();
-        a.cheer.play();
+        sm.stopLoop("heartbeat" as any, 300);
+        sm.play("player_victory" as any);
+        sm.play("crowd_cheer" as any);
         
         const timeBonus = Math.floor(timeLeftRef.current * 50);
         const speedBonus = timeLeftRef.current > 60 ? 2000 : timeLeftRef.current > 45 ? 1000 : 0;
@@ -1352,9 +1190,9 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     if (lp === LightPhase.RED) {
       if (human.alive && !human.finished && Math.abs(human.vz) > 0.01) {
         const dangerLevel = Math.min(1, Math.abs(human.vz) / MOVE_THRESHOLD);
-        a.heartbeat.volume(0.55 + dangerLevel * 0.35);
+        sm.setHeartbeatIntensity?.(0.55 + dangerLevel * 0.35);
       } else {
-        a.heartbeat.volume(0.55);
+        sm.setHeartbeatIntensity?.(0.55);
       }
 
       if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
@@ -1367,7 +1205,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         }
       }
       
-      // Elimination sequence state machine
       if (elimStateRef.current !== "idle") {
         elimTimerRef.current += dt;
         
@@ -1379,7 +1216,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
             if (elimTimerRef.current >= 0.1) {
               elimStateRef.current = "audio";
               elimTimerRef.current = 0;
-              a.elimination.play();
+              sm.play("player_eliminated" as any);
             }
             break;
             
@@ -1410,10 +1247,10 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
               elimTimerRef.current = 0;
               human.alive = false;
               human.fallProgress = 0;
-              a.shatter.play();
-              a.gasp.play();
+              sm.play("shatter" as any);
+              sm.play("crowd_gasp" as any);
               stopDollSong();
-              a.heartbeat.stop();
+              sm.stopLoop("heartbeat" as any, 300);
             }
             break;
             
@@ -1436,7 +1273,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
           if (Math.abs(p.vz) > VELOCITY_DEADZONE) {
             p.alive = false;
             p.fallProgress = 0;
-            a.shatter.play();
+            sm.play("shatter" as any);
           }
         }
       }
@@ -1479,7 +1316,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         shake={shakeRef.current}
       />
       
-      {/* Lighting */}
       <ambientLight 
         intensity={isRed ? 0.25 : 0.65} 
         color={isRed ? "#4a0808" : "#ffe8c4"} 
@@ -1596,38 +1432,31 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     setRuntimePhase("countdown");
   }, [setRuntimePhase]);
 
-  const audioRef = useRef<AudioHandles | null>(null);
   useEffect(() => {
-    audioRef.current = buildAudio({
-      master: settings.masterVolume,
-      sfx:    settings.sfxVolume,
-      music:  settings.musicVolume,
-    });
+    const sm = SoundManager.getInstance();
+    const mm = MusicManager.getInstance();
+    sm.preload([
+      "player_step", "player_jump", "player_land",
+      "player_eliminated", "player_victory",
+      "heartbeat", "shatter", "crowd_gasp", "crowd_cheer", "countdown_beep", "countdown_go", "scan_tone"
+    ] as any[]);
+    
     return () => {
-      const a = audioRef.current;
-      if (!a) return;
-      Object.values(a).forEach((h) => h.unload());
-      audioRef.current = null;
+      sm.stopAll(0);
+      mm.stop(0);
     };
   }, []);
 
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    const m = settings.masterVolume;
-    a.dollSong.volume(1.0 * settings.musicVolume * m);
-    a.redLight.volume(0.85 * settings.sfxVolume * m);
-    a.greenLight.volume(0.6 * settings.sfxVolume * m);
-    a.elimination.volume(0.9 * settings.sfxVolume * m);
-    a.victory.volume(0.9 * settings.sfxVolume * m);
-    a.gasp.volume(0.7 * settings.sfxVolume * m);
-    a.heartbeat.volume(0.55 * settings.sfxVolume * m);
-    a.alarm.volume(0.5 * settings.sfxVolume * m);
-    a.beep.volume(0.6 * settings.sfxVolume * m);
-    a.go.volume(0.8 * settings.sfxVolume * m);
-    a.cheer.volume(0.7 * settings.sfxVolume * m);
-    a.step.volume(0.25 * settings.sfxVolume * m);
-    a.shatter.volume(0.7 * settings.sfxVolume * m);
+    const sm = SoundManager.getInstance();
+    const mm = MusicManager.getInstance();
+    // Use the SoundManager to store the volume state universally 
+    sm.setMasterVolume(settings.masterVolume);
+    sm.setSFXVolume(settings.sfxVolume);
+    sm.setMusicVolume(settings.musicVolume); // FIXED: Used `sm` instead of `mm`
+    
+    // Command the MusicManager to pull the updated multipliers from the SoundManager
+    mm.updateVolume();
   }, [settings.masterVolume, settings.sfxVolume, settings.musicVolume]);
 
   const inputRef = useRef({ forward: false, sprint: false });
@@ -1635,9 +1464,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Escape") {
-        if (audioRef.current) {
-          Object.values(audioRef.current).forEach((h) => h.stop());
-        }
+        SoundManager.getInstance().stopAll(0);
+        MusicManager.getInstance().stop(0);
         onExit?.();
         return;
       }
@@ -1663,20 +1491,18 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 
   const pausedRef = useRef(false);
   const [paused, setPaused] = useState(false);
+  
   const togglePause = useCallback(() => {
     setPaused((p) => {
       pausedRef.current = !p;
-      const a = audioRef.current;
-      if (a) {
-        if (!p) {
-          a.heartbeat.pause();
-          if (a.dollSong.playing()) a.dollSong.pause();
-        } else {
-          a.heartbeat.play();
-          if (!a.dollSong.playing() && (a.dollSong as unknown as { _state?: string })._state === "paused") {
-            a.dollSong.play();
-          }
-        }
+      const sm = SoundManager.getInstance();
+      const mm = MusicManager.getInstance();
+      if (!p) {
+        sm.stopLoop("heartbeat" as any, 0);
+        mm.pause();
+      } else {
+        sm.loop("heartbeat" as any);
+        mm.resume();
       }
       return !p;
     });
@@ -1743,7 +1569,6 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       >
         <Suspense fallback={null}>
           <Scene
-            audioRef={audioRef}
             onGameOver={handleGameOver}
             onHudUpdate={handleHudUpdate}
             pausedRef={pausedRef}
@@ -1786,7 +1611,11 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
             RESUME
           </button>
           {onExit && (
-            <button onClick={onExit} data-testid="rlgl3d-pause-exit" style={btnStyle("#ff0066")}>
+            <button onClick={() => {
+              SoundManager.getInstance().stopAll(0);
+              MusicManager.getInstance().stop(0);
+              onExit();
+            }} data-testid="rlgl3d-pause-exit" style={btnStyle("#ff0066")}>
               EXIT TO MENU
             </button>
           )}
@@ -1880,7 +1709,11 @@ function HUDOverlay({
         <div style={{ display: "flex", gap: 12, pointerEvents: "auto" }}>
           {onExit && (
             <button
-              onClick={onExit}
+              onClick={() => {
+                SoundManager.getInstance().stopAll(0);
+                MusicManager.getInstance().stop(0);
+                onExit();
+              }}
               data-testid="rlgl3d-exit-btn"
               style={{
                 padding: "8px 14px",
@@ -2069,7 +1902,11 @@ function EndScreen({
           PLAY AGAIN
         </button>
         {onExit && (
-          <button data-testid="rlgl3d-end-exit" onClick={onExit} style={btnStyle("#ff0066")}>
+          <button data-testid="rlgl3d-end-exit" onClick={() => {
+            SoundManager.getInstance().stopAll(0);
+            MusicManager.getInstance().stop(0);
+            onExit();
+          }} style={btnStyle("#ff0066")}>
             ← MENU
           </button>
         )}

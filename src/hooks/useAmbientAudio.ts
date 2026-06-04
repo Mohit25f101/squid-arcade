@@ -9,13 +9,11 @@ import { useGameStore, selectRuntimePhase } from "../store/gameStore";
 import type { SoundId } from "../managers/SoundManager";
 
 // ─── Layered ambient config per phase ─────────────────────────────────────────
-// Each phase defines a base layer (always on while in that phase) and an
-// optional tension layer (fades in on red light, fades out on green).
 
 interface LayerConfig {
-  base:    SoundId[];   // loops that start when entering the phase
-  fadeIn:  number;      // ms
-  fadeOut: number;      // ms
+  base:    SoundId[];
+  fadeIn:  number;     
+  fadeOut: number;     
 }
 
 const PHASE_LAYERS: Partial<Record<string, LayerConfig>> = {
@@ -36,17 +34,14 @@ export function useAmbientAudio(): void {
     const prevPhase = prevPhaseRef.current;
     const config    = PHASE_LAYERS[phase];
 
-    // Stop layers from the previous phase that aren't in the new phase
     const nextBase  = config?.base ?? [];
     for (const id of activeLayers.current) {
       if (!nextBase.includes(id)) {
         const prevConfig = prevPhase ? PHASE_LAYERS[prevPhase] : null;
-        // FIXED: Routing to stopLoop to support the fadeOut parameter
         sm.stop(id, prevConfig?.fadeOut ?? 600);
       }
     }
 
-    // Start new layers
     if (config) {
       for (const id of config.base) {
         sm.loop(id);
@@ -61,33 +56,27 @@ export function useAmbientAudio(): void {
 
   useEffect(() => {
     return () => {
-      // FIXED: Routing to stopLoop to support the fadeOut parameter
-      for (const id of activeLayers.current) sm.stopLoop(id, 400);
+      for (const id of activeLayers.current) sm.stop(id, 400);
     };
   }, [sm]);
 }
 
 // ─── useAudioSubscriptions ────────────────────────────────────────────────────
-// Red light phase adds scan_tone tension layer.
-// Green light phase removes it and restores the base ambient.
 
 export function useAudioSubscriptions() {
   const sm = useSoundManager();
 
   useEffect(() => {
     const onGreenLight = () => {
-      // Tension layer out — resume base ambient movement
-      // FIXED: Routing to stopLoop to support the fadeOut parameter
-      sm.stopLoop("scan_tone",  300);
-      sm.stopLoop("heartbeat",  300);
+      sm.stop("scan_tone",  300);
+      sm.stop("heartbeat",  300);
       sm.loop("drone_root");
       sm.loop("room_tone");
     };
 
     const onRedLight = () => {
-      // Add scan tone tension over the existing drone layers
       sm.loop("scan_tone");
-      sm.play("heartbeat");
+      sm.loop("heartbeat");
     };
     
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -113,11 +102,9 @@ export function useGameAudio() {
   const sm = useSoundManager();
 
   return {
-    // Green/Red light music is now strictly handled by RLGLAudioController.
-    // We leave these as safe empty stubs just in case other files still call them.
     onGreenLight:    () => { 
       if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
-      else sm.stopLoop("heartbeat", 300); // FIXED
+      else sm.stop("heartbeat", 300); 
     },
     
     onRedLight:      () => { 
@@ -133,29 +120,27 @@ export function useGameAudio() {
       sm.play("player_eliminated", 0); 
       sm.play("crowd_gasp", 200); 
       if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
-      else sm.stopLoop("heartbeat", 300); // FIXED
+      else sm.stop("heartbeat", 300); 
     },
     
     onVictory:       () => { 
       sm.play("player_victory", 0); 
       sm.play("crowd_cheer", 300); 
       if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(0); 
-      else sm.stopLoop("heartbeat", 300); // FIXED
+      else sm.stop("heartbeat", 300); 
     },
     
     onCountdownBeep: () => sm.play("countdown_beep",     50),
     onCountdownGo:   () => sm.play("countdown_go",        0),
     
-    // Legacy stub to prevent crashes if called
     onCombo:         () => { /* combo_hit removed */ },
     
     setDangerLevel:  (v: number) => {
       if (typeof sm.setHeartbeat === 'function') sm.setHeartbeat(v);
     },
     
-    stopHeartbeat:   () => sm.stopLoop("heartbeat", 400), // FIXED
+    stopHeartbeat:   () => sm.stop("heartbeat", 400), 
     
-    // Preload strictly valid SoundIds
     preloadGame:     () => sm.preload([
       "player_step", "player_jump",
       "player_land", "player_eliminated", "player_victory",

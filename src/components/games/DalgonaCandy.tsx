@@ -15,6 +15,12 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
 
   useEffect(() => {
+    return () => {
+      SoundManager.getInstance().stopAll(0);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (!e.data || typeof e.data.type !== 'string') return;
       

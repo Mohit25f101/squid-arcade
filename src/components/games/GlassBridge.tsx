@@ -9,19 +9,13 @@ import { ResultScreen } from "../ui/ResultScreen";
 import { lerp, clamp } from "@/utils/math";
 import { useGameStore } from "@/store/gameStore";
 
-// FIXED: Added onComplete prop so the global store knows when the game ends
 interface GameProps {
   onExit?: () => void;
   onComplete?: (score: number, outcome: "victory" | "eliminated") => void;
 }
 
-// ============================================================
-// 1. CONSTANTS & PALETTE
-// ============================================================
-
 const WORLD_W = 1280;
 const WORLD_H = 720;
-
 const TOTAL_ROWS = 18;
 
 const PLAYER_W = 68; 
@@ -44,14 +38,8 @@ const SHAKE_DECAY_RATE = 0.88;
 const SAFE_BLUE: [number, number, number] = [3, 135, 121]; 
 const FRAGILE_BLUE: [number, number, number] = [180, 210, 220]; 
 
-
 const CAMERA_LERP = 5;
-
 const COUNTDOWN_TOTAL = 120; 
-
-// ============================================================
-// 2. TYPES
-// ============================================================
 
 interface Panel {
   row: number;
@@ -139,10 +127,6 @@ interface GameState {
   lateGameZoomActive: boolean;
 }
 
-// ============================================================
-// 3. OBJECT POOL
-// ============================================================
-
 class ObjectPool<T extends { active: boolean }> {
   private pool: T[];
   private factory: () => T;
@@ -175,10 +159,6 @@ class ObjectPool<T extends { active: boolean }> {
   }
 }
 
-// ============================================================
-// 4. SEEDED RANDOM
-// ============================================================
-
 function makeRng(seed: number) {
   let s = seed >>> 0 || 1;
   return {
@@ -190,10 +170,6 @@ function makeRng(seed: number) {
     },
   };
 }
-
-// ============================================================
-// 5. PURE UTILITIES
-// ============================================================
 
 function jumpArc(startY: number, targetY: number, t: number): number {
   return lerp(startY, targetY, t) - Math.sin(t * Math.PI) * JUMP_HEIGHT;
@@ -212,10 +188,6 @@ function colWorldX(col: 0 | 1 | 2): number {
 function rgb(r: number, g: number, b: number, a = 1): string {
   return `rgba(${r|0},${g|0},${b|0},${a})`;
 }
-
-// ============================================================
-// 6. BRIDGE GENERATOR
-// ============================================================
 
 function generateBridge(rows: number, seed: number): Panel[][] {
   const rng = makeRng(seed);
@@ -251,10 +223,6 @@ function generateBridge(rows: number, seed: number): Panel[][] {
   return panels;
 }
 
-// ============================================================
-// 7. BAKED ASSET INITIALIZER
-// ============================================================
-
 interface BakedAssets {
   background: HTMLCanvasElement | OffscreenCanvas;
   crackStages: Array<HTMLCanvasElement | OffscreenCanvas>;
@@ -281,7 +249,6 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
-  // 1. Squid Game-style arena - Deep magenta/pink base
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, "#1a0810");
   grad.addColorStop(0.3, "#0d0406");
@@ -290,18 +257,15 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // 2. Heavy Industrial Girders & Structures (darker, more ominous)
   ctx.fillStyle = "#0f0a0d";
   ctx.strokeStyle = "#1a0e14";
   ctx.lineWidth = 2;
   
   for (let i = 0; i < 6; i++) {
     const x = (w / 6) * i + 50;
-    // Massive vertical pillars
     ctx.fillRect(x, 0, 40, h);
     ctx.strokeRect(x, 0, 40, h);
     
-    // Cross bracing
     ctx.beginPath();
     for (let y = 0; y < h; y += 150) {
       ctx.moveTo(x, y);
@@ -312,7 +276,6 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
     ctx.stroke();
   }
 
-  // 3. Atmospheric Fog - Magenta/Pink tinted for Squid Game feel
   const spotlight = ctx.createRadialGradient(w / 2, h * 0.2, 0, w / 2, h * 0.4, w * 0.9);
   spotlight.addColorStop(0, "rgba(200, 60, 120, 0.08)");
   spotlight.addColorStop(0.5, "rgba(140, 40, 80, 0.04)");
@@ -320,7 +283,6 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   ctx.fillStyle = spotlight;
   ctx.fillRect(0, 0, w, h);
   
-  // 4. Additional depth layers (darker fog)
   const fogGrad = ctx.createLinearGradient(0, h * 0.5, 0, h);
   fogGrad.addColorStop(0, "rgba(0,0,0,0)");
   fogGrad.addColorStop(0.6, "rgba(10,4,8,0.4)");
@@ -404,10 +366,6 @@ function initBakedAssets(): BakedAssets {
     vignetteCanvas: bakeVignette(WORLD_W, WORLD_H),
   };
 }
-
-// ============================================================
-// 8. PARTICLE EMITTER
-// ============================================================
 
 let particlePool: ObjectPool<Particle> | null = null;
 
@@ -662,7 +620,6 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
   gs.atmosphericT += dtSec * 0.4;
   gs.vignetteIntensity = lerp(gs.vignetteIntensity, gs.vignetteTarget, dtSec * 3);
 
-  // Ambient tension particles
   if (gs.phase === "playing" && getPool().availableCount > 10) {
     gs.ambientDripTimer -= dtSec;
     if (gs.ambientDripTimer <= 0) {
@@ -671,7 +628,6 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
       const rightEdge = colWorldX(2) + PANEL_W;
       const rx = leftEdge + Math.random() * (rightEdge - leftEdge);
       const ry = rowWorldY(gs.currentRow) - (Math.random() * 200 + 50);
-      // Pink/magenta tinted particles for tension
       emitBurst(gs, { x: rx, y: ry, count: 2, r: 100, g: 40, b: 80, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
     }
   }
@@ -907,11 +863,9 @@ function renderPanel(
       ctx.fillRect(shimX, 0, 3, PANEL_H);
     }
   }
-  // Subtle glow and highlight
   ctx.fillStyle = `rgba(220,240,255,${glintVal})`;
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
   
-  // Hover highlight on current target
   if (isPlayerOn) {
     const glowPulse = 0.6 + Math.sin(atmosphericT * 3) * 0.4;
     ctx.shadowColor = `rgba(${br}, ${bg + 100}, ${bb + 100}, ${glowPulse})`;
@@ -930,7 +884,6 @@ function renderPanel(
   ctx.lineWidth = 1;
   ctx.strokeRect(3, 3, PANEL_W - 6, PANEL_H - 6);
 
-  // GEOMETRIC SHAPE INDICATOR: Draw figure on ALL panels based on column
   if (quality === "high") {
     const figureSize = 16;
     const figureX = PANEL_W / 2;
@@ -946,16 +899,13 @@ function renderPanel(
     
     ctx.beginPath();
     if (panel.col === 0) {
-      // Square
       ctx.rect(-figureSize, -figureSize, figureSize * 2, figureSize * 2);
     } else if (panel.col === 1) {
-      // Triangle
       ctx.moveTo(0, -figureSize - 2);
       ctx.lineTo(-figureSize * 1.1, figureSize * 0.8);
       ctx.lineTo(figureSize * 1.1, figureSize * 0.8);
       ctx.closePath();
     } else {
-      // Circle
       ctx.arc(0, 0, figureSize * 1.1, 0, Math.PI * 2);
     }
     ctx.stroke();
@@ -1150,10 +1100,6 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
   renderOverlays(ctx, gs, assets);
 }
 
-// ============================================================
-// 21. TOUCH STATE
-// ============================================================
-
 interface TouchState {
   left: boolean;
   center: boolean;
@@ -1175,10 +1121,6 @@ function createGameState(seed: number): GameState {
     atmosphericT: 0, vignetteIntensity: 0.15, vignetteTarget: 0.15, flashAlpha: 0, fadeAlpha: 0, inputConsumed: false, seed, ambientDripTimer: 1, lateGameZoomActive: false,
   };
 }
-
-// ============================================================
-// 23. GAME LOOP HOOK
-// ============================================================
 
 function useGameLoop(callback: (dt: number) => void, active: boolean): React.MutableRefObject<((scale: number) => void) | null> {
   const rafRef = useRef<number>(0);
@@ -1292,10 +1234,6 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-// ============================================================
-// 26. MAIN REACT COMPONENT
-// ============================================================
-
 const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gsRef = useRef<GameState | null>(null);
@@ -1317,13 +1255,22 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
   useEffect(() => {
     return () => {
-      particlePool = null;
+      if (particlePool) {
+        const pool = particlePool as any;
+        if (pool.pool) {
+          for (let i = 0; i < pool.pool.length; i++) {
+            const p = pool.pool[i];
+            if (p && p.active) pool.release(p);
+          }
+        }
+        particlePool = null;
+      }
     };
   }, []);
 
   useEffect(() => {
     return () => {
-      SoundManager.getInstance().stopAll();
+      SoundManager.getInstance().stopAll(0);
     };
   }, []);
 
@@ -1334,7 +1281,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     progressTotal: TOTAL_ROWS,
     outcome: uiPhase === "victory" ? "victory" : "eliminated"
   });
-  
 
   const hudSync = useHUDSync({ flushInterval: 100 });
   const isTouchDevice =
@@ -1353,7 +1299,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
 
-      // Backing store fills the container exactly (no letterboxing).
       canvas.width  = Math.round(cw * dpr);
       canvas.height = Math.round(ch * dpr);
       canvas.style.width  = cw + "px";
@@ -1362,7 +1307,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      // Scale the world to COVER the viewport (clip overflow instead of bars)
       const sx = (cw * dpr) / WORLD_W;
       const sy = (ch * dpr) / WORLD_H;
       const s  = Math.max(sx, sy);
@@ -1427,9 +1371,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
       const sm = SoundManager.getInstance();
       for (const ev of gs.audioEvents) {
         if (ev.startsWith("land-")) {
-          // Already played by SoundManager.getInstance().play("jump")
         } else if (ev.startsWith("tension-")) {
-          // Tension ambience for unsafe panels - can be added later
         } else {
           switch (ev) {
             case "shatter":
