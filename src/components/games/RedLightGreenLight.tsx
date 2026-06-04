@@ -491,8 +491,43 @@ function Guard({ position, rotationY = 0 }: { position: [number, number, number]
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * ENVIRONMENT
+ * ENVIRONMENT DYNAMIC FEATURES
  * ────────────────────────────────────────────────────────────────────────────*/
+
+function GuardLasers() {
+  const group = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!group.current) return;
+    // Update will trigger slight sweep movement over time natively
+    group.current.rotation.y = state.clock.elapsedTime * 0.001;
+  });
+
+  return (
+    <group ref={group}>
+      <Line
+        points={[
+          new THREE.Vector3(-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5),
+          new THREE.Vector3(0, 1.5, START_Z / 2),
+        ]}
+        color="#ff0000"
+        lineWidth={0.8}
+        transparent
+        opacity={0.7}
+      />
+      <Line
+        points={[
+          new THREE.Vector3(FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5),
+          new THREE.Vector3(0, 1.5, START_Z / 2),
+        ]}
+        color="#ff0000"
+        lineWidth={0.8}
+        transparent
+        opacity={0.7}
+      />
+    </group>
+  );
+}
 
 function Arena({ isRed }: { isRed: boolean }) {
   return (
@@ -572,53 +607,7 @@ function Arena({ isRed }: { isRed: boolean }) {
       <Guard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
 
       {/* Guard laser sights during RED LIGHT */}
-      {isRed && (
-        <>
-          {/* Finish line guards targeting center */}
-          <Line
-            points={[
-              [-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5],
-              [0, 1.5, START_Z / 2],
-            ]}
-            color="#ff0000"
-            lineWidth={0.8}
-            transparent
-            opacity={0.6 + Math.sin(performance.now() * 0.008) * 0.2}
-          />
-          <Line
-            points={[
-              [FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5],
-              [0, 1.5, START_Z / 2],
-            ]}
-            color="#ff0000"
-            lineWidth={0.8}
-            transparent
-            opacity={0.6 + Math.sin(performance.now() * 0.008 + 0.5) * 0.2}
-          />
-          
-          {/* Wall guard sweeping lasers */}
-          <Line
-            points={[
-              [-FIELD_WIDTH / 2 + 1, 2.2, 40],
-              [Math.sin(performance.now() * 0.002) * 8, 1.5, 40 + Math.cos(performance.now() * 0.002) * 20],
-            ]}
-            color="#ff0000"
-            lineWidth={0.6}
-            transparent
-            opacity={0.5}
-          />
-          <Line
-            points={[
-              [FIELD_WIDTH / 2 - 1, 2.2, 40],
-              [Math.sin(performance.now() * 0.002 + Math.PI) * 8, 1.5, 40 + Math.cos(performance.now() * 0.002 + Math.PI) * 20],
-            ]}
-            color="#ff0000"
-            lineWidth={0.6}
-            transparent
-            opacity={0.5}
-          />
-        </>
-      )}
+      {isRed && <GuardLasers />}
     </group>
   );
 }
@@ -711,7 +700,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
   const turnTRef      = useRef(0);     
   const redTimerRef   = useRef(0);     
-  // Initialize gamePhaseRef at Location 3 (effectively Reset equivalent for boot)
+  // Initialize gamePhaseRef at Reset equivalent for boot
   const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN); 
   const countdownRef  = useRef(3);
   const timeLeftRef   = useRef(ROUND_TIMER);
@@ -780,8 +769,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     turnTRef.current      = 0;
     redTimerRef.current   = 0;
     
-    // Location 3: Reset
-    gamePhaseRef.current  = GamePhase.COUNTDOWN; // ADDED to sync state
+    // Reset sync state
+    gamePhaseRef.current  = GamePhase.COUNTDOWN; 
     
     countdownRef.current  = 3;
     timeLeftRef.current   = ROUND_TIMER;
@@ -884,8 +873,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         if (intNow > 0) a.beep.play();
       }
       if (countdownRef.current <= 0) {
-        // Location 4: Countdown -> Playing
-        gamePhaseRef.current = GamePhase.PLAYING; // ADDED to sync state
+        // Countdown -> Playing
+        gamePhaseRef.current = GamePhase.PLAYING;
         useGameStore.getState().setRuntimePhase("playing");
         a.go.play();
         startDollSong();
@@ -923,7 +912,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         lightPhaseRef.current = LightPhase.RED;
         redTimerRef.current = 0;
         a.redLight.play();
-        a.heartbeat.play();
+        if (!a.heartbeat.playing()) a.heartbeat.play();
       }
     } else if (lp === LightPhase.RED) {
       redTimerRef.current += dt;
@@ -944,7 +933,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       }
     }
 
-    if (human.alive && !human.finished) {
+    if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
       const input = inputRef.current;
       // Pull clean movement intent from specialized InputManager architecture
       const wantMove = snap.up || snap.action;
@@ -968,8 +957,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         human.z = FINISH_Z;
         human.vz = 0;
         
-        // Location 1: Victory
-        gamePhaseRef.current = GamePhase.VICTORY; // ADDED to sync state and halt loop
+        // Victory state mapped correctly to halt processing
+        gamePhaseRef.current = GamePhase.VICTORY; 
         
         stopDollSong();
         a.heartbeat.stop();
@@ -1043,21 +1032,21 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         a.heartbeat.volume(0.55);
       }
 
-      if (human.alive && !human.finished) {
+      if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
         const hasMovement = Math.abs(human.vz) > MOVE_THRESHOLD;
         
         if (hasMovement) {
           human.alive = false;
           human.fallProgress = 0;
           
-          // Location 2: Elimination
-          gamePhaseRef.current = GamePhase.ELIMINATED; // ADDED to sync state and halt loop
+          // Elimination state mapped correctly to halt processing
+          gamePhaseRef.current = GamePhase.ELIMINATED; 
           
           shakeRef.current = 0.45; // Stronger shake
           stopDollSong();
           a.heartbeat.stop();
           
-          // Guard shoot effect - store flash state for rendering
+          // Guard shoot effect - store flash state for rendering directly
           guardFlashRef.current = performance.now();
           
           a.shatter.play();
@@ -1218,7 +1207,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       {/* Sky/Background - Sharp color shift */}
       <color attach="background" args={[isRed ? "#1a0505" : "#a7c3df"]} />
 
-      {/* Volumetric fog feel - denser during red */}
+      {/* Volumetric fog feel - single instance shifts by state */}
       <fog 
         attach="fog" 
         args={[
@@ -1227,14 +1216,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
           isRed ? 95 : 150
         ]} 
       />
-
-      {/* Additional atmospheric fog layer during red */}
-      {isRed && (
-        <fog 
-          attach="fog" 
-          args={["#440808", 60, 120]} 
-        />
-      )}
 
       <Arena isRed={isRed} />
       <Doll
