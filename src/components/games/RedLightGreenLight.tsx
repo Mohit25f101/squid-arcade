@@ -147,21 +147,37 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
 
   useFrame((state) => {
     if (!group.current) return;
-    group.current.rotation.y = yRot;
+    
+    // Slower, more mechanical turn
+    const turnSpeed = turnProgress < 0.3 ? 0.6 : turnProgress > 0.7 ? 0.4 : 1;
+    group.current.rotation.y = THREE.MathUtils.lerp(
+      group.current.rotation.y, 
+      yRot, 
+      0.08 * turnSpeed
+    );
+    
+    // Menacing idle during green light
     if (facing === "away" && turnProgress < 0.05) {
-      group.current.rotation.z = Math.sin(state.clock.elapsedTime * 2.2) * 0.025;
-      group.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 1.4) * 0.03;
+      const t = state.clock.elapsedTime;
+      group.current.rotation.z = Math.sin(t * 1.8) * 0.035;
+      group.current.position.y = position[1] + Math.sin(t * 1.2) * 0.04;
+      // Slight head tilt
+      group.current.rotation.x = Math.sin(t * 0.8) * 0.015;
     } else {
       group.current.rotation.z = 0;
+      group.current.rotation.x = 0;
       group.current.position.y = position[1];
     }
 
+    // Dramatic eye pulse on red
     if (eyeL.current && eyeR.current) {
       const mat = eyeL.current.material as THREE.MeshStandardMaterial;
       const mat2 = eyeR.current.material as THREE.MeshStandardMaterial;
-      const pulse = isRed ? 0.6 + Math.sin(state.clock.elapsedTime * 11) * 0.4 * scanIntensity : 0;
-      mat.emissiveIntensity  = pulse * 5;
-      mat2.emissiveIntensity = pulse * 5;
+      const pulse = isRed 
+        ? 0.8 + Math.sin(state.clock.elapsedTime * 15) * 0.2 * scanIntensity 
+        : 0;
+      mat.emissiveIntensity = pulse * 8;
+      mat2.emissiveIntensity = pulse * 8;
     }
   });
 
@@ -400,33 +416,51 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 function Guard({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[0, 1.0, 0]} castShadow>
-        <boxGeometry args={[0.7, 1.45, 0.45]} />
-        <meshStandardMaterial color="#e92076" roughness={0.6} />
+      {/* Body - larger, more imposing */}
+      <mesh position={[0, 1.1, 0]} castShadow>
+        <boxGeometry args={[0.85, 1.7, 0.5]} />
+        <meshStandardMaterial color="#e92076" roughness={0.5} metalness={0.1} />
       </mesh>
-      <mesh position={[0, 1.92, 0]} castShadow>
-        <boxGeometry args={[0.42, 0.46, 0.4]} />
-        <meshStandardMaterial color="#0b0b0b" roughness={0.4} />
+      {/* Mask/helmet */}
+      <mesh position={[0, 2.1, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.52, 0.45]} />
+        <meshStandardMaterial color="#0b0b0b" roughness={0.3} metalness={0.2} />
       </mesh>
-      <mesh position={[0, 1.92, 0.21]}>
-        <planeGeometry args={[0.18, 0.18]} />
-        <meshStandardMaterial color="#fff" emissive="#fff" emissiveIntensity={0.4} />
+      {/* Mask shape - larger */}
+      <mesh position={[0, 2.1, 0.23]}>
+        <boxGeometry args={[0.22, 0.22, 0.02]} />
+        <meshStandardMaterial 
+          color="#fff" 
+          emissive="#fff" 
+          emissiveIntensity={0.6} 
+        />
       </mesh>
-      <mesh position={[-0.42, 0.9, 0]}>
-        <boxGeometry args={[0.18, 1.2, 0.18]} />
-        <meshStandardMaterial color="#e92076" roughness={0.6} />
+      {/* Arms */}
+      <mesh position={[-0.5, 1.0, 0]} castShadow>
+        <boxGeometry args={[0.22, 1.4, 0.22]} />
+        <meshStandardMaterial color="#e92076" roughness={0.5} />
       </mesh>
-      <mesh position={[0.42, 0.9, 0]} castShadow>
-        <boxGeometry args={[0.18, 1.2, 0.18]} />
-        <meshStandardMaterial color="#e92076" roughness={0.6} />
+      <mesh position={[0.5, 1.0, 0]} castShadow>
+        <boxGeometry args={[0.22, 1.4, 0.22]} />
+        <meshStandardMaterial color="#e92076" roughness={0.5} />
       </mesh>
-      <mesh position={[-0.17, 0.1, 0]}>
-        <boxGeometry args={[0.2, 0.95, 0.2]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
+      {/* Rifle */}
+      <mesh position={[0, 1.2, 0.4]} rotation={[0, 0, 0]}>
+        <boxGeometry args={[0.08, 0.08, 1.2]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.5} />
       </mesh>
-      <mesh position={[0.17, 0.1, 0]}>
-        <boxGeometry args={[0.2, 0.95, 0.2]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
+      <mesh position={[0, 1.2, -0.2]} rotation={[0, 0, 0]}>
+        <boxGeometry args={[0.12, 0.18, 0.35]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.4} metalness={0.3} />
+      </mesh>
+      {/* Legs */}
+      <mesh position={[-0.2, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.24, 1.1, 0.24]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
+      </mesh>
+      <mesh position={[0.2, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.24, 1.1, 0.24]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.6} />
       </mesh>
     </group>
   );
@@ -500,8 +534,18 @@ function Arena() {
         resolution={512}
         color="#000"
       />
+      
+      {/* Guards at finish line */}
       <Guard position={[-FIELD_WIDTH / 2 + 2, 0, FINISH_Z + 1.5]} rotationY={Math.PI / 2} />
       <Guard position={[FIELD_WIDTH / 2 - 2, 0, FINISH_Z + 1.5]} rotationY={-Math.PI / 2} />
+      <Guard position={[-FIELD_WIDTH / 2 + 4, 0, FINISH_Z - 2]} rotationY={Math.PI / 3} />
+      <Guard position={[FIELD_WIDTH / 2 - 4, 0, FINISH_Z - 2]} rotationY={-Math.PI / 3} />
+      
+      {/* Guards along walls */}
+      <Guard position={[-FIELD_WIDTH / 2 + 1, 0, START_Z - 20]} rotationY={Math.PI / 2} />
+      <Guard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
+      <Guard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
+      <Guard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
     </group>
   );
 }
@@ -605,6 +649,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const aliveCountRef    = useRef(NPC_COUNT + 1);
   const hudThrottleRef   = useRef(0);
   const turnDirRef    = useRef<"to_red" | "to_green">("to_red");
+  const guardFlashRef = useRef(0);
 
   // Lightweight Gunshot Tracer references
   const shotLineRef = useRef<THREE.Line>(null);
@@ -668,6 +713,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     fakeOutChanceRef.current = 0;
     aliveCountRef.current = NPC_COUNT + 1;
     shotTimerRef.current  = 0;
+    guardFlashRef.current = 0;
 
     if (shotLineRef.current) {
       shotLineRef.current.visible = false;
@@ -846,8 +892,15 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         a.heartbeat.stop();
         a.victory.play();
         a.cheer.play();
-        scoreRef.current += 5000;
-        scoreRef.current += timeLeftRef.current * 50;
+        
+        // Victory score bonus
+        const timeBonus = Math.floor(timeLeftRef.current * 50);
+        const speedBonus = timeLeftRef.current > 60 ? 2000 : timeLeftRef.current > 45 ? 1000 : 0;
+        scoreRef.current += 5000 + timeBonus + speedBonus;
+        
+        // Victory camera shake (positive)
+        shakeRef.current = 0.15;
+        
         onGameOver(GamePhase.VICTORY, Math.floor(scoreRef.current));
       }
     }
@@ -874,10 +927,21 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         }
       }
 
-      const npcSpeed = 5 + (p.id % 5) * 0.5;
+      // Velocity with variation
+      const baseSpeed = 5 + (p.id % 5) * 0.5;
+      const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
+      const npcSpeed = baseSpeed + speedVariation;
       const targetVz = p.npcMoving ? -npcSpeed : 0;
-      const accel = p.npcMoving ? 8 : 18;
+      const accel = p.npcMoving ? 8 + (p.id % 3) * 2 : 18;
       p.vz = THREE.MathUtils.lerp(p.vz, targetVz, Math.min(1, dt * accel));
+
+      // Slight lateral drift for realism
+      if (p.npcMoving) {
+        const drift = Math.sin(performance.now() * 0.003 + p.id * 0.7) * 0.015;
+        p.x += drift;
+        p.x = Math.max(-FIELD_WIDTH / 2 + 1, Math.min(FIELD_WIDTH / 2 - 1, p.x));
+      }
+
       p.z += p.vz * dt;
 
       if (p.z <= FINISH_Z) {
@@ -888,39 +952,54 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     }
 
     if (lp === LightPhase.RED) {
-      // Evaluate human movement limits safely against current tuning rules
-      const triggerMoveIntent = snap.up || snap.action;
-      const physicalMovement = Math.abs(human.vz) > MOVE_THRESHOLD || snap.deltaMagnitude > 12.0;
-
-      if (human.alive && !human.finished && (triggerMoveIntent || physicalMovement)) {
-        human.alive = false;
-        human.fallProgress = 0;
-        gamePhaseRef.current = GamePhase.ELIMINATED;
-        shakeRef.current = 0.35;
-        stopDollSong();
-        a.heartbeat.stop();
-        a.shatter.play();
-        a.elimination.play();
-        a.gasp.play();
-
-        // Calculate dynamic 3D tracer coordinates from Left Finish Guard coordinates
-        if (shotLineRef.current) {
-          const guardX = -FIELD_WIDTH / 2 + 2;
-          const guardY = 1.92; // Guard chest height
-          const guardZ = FINISH_Z + 1.5;
-
-          const points = [
-            new THREE.Vector3(guardX, guardY, guardZ),
-            new THREE.Vector3(human.x, 0.95, human.z) // Target player torso
-          ];
-          
-          shotLineRef.current.geometry.setFromPoints(points);
-          shotLineRef.current.visible = true;
-          shotTimerRef.current = 0.25; // Render tracer burst for 250ms
-        }
-
-        onGameOver(GamePhase.ELIMINATED, Math.floor(scoreRef.current));
+      // Intensify heartbeat as player moves during red
+      if (human.alive && !human.finished && Math.abs(human.vz) > 0.01) {
+        const dangerLevel = Math.min(1, Math.abs(human.vz) / MOVE_THRESHOLD);
+        a.heartbeat.volume(0.55 + dangerLevel * 0.35);
+      } else {
+        a.heartbeat.volume(0.55);
       }
+
+      // Human elimination - only check actual velocity
+      if (human.alive && !human.finished) {
+        const hasMovement = Math.abs(human.vz) > MOVE_THRESHOLD;
+        
+        if (hasMovement) {
+          human.alive = false;
+          human.fallProgress = 0;
+          gamePhaseRef.current = GamePhase.ELIMINATED;
+          shakeRef.current = 0.45; // Stronger shake
+          stopDollSong();
+          a.heartbeat.stop();
+          
+          // Guard shoot effect - store flash state for rendering
+          guardFlashRef.current = performance.now();
+          
+          a.shatter.play();
+          a.elimination.play();
+          a.gasp.play();
+
+          // Calculate dynamic 3D tracer coordinates from Left Finish Guard coordinates
+          if (shotLineRef.current) {
+            const guardX = -FIELD_WIDTH / 2 + 2;
+            const guardY = 1.92; // Guard chest height
+            const guardZ = FINISH_Z + 1.5;
+
+            const points = [
+              new THREE.Vector3(guardX, guardY, guardZ),
+              new THREE.Vector3(human.x, 0.95, human.z) // Target player torso
+            ];
+            
+            shotLineRef.current.geometry.setFromPoints(points);
+            shotLineRef.current.visible = true;
+            shotTimerRef.current = 0.25; // Render tracer burst for 250ms
+          }
+
+          onGameOver(GamePhase.ELIMINATED, Math.floor(scoreRef.current));
+        }
+      }
+      
+      // NPCs
       for (let i = 1; i < players.length; i++) {
         const p = players[i];
         if (!p.alive || p.finished) continue;
@@ -981,10 +1060,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         phase={gamePhaseRef.current}
         shake={shakeRef.current}
       />
-      <ambientLight intensity={0.55} color="#fff2dc" />
+      {/* Lighting */}
+      <ambientLight intensity={isRed ? 0.35 : 0.55} color={isRed ? "#ff3838" : "#fff2dc"} />
       <directionalLight
         position={[15, 20, 20]}
-        intensity={1.05}
+        intensity={isRed ? 0.7 : 1.05}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -994,11 +1074,56 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         shadow-camera-bottom={-30}
         shadow-camera-near={1}
         shadow-camera-far={80}
-        color="#fff8e8"
+        color={isRed ? "#ff6666" : "#fff8e8"}
       />
-      <hemisphereLight args={["#bcd9ff", "#3a2a1d", 0.45]} />
-      <color attach="background" args={[isRed ? "#3a1a1c" : "#a7c3df"]} />
-      <fog attach="fog" args={[isRed ? "#5b1a1c" : "#a7c3df", 35, 140]} />
+      <hemisphereLight 
+        args={[
+          isRed ? "#ff4444" : "#bcd9ff", 
+          isRed ? "#1a0000" : "#3a2a1d", 
+          isRed ? 0.25 : 0.45
+        ]} 
+      />
+
+      {/* Guard muzzle flash on elimination */}
+      {performance.now() - guardFlashRef.current < 100 && (
+        <>
+          <pointLight
+            position={[-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5]}
+            intensity={12}
+            distance={30}
+            color="#ff4444"
+            decay={2}
+          />
+          <pointLight
+            position={[FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5]}
+            intensity={12}
+            distance={30}
+            color="#ff4444"
+            decay={2}
+          />
+        </>
+      )}
+
+      {/* Dramatic red spotlight during red light */}
+      {isRed && (
+        <spotLight
+          position={[0, 15, -12]}
+          target-position={[0, 0, 40]}
+          intensity={3}
+          angle={0.9}
+          penumbra={0.4}
+          color="#ff2a2a"
+          distance={150}
+          castShadow={false}
+        />
+      )}
+
+      <color attach="background" args={[isRed ? "#2a1214" : "#a7c3df"]} />
+      <fog attach="fog" args={[
+        isRed ? "#4a1a1c" : "#a7c3df", 
+        isRed ? 25 : 35, 
+        isRed ? 110 : 140
+      ]} />
       <Arena />
       <Doll
         position={[0, 0, -12.5]}
