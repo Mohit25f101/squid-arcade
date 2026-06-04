@@ -1,5 +1,4 @@
-Now let me build the 3D RLGL game. I'll create the main component and wire it into the router.
-Action: file_editor create /app/frontend/src/components/games/RedLightGreenLight3D.tsx --file-text "\"use client\";
+"use client";
 
 import React, {
   useEffect,
@@ -8,8 +7,8 @@ import React, {
   useState,
   useCallback,
   Suspense,
-} from \"react\";
-import { Canvas, useFrame, useThree } from \"@react-three/fiber\";
+} from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Environment,
   Float,
@@ -17,13 +16,13 @@ import {
   Sky,
   Stars,
   ContactShadows,
-} from \"@react-three/drei\";
-import * as THREE from \"three\";
-import { Howl } from \"howler\";
-import { useGameStore } from \"@/store/gameStore\";
+} from "@react-three/drei";
+import * as THREE from "three";
+import { Howl } from "howler";
+import { useGameStore } from "@/store/gameStore";
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  CONSTANTS — world layout, gameplay tunables
+ * CONSTANTS — world layout, gameplay tunables
  * ────────────────────────────────────────────────────────────────────────────*/
 
 const FIELD_LEN          = 90;          // distance from start line to doll
@@ -40,11 +39,23 @@ const NPC_COUNT          = 18;
 const ROUND_TIMER        = 90;
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  TYPES
+ * STATE MACHINE ENUMS
  * ────────────────────────────────────────────────────────────────────────────*/
 
-type LightPhase = \"green\" | \"turning_red\" | \"red\" | \"turning_green\";
-type GamePhase  = \"countdown\" | \"playing\" | \"eliminated\" | \"victory\" | \"timeout\";
+export enum LightPhase {
+  GREEN = "green",
+  TURNING_RED = "turning_red",
+  RED = "red",
+  TURNING_GREEN = "turning_green"
+}
+
+export enum GamePhase {
+  COUNTDOWN = "countdown",
+  PLAYING = "playing",
+  ELIMINATED = "eliminated",
+  VICTORY = "victory",
+  TIMEOUT = "timeout"
+}
 
 interface PlayerEntity {
   id: number;
@@ -55,22 +66,18 @@ interface PlayerEntity {
   alive: boolean;
   finished: boolean;
   isHuman: boolean;
-  /** Track number / suit number */
   number: number;
-  /** NPC AI state */
-  npcStopOffsetMs: number; // reaction delay
+  npcStopOffsetMs: number; 
   npcResumeOffsetMs: number;
   npcStopTimer: number;
   npcResumeTimer: number;
   npcMoving: boolean;
-  /** death anim */
   fallProgress: number;
   fallAxis: [number, number, number];
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  AUDIO — single source of truth for doll-song sync.
- *  The doll-song is the GREEN-LIGHT timer. When it ends, the doll turns.
+ * AUDIO
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface AudioHandles {
@@ -90,7 +97,7 @@ interface AudioHandles {
 }
 
 function buildAudio(volumes: { master: number; sfx: number; music: number }): AudioHandles {
-  const mk = (src: string, vol: number, opts: Partial<Howl[\"_opts\"]> = {}) =>
+  const mk = (src: string, vol: number, opts: Partial<Howl["_opts"]> = {}) =>
     new Howl({
       src: [src],
       volume: Math.max(0, Math.min(1, vol * volumes.master)),
@@ -100,33 +107,32 @@ function buildAudio(volumes: { master: number; sfx: number; music: number }): Au
     } as ConstructorParameters<typeof Howl>[0]);
 
   return {
-    // THE iconic 8-second song — drives green-light phase
-    dollSong:    mk(\"/audio/sfx/squid_game_doll_song.mp3\", 1.0 * volumes.music),
-    redLight:    mk(\"/audio/sfx/red_light.mp3\",            0.85 * volumes.sfx),
-    greenLight:  mk(\"/audio/sfx/green_light.mp3\",          0.6  * volumes.sfx),
-    elimination: mk(\"/audio/sfx/elimination.mp3\",          0.9  * volumes.sfx),
-    victory:     mk(\"/audio/sfx/victory.mp3\",              0.9  * volumes.sfx),
-    gasp:        mk(\"/audio/sfx/gasp.mp3\",                 0.7  * volumes.sfx),
-    heartbeat:   mk(\"/audio/sfx/heartbeat.mp3\",            0.55 * volumes.sfx, { loop: true }),
-    alarm:       mk(\"/audio/sfx/alarm.mp3\",                0.5  * volumes.sfx),
-    beep:        mk(\"/audio/sfx/beep.mp3\",                 0.6  * volumes.sfx),
-    go:          mk(\"/audio/sfx/go.mp3\",                   0.8  * volumes.sfx),
-    cheer:       mk(\"/audio/sfx/cheer.mp3\",                0.7  * volumes.sfx),
-    step:        mk(\"/audio/sfx/step.mp3\",                 0.25 * volumes.sfx),
-    shatter:     mk(\"/audio/sfx/shatter.mp3\",              0.7  * volumes.sfx),
+    dollSong:    mk("/audio/sfx/squid_game_doll_song.mp3", 1.0 * volumes.music),
+    redLight:    mk("/audio/sfx/red_light.mp3",            0.85 * volumes.sfx),
+    greenLight:  mk("/audio/sfx/green_light.mp3",          0.6  * volumes.sfx),
+    elimination: mk("/audio/sfx/elimination.mp3",          0.9  * volumes.sfx),
+    victory:     mk("/audio/sfx/victory.mp3",              0.9  * volumes.sfx),
+    gasp:        mk("/audio/sfx/gasp.mp3",                 0.7  * volumes.sfx),
+    heartbeat:   mk("/audio/sfx/heartbeat.mp3",            0.55 * volumes.sfx, { loop: true }),
+    alarm:       mk("/audio/sfx/alarm.mp3",                0.5  * volumes.sfx),
+    beep:        mk("/audio/sfx/beep.mp3",                 0.6  * volumes.sfx),
+    go:          mk("/audio/sfx/go.mp3",                   0.8  * volumes.sfx),
+    cheer:       mk("/audio/sfx/cheer.mp3",                0.7  * volumes.sfx),
+    step:        mk("/audio/sfx/step.mp3",                 0.25 * volumes.sfx),
+    shatter:     mk("/audio/sfx/shatter.mp3",              0.7  * volumes.sfx),
   };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  DOLL MODEL — stylized \"Young-hee\" with sensor head & glowing eyes
+ * DOLL MODEL
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface DollProps {
   position: [number, number, number];
-  facing: \"away\" | \"players\"; // away = back to players (singing); players = looking
-  turnProgress: number;       // 0..1 during animation
+  facing: "away" | "players"; 
+  turnProgress: number;       
   isRed: boolean;
-  scanIntensity: number;      // 0..1 — pulses on red
+  scanIntensity: number;      
 }
 
 function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProps) {
@@ -134,19 +140,14 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
   const eyeL = useRef<THREE.Mesh>(null);
   const eyeR = useRef<THREE.Mesh>(null);
 
-  // Compute Y-rotation from facing + turn progress
-  // facing \"away\" = back to player (looking toward doll-side of field) = rotate to look toward +Z (away from player)
-  // Player is at +Z (close to camera). Doll at -Z. \"Away\" means looking toward -Z (away from player). So Y = 0.
-  // \"players\" = looking toward +Z (toward player). Y = PI.
-  const targetY = facing === \"away\" ? 0 : Math.PI;
-  const fromY   = facing === \"away\" ? Math.PI : 0;
+  const targetY = facing === "away" ? 0 : Math.PI;
+  const fromY   = facing === "away" ? Math.PI : 0;
   const yRot    = THREE.MathUtils.lerp(fromY, targetY, turnProgress);
 
   useFrame((state) => {
     if (!group.current) return;
     group.current.rotation.y = yRot;
-    // Subtle idle sway during green light (singing motion)
-    if (facing === \"away\" && turnProgress < 0.05) {
+    if (facing === "away" && turnProgress < 0.05) {
       group.current.rotation.z = Math.sin(state.clock.elapsedTime * 2.2) * 0.025;
       group.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 1.4) * 0.03;
     } else {
@@ -154,7 +155,6 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
       group.current.position.y = position[1];
     }
 
-    // Eye scan pulse on red
     if (eyeL.current && eyeR.current) {
       const mat = eyeL.current.material as THREE.MeshStandardMaterial;
       const mat2 = eyeR.current.material as THREE.MeshStandardMaterial;
@@ -166,88 +166,75 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
 
   return (
     <group ref={group} position={position} dispose={null}>
-      {/* dress — pinafore (signature orange) */}
       <mesh position={[0, 1.45, 0]} castShadow>
         <coneGeometry args={[1.55, 2.55, 32]} />
-        <meshStandardMaterial color=\"#e89c2a\" roughness={0.65} metalness={0.05} />
+        <meshStandardMaterial color="#e89c2a" roughness={0.65} metalness={0.05} />
       </mesh>
-      {/* yellow shirt under dress */}
       <mesh position={[0, 2.55, 0]} castShadow>
         <cylinderGeometry args={[0.85, 0.95, 0.7, 24]} />
-        <meshStandardMaterial color=\"#f4d34c\" roughness={0.7} />
+        <meshStandardMaterial color="#f4d34c" roughness={0.7} />
       </mesh>
-      {/* arms */}
       <mesh position={[-1.0, 2.4, 0]} rotation={[0, 0, 0.2]} castShadow>
         <cylinderGeometry args={[0.18, 0.18, 1.3, 12]} />
-        <meshStandardMaterial color=\"#f4d34c\" roughness={0.7} />
+        <meshStandardMaterial color="#f4d34c" roughness={0.7} />
       </mesh>
       <mesh position={[1.0, 2.4, 0]} rotation={[0, 0, -0.2]} castShadow>
         <cylinderGeometry args={[0.18, 0.18, 1.3, 12]} />
-        <meshStandardMaterial color=\"#f4d34c\" roughness={0.7} />
+        <meshStandardMaterial color="#f4d34c" roughness={0.7} />
       </mesh>
-      {/* hands (skin) */}
       <mesh position={[-1.15, 1.75, 0]} castShadow>
         <sphereGeometry args={[0.22, 12, 12]} />
-        <meshStandardMaterial color=\"#f5d3a8\" roughness={0.6} />
+        <meshStandardMaterial color="#f5d3a8" roughness={0.6} />
       </mesh>
       <mesh position={[1.15, 1.75, 0]} castShadow>
         <sphereGeometry args={[0.22, 12, 12]} />
-        <meshStandardMaterial color=\"#f5d3a8\" roughness={0.6} />
+        <meshStandardMaterial color="#f5d3a8" roughness={0.6} />
       </mesh>
-      {/* legs (white tights / pants) */}
       <mesh position={[-0.45, 0.5, 0]} castShadow>
         <cylinderGeometry args={[0.22, 0.22, 1.1, 12]} />
-        <meshStandardMaterial color=\"#f3eee2\" roughness={0.85} />
+        <meshStandardMaterial color="#f3eee2" roughness={0.85} />
       </mesh>
       <mesh position={[0.45, 0.5, 0]} castShadow>
         <cylinderGeometry args={[0.22, 0.22, 1.1, 12]} />
-        <meshStandardMaterial color=\"#f3eee2\" roughness={0.85} />
+        <meshStandardMaterial color="#f3eee2" roughness={0.85} />
       </mesh>
-      {/* shoes */}
       <mesh position={[-0.45, -0.05, 0.08]} castShadow>
         <boxGeometry args={[0.4, 0.18, 0.6]} />
-        <meshStandardMaterial color=\"#222\" roughness={0.5} />
+        <meshStandardMaterial color="#222" roughness={0.5} />
       </mesh>
       <mesh position={[0.45, -0.05, 0.08]} castShadow>
         <boxGeometry args={[0.4, 0.18, 0.6]} />
-        <meshStandardMaterial color=\"#222\" roughness={0.5} />
+        <meshStandardMaterial color="#222" roughness={0.5} />
       </mesh>
-      {/* head */}
       <mesh position={[0, 3.35, 0]} castShadow>
         <sphereGeometry args={[0.65, 32, 32]} />
-        <meshStandardMaterial color=\"#f5d3a8\" roughness={0.5} />
+        <meshStandardMaterial color="#f5d3a8" roughness={0.5} />
       </mesh>
-      {/* hair — black bowl cut */}
       <mesh position={[0, 3.55, -0.05]} castShadow>
         <sphereGeometry args={[0.72, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.62]} />
-        <meshStandardMaterial color=\"#191510\" roughness={0.85} />
+        <meshStandardMaterial color="#191510" roughness={0.85} />
       </mesh>
-      {/* pigtails */}
       <mesh position={[-0.7, 3.25, -0.1]} castShadow>
         <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color=\"#191510\" roughness={0.85} />
+        <meshStandardMaterial color="#191510" roughness={0.85} />
       </mesh>
       <mesh position={[0.7, 3.25, -0.1]} castShadow>
         <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color=\"#191510\" roughness={0.85} />
+        <meshStandardMaterial color="#191510" roughness={0.85} />
       </mesh>
-      {/* pigtail ribbons (red) */}
       <mesh position={[-0.78, 3.05, -0.1]}>
         <boxGeometry args={[0.16, 0.12, 0.05]} />
-        <meshStandardMaterial color=\"#c52525\" emissive=\"#600\" emissiveIntensity={0.4} roughness={0.5} />
+        <meshStandardMaterial color="#c52525" emissive="#600" emissiveIntensity={0.4} roughness={0.5} />
       </mesh>
       <mesh position={[0.78, 3.05, -0.1]}>
         <boxGeometry args={[0.16, 0.12, 0.05]} />
-        <meshStandardMaterial color=\"#c52525\" emissive=\"#600\" emissiveIntensity={0.4} roughness={0.5} />
+        <meshStandardMaterial color="#c52525" emissive="#600" emissiveIntensity={0.4} roughness={0.5} />
       </mesh>
-
-      {/* FACE — only on +Z front of head (which faces players when rotated PI) */}
-      {/* Eyes — sensors */}
       <mesh ref={eyeL} position={[-0.22, 3.4, 0.55]}>
         <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
-          color={isRed ? \"#ff1a1a\" : \"#111\"}
-          emissive={isRed ? \"#ff0000\" : \"#000\"}
+          color={isRed ? "#ff1a1a" : "#111"}
+          emissive={isRed ? "#ff0000" : "#000"}
           emissiveIntensity={0}
           roughness={0.2}
         />
@@ -255,42 +242,36 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
       <mesh ref={eyeR} position={[0.22, 3.4, 0.55]}>
         <sphereGeometry args={[0.08, 16, 16]} />
         <meshStandardMaterial
-          color={isRed ? \"#ff1a1a\" : \"#111\"}
-          emissive={isRed ? \"#ff0000\" : \"#000\"}
+          color={isRed ? "#ff1a1a" : "#111"}
+          emissive={isRed ? "#ff0000" : "#000"}
           emissiveIntensity={0}
           roughness={0.2}
         />
       </mesh>
-      {/* mouth — small line */}
       <mesh position={[0, 3.18, 0.6]}>
         <boxGeometry args={[0.18, 0.04, 0.02]} />
-        <meshStandardMaterial color=\"#8a2222\" roughness={0.6} />
+        <meshStandardMaterial color="#8a2222" roughness={0.6} />
       </mesh>
-      {/* cheek blush */}
       <mesh position={[-0.32, 3.25, 0.58]}>
         <sphereGeometry args={[0.07, 10, 10]} />
-        <meshStandardMaterial color=\"#f0a4a4\" transparent opacity={0.55} roughness={0.6} />
+        <meshStandardMaterial color="#f0a4a4" transparent opacity={0.55} roughness={0.6} />
       </mesh>
       <mesh position={[0.32, 3.25, 0.58]}>
         <sphereGeometry args={[0.07, 10, 10]} />
-        <meshStandardMaterial color=\"#f0a4a4\" transparent opacity={0.55} roughness={0.6} />
+        <meshStandardMaterial color="#f0a4a4" transparent opacity={0.55} roughness={0.6} />
       </mesh>
-
-      {/* Sensor mounted on top of head (sentry beacon) */}
       <mesh position={[0, 4.15, 0]}>
         <cylinderGeometry args={[0.07, 0.07, 0.35, 8]} />
-        <meshStandardMaterial color=\"#333\" metalness={0.6} roughness={0.4} />
+        <meshStandardMaterial color="#333" metalness={0.6} roughness={0.4} />
       </mesh>
       <mesh position={[0, 4.4, 0]}>
         <sphereGeometry args={[0.13, 16, 16]} />
         <meshStandardMaterial
-          color={isRed ? \"#ff2a2a\" : \"#26d671\"}
-          emissive={isRed ? \"#ff0000\" : \"#26d671\"}
+          color={isRed ? "#ff2a2a" : "#26d671"}
+          emissive={isRed ? "#ff0000" : "#26d671"}
           emissiveIntensity={isRed ? 3 + scanIntensity * 2 : 0.8}
         />
       </mesh>
-
-      {/* Spotlight pointing forward when red */}
       {isRed && (
         <spotLight
           position={[0, 3.4, 0.6]}
@@ -298,7 +279,7 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
           intensity={4 + scanIntensity * 6}
           angle={0.7}
           penumbra={0.35}
-          color=\"#ff2a2a\"
+          color="#ff2a2a"
           distance={120}
           castShadow={false}
         />
@@ -308,7 +289,7 @@ function Doll({ position, facing, turnProgress, isRed, scanIntensity }: DollProp
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  PLAYER — boxy \"Minecraft-style\" tracksuited figure with number
+ * PLAYER MODEL
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface PlayerMeshProps {
@@ -323,16 +304,14 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
   const armL  = useRef<THREE.Mesh>(null);
   const armR  = useRef<THREE.Mesh>(null);
 
-  // Track suit teal-green color from Squid Game
-  const SUIT = \"#0fa07d\";
-  const SUIT_DARK = \"#0b6e57\";
+  const SUIT = "#0fa07d";
+  const SUIT_DARK = "#0b6e57";
 
   useFrame((state) => {
     if (!group.current) return;
     group.current.position.x = player.x;
     group.current.position.z = player.z;
 
-    // Falling animation if dead
     if (!player.alive) {
       const t = Math.min(1, player.fallProgress);
       group.current.rotation.x = -player.fallAxis[0] * t * Math.PI / 2;
@@ -344,41 +323,33 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
     group.current.rotation.z = 0;
     group.current.position.y = 0;
 
-    // Walking animation while moving
     const swing = isMoving ? Math.sin(state.clock.elapsedTime * 10) * 0.45 : 0;
     if (legL.current) legL.current.rotation.x = swing;
     if (legR.current) legR.current.rotation.x = -swing;
     if (armL.current) armL.current.rotation.x = -swing * 0.7;
     if (armR.current) armR.current.rotation.x = swing * 0.7;
 
-    // Slight body bob while moving
     group.current.position.y = isMoving ? Math.abs(Math.sin(state.clock.elapsedTime * 10)) * 0.06 : 0;
   });
 
-  // Group always faces -Z (toward doll). Body is built oriented that way.
   return (
     <group ref={group}>
-      {/* torso */}
       <mesh position={[0, 0.95, 0]} castShadow>
         <boxGeometry args={[0.55, 0.7, 0.32]} />
         <meshStandardMaterial color={SUIT} roughness={0.7} />
       </mesh>
-      {/* number patch on chest */}
       <mesh position={[0, 1.0, -0.165]}>
         <planeGeometry args={[0.32, 0.18]} />
-        <meshStandardMaterial color=\"#fafaf6\" roughness={0.55} />
+        <meshStandardMaterial color="#fafaf6" roughness={0.55} />
       </mesh>
-      {/* \"head\" — box with skin tone */}
       <mesh position={[0, 1.6, 0]} castShadow>
         <boxGeometry args={[0.35, 0.36, 0.32]} />
-        <meshStandardMaterial color=\"#e8c79c\" roughness={0.6} />
+        <meshStandardMaterial color="#e8c79c" roughness={0.6} />
       </mesh>
-      {/* hair top */}
       <mesh position={[0, 1.79, 0.02]}>
         <boxGeometry args={[0.36, 0.07, 0.34]} />
-        <meshStandardMaterial color=\"#1c1611\" roughness={0.85} />
+        <meshStandardMaterial color="#1c1611" roughness={0.85} />
       </mesh>
-      {/* arms */}
       <mesh ref={armL} position={[-0.36, 1.0, 0]} castShadow>
         <boxGeometry args={[0.16, 0.7, 0.18]} />
         <meshStandardMaterial color={SUIT} roughness={0.7} />
@@ -387,7 +358,6 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
         <boxGeometry args={[0.16, 0.7, 0.18]} />
         <meshStandardMaterial color={SUIT} roughness={0.7} />
       </mesh>
-      {/* legs */}
       <mesh ref={legL} position={[-0.14, 0.35, 0]} castShadow>
         <boxGeometry args={[0.18, 0.7, 0.18]} />
         <meshStandardMaterial color={SUIT_DARK} roughness={0.75} />
@@ -396,28 +366,26 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
         <boxGeometry args={[0.18, 0.7, 0.18]} />
         <meshStandardMaterial color={SUIT_DARK} roughness={0.75} />
       </mesh>
-      {/* player number text — uses drei <Html> for clarity */}
       <Html position={[0, 1.05, -0.18]} center distanceFactor={6} occlude={false}>
         <div
           style={{
-            fontFamily: \"var(--font-mono, 'JetBrains Mono', monospace)\",
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
             fontSize: 14,
             fontWeight: 700,
-            color: \"#111\",
-            letterSpacing: \"0.04em\",
-            pointerEvents: \"none\",
-            userSelect: \"none\",
+            color: "#111",
+            letterSpacing: "0.04em",
+            pointerEvents: "none",
+            userSelect: "none",
           }}
         >
-          {player.number.toString().padStart(3, \"0\")}
+          {player.number.toString().padStart(3, "0")}
         </div>
       </Html>
 
-      {/* blood splash if killed */}
       {!player.alive && (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[0.55 + player.fallProgress * 0.4, 16]} />
-          <meshBasicMaterial color=\"#9b1414\" transparent opacity={0.65} />
+          <meshBasicMaterial color="#9b1414" transparent opacity={0.65} />
         </mesh>
       )}
     </group>
@@ -425,7 +393,7 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 });
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  GUARD — pink jumpsuit guard at finish line
+ * GUARD
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function Guard({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
@@ -433,117 +401,95 @@ function Guard({ position, rotationY = 0 }: { position: [number, number, number]
     <group position={position} rotation={[0, rotationY, 0]}>
       <mesh position={[0, 1.0, 0]} castShadow>
         <boxGeometry args={[0.7, 1.45, 0.45]} />
-        <meshStandardMaterial color=\"#e92076\" roughness={0.6} />
+        <meshStandardMaterial color="#e92076" roughness={0.6} />
       </mesh>
       <mesh position={[0, 1.92, 0]} castShadow>
         <boxGeometry args={[0.42, 0.46, 0.4]} />
-        <meshStandardMaterial color=\"#0b0b0b\" roughness={0.4} />
+        <meshStandardMaterial color="#0b0b0b" roughness={0.4} />
       </mesh>
-      {/* mask shape */}
       <mesh position={[0, 1.92, 0.21]}>
         <planeGeometry args={[0.18, 0.18]} />
-        <meshStandardMaterial color=\"#fff\" emissive=\"#fff\" emissiveIntensity={0.4} />
+        <meshStandardMaterial color="#fff" emissive="#fff" emissiveIntensity={0.4} />
       </mesh>
       <mesh position={[-0.42, 0.9, 0]}>
         <boxGeometry args={[0.18, 1.2, 0.18]} />
-        <meshStandardMaterial color=\"#e92076\" roughness={0.6} />
+        <meshStandardMaterial color="#e92076" roughness={0.6} />
       </mesh>
       <mesh position={[0.42, 0.9, 0]}>
         <boxGeometry args={[0.18, 1.2, 0.18]} />
-        <meshStandardMaterial color=\"#e92076\" roughness={0.6} />
+        <meshStandardMaterial color="#e92076" roughness={0.6} />
       </mesh>
       <mesh position={[-0.17, 0.1, 0]}>
         <boxGeometry args={[0.2, 0.95, 0.2]} />
-        <meshStandardMaterial color=\"#0a0a0a\" roughness={0.7} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
       </mesh>
       <mesh position={[0.17, 0.1, 0]}>
         <boxGeometry args={[0.2, 0.95, 0.2]} />
-        <meshStandardMaterial color=\"#0a0a0a\" roughness={0.7} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.7} />
       </mesh>
     </group>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  ENVIRONMENT — playground arena
+ * ENVIRONMENT
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function Arena() {
   return (
     <group>
-      {/* SAND FLOOR — warm beige */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, FIELD_LEN / 2 - 5]} receiveShadow>
         <planeGeometry args={[FIELD_WIDTH + 6, FIELD_LEN + 20]} />
-        <meshStandardMaterial color=\"#cda878\" roughness={0.95} />
+        <meshStandardMaterial color="#cda878" roughness={0.95} />
       </mesh>
-
-      {/* Outer dust ring (slightly darker) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, FIELD_LEN / 2 - 5]}>
         <ringGeometry args={[FIELD_WIDTH / 2 - 3, FIELD_WIDTH / 2 + 10, 64]} />
-        <meshStandardMaterial color=\"#a8865d\" roughness={0.95} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#a8865d" roughness={0.95} side={THREE.DoubleSide} />
       </mesh>
-
-      {/* START LINE — white painted line */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, START_Z]}>
         <planeGeometry args={[FIELD_WIDTH, 0.6]} />
-        <meshStandardMaterial color=\"#ffffff\" roughness={0.9} emissive=\"#ffffff\" emissiveIntensity={0.05} />
+        <meshStandardMaterial color="#ffffff" roughness={0.9} emissive="#ffffff" emissiveIntensity={0.05} />
       </mesh>
-
-      {/* FINISH LINE — yellow under doll */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, FINISH_Z]}>
         <planeGeometry args={[FIELD_WIDTH, 0.6]} />
-        <meshStandardMaterial color=\"#f5c542\" roughness={0.85} emissive=\"#f5c542\" emissiveIntensity={0.2} />
+        <meshStandardMaterial color="#f5c542" roughness={0.85} emissive="#f5c542" emissiveIntensity={0.2} />
       </mesh>
-
-      {/* Left wall — bright pink playground */}
       <mesh position={[-FIELD_WIDTH / 2 - 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
         <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
-        <meshStandardMaterial color=\"#e34a8a\" roughness={0.65} />
+        <meshStandardMaterial color="#e34a8a" roughness={0.65} />
       </mesh>
-      {/* Right wall */}
       <mesh position={[FIELD_WIDTH / 2 + 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
         <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
-        <meshStandardMaterial color=\"#e34a8a\" roughness={0.65} />
+        <meshStandardMaterial color="#e34a8a" roughness={0.65} />
       </mesh>
-
-      {/* Back wall behind doll */}
       <mesh position={[0, 6, -14]} castShadow receiveShadow>
         <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
-        <meshStandardMaterial color=\"#75a1d1\" roughness={0.8} />
+        <meshStandardMaterial color="#75a1d1" roughness={0.8} />
       </mesh>
-      {/* sky beyond — pale */}
       <mesh position={[0, 11, -14.6]}>
         <planeGeometry args={[FIELD_WIDTH + 2, 4]} />
-        <meshStandardMaterial color=\"#a7c3df\" roughness={0.95} />
+        <meshStandardMaterial color="#a7c3df" roughness={0.95} />
       </mesh>
-
-      {/* Behind start - dark area suggesting waiting hall */}
       <mesh position={[0, 6, FIELD_LEN]} >
         <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
-        <meshStandardMaterial color=\"#3d2c1f\" roughness={0.85} />
+        <meshStandardMaterial color="#3d2c1f" roughness={0.85} />
       </mesh>
-
-      {/* Decorative trees painted on side walls — flat planes */}
       {[20, 45, 70].map((z) => (
         <React.Fragment key={z}>
           <mesh position={[-FIELD_WIDTH / 2 + 0.1, 3.5, z]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[6, 6]} />
-            <meshStandardMaterial color=\"#7a8a3a\" transparent opacity={0.55} roughness={0.85} />
+            <meshStandardMaterial color="#7a8a3a" transparent opacity={0.55} roughness={0.85} />
           </mesh>
           <mesh position={[FIELD_WIDTH / 2 - 0.1, 3.5, z]} rotation={[0, -Math.PI / 2, 0]}>
             <planeGeometry args={[6, 6]} />
-            <meshStandardMaterial color=\"#7a8a3a\" transparent opacity={0.55} roughness={0.85} />
+            <meshStandardMaterial color="#7a8a3a" transparent opacity={0.55} roughness={0.85} />
           </mesh>
         </React.Fragment>
       ))}
-
-      {/* Painted \"tree\" silhouette behind doll */}
       <mesh position={[0, 6, -13.5]}>
         <planeGeometry args={[12, 9]} />
-        <meshStandardMaterial color=\"#3c5a2a\" transparent opacity={0.75} roughness={0.9} />
+        <meshStandardMaterial color="#3c5a2a" transparent opacity={0.75} roughness={0.9} />
       </mesh>
-
-      {/* Soft contact shadow under doll */}
       <ContactShadows
         position={[0, 0.02, -10]}
         opacity={0.5}
@@ -551,10 +497,8 @@ function Arena() {
         blur={2.2}
         far={4}
         resolution={512}
-        color=\"#000\"
+        color="#000"
       />
-
-      {/* Guards flanking finish line */}
       <Guard position={[-FIELD_WIDTH / 2 + 2, 0, FINISH_Z + 1.5]} rotationY={Math.PI / 2} />
       <Guard position={[FIELD_WIDTH / 2 - 2, 0, FINISH_Z + 1.5]} rotationY={-Math.PI / 2} />
     </group>
@@ -562,7 +506,7 @@ function Arena() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  CAMERA — third-person follow / cinematic
+ * CAMERA
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function FollowCamera({
@@ -585,8 +529,7 @@ function FollowCamera({
     let desiredX: number, desiredY: number, desiredZ: number;
     let lookX: number, lookY: number, lookZ: number;
 
-    if (phase === \"countdown\") {
-      // Cinematic — orbit slightly around doll
+    if (phase === GamePhase.COUNTDOWN) {
       const t = performance.now() * 0.0002;
       desiredX = Math.sin(t) * 12;
       desiredY = 5.5;
@@ -594,7 +537,7 @@ function FollowCamera({
       lookX = 0;
       lookY = 2.5;
       lookZ = -8;
-    } else if (phase === \"victory\") {
+    } else if (phase === GamePhase.VICTORY) {
       desiredX = targetX + 2.5;
       desiredY = 3.0;
       desiredZ = targetZ - 3;
@@ -602,7 +545,6 @@ function FollowCamera({
       lookY = 1.5;
       lookZ = targetZ - 5;
     } else {
-      // Third-person — behind player, looking toward doll
       desiredX = targetX;
       desiredY = 4.2;
       desiredZ = targetZ + 7.5;
@@ -628,7 +570,7 @@ function FollowCamera({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  SCENE — heart of the simulation
+ * SCENE LOGIC
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface SceneProps {
@@ -647,12 +589,11 @@ interface SceneProps {
 }
 
 function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal }: SceneProps) {
-  /* ── state refs (mutated in useFrame) ───────────────────────────────────*/
   const playersRef    = useRef<PlayerEntity[]>([]);
-  const lightPhaseRef = useRef<LightPhase>(\"green\");
-  const turnTRef      = useRef(0);     // 0..1 turn progress
-  const redTimerRef   = useRef(0);     // seconds doll has been red
-  const gamePhaseRef  = useRef<GamePhase>(\"countdown\");
+  const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
+  const turnTRef      = useRef(0);     
+  const redTimerRef   = useRef(0);     
+  const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN);
   const countdownRef  = useRef(3);
   const timeLeftRef   = useRef(ROUND_TIMER);
   const scoreRef      = useRef(0);
@@ -662,12 +603,10 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
   const fakeOutChanceRef = useRef(0);
   const aliveCountRef    = useRef(NPC_COUNT + 1);
   const hudThrottleRef   = useRef(0);
-  const turnDirRef    = useRef<\"to_red\" | \"to_green\">(\"to_red\");
+  const turnDirRef    = useRef<"to_red" | "to_green">("to_red");
 
-  // Initialize / reset players whenever resetSignal changes
   useEffect(() => {
     const arr: PlayerEntity[] = [];
-    // Human player — id 0
     arr.push({
       id: 0,
       x: 0,
@@ -686,9 +625,8 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       fallProgress: 0,
       fallAxis: [1, 0, 0],
     });
-    // NPCs spread across lanes
     for (let i = 1; i <= NPC_COUNT; i++) {
-      const lane = ((i - 1) % 7) - 3;  // -3..3
+      const lane = ((i - 1) % 7) - 3; 
       const row  = Math.floor((i - 1) / 7);
       arr.push({
         id: i,
@@ -713,11 +651,11 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         ],
       });
     }
-    playersRef.current   = arr;
-    lightPhaseRef.current = \"green\";
+    playersRef.current    = arr;
+    lightPhaseRef.current = LightPhase.GREEN;
     turnTRef.current      = 0;
     redTimerRef.current   = 0;
-    gamePhaseRef.current  = \"countdown\";
+    gamePhaseRef.current  = GamePhase.COUNTDOWN;
     countdownRef.current  = 3;
     timeLeftRef.current   = ROUND_TIMER;
     scoreRef.current      = 0;
@@ -725,7 +663,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     fakeOutChanceRef.current = 0;
     aliveCountRef.current = NPC_COUNT + 1;
 
-    // Stop any lingering audio
     const a = audioRef.current;
     if (a) {
       if (dollSongIdRef.current !== null) a.dollSong.stop(dollSongIdRef.current);
@@ -734,7 +671,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     }
   }, [resetSignal, audioRef]);
 
-  /* ── start doll song when entering green light ──────────────────────────*/
   const startDollSong = useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -742,7 +678,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       a.dollSong.stop(dollSongIdRef.current);
     }
     const id = a.dollSong.play();
-    dollSongIdRef.current = typeof id === \"number\" ? id : null;
+    dollSongIdRef.current = typeof id === "number" ? id : null;
   }, [audioRef]);
 
   const stopDollSong = useCallback(() => {
@@ -756,32 +692,26 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     }
   }, [audioRef]);
 
-  /* ── Wire up doll-song \"end\" event → start the turn ─────────────────────*/
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     const onEnd = () => {
-      // Song ended naturally → trigger the doll to turn (red phase)
-      // Only react if we're in green phase
-      if (lightPhaseRef.current === \"green\" && gamePhaseRef.current === \"playing\") {
-        lightPhaseRef.current = \"turning_red\";
-        turnDirRef.current    = \"to_red\";
+      if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
+        lightPhaseRef.current = LightPhase.TURNING_RED;
+        turnDirRef.current    = "to_red";
         turnTRef.current      = 0;
         dollSongIdRef.current = null;
-        // optional alert
         a.beep.play();
       }
     };
-    a.dollSong.on(\"end\", onEnd);
+    a.dollSong.on("end", onEnd);
     return () => {
-      a.dollSong.off(\"end\", onEnd);
+      a.dollSong.off("end", onEnd);
     };
   }, [audioRef]);
 
-  /* ── countdown beep on integer ticks ────────────────────────────────────*/
   const countdownLastIntRef = useRef(3);
 
-  /* ── MAIN LOOP ──────────────────────────────────────────────────────────*/
   useFrame((_, rawDt) => {
     if (pausedRef.current) return;
     const dt = Math.min(rawDt, 0.05);
@@ -792,8 +722,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     const human   = players[0];
     if (!human) return;
 
-    /* ── COUNTDOWN PHASE ──────────────────────────────────────────────── */
-    if (gamePhaseRef.current === \"countdown\") {
+    if (gamePhaseRef.current === GamePhase.COUNTDOWN) {
       countdownRef.current -= dt;
       const intNow = Math.ceil(countdownRef.current);
       if (intNow !== countdownLastIntRef.current) {
@@ -801,80 +730,74 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         if (intNow > 0) a.beep.play();
       }
       if (countdownRef.current <= 0) {
-        gamePhaseRef.current = \"playing\";
+        gamePhaseRef.current = GamePhase.PLAYING;
+        
+        // Notify Store of game start
+        useGameStore.getState().setRuntimePhase("playing");
+
         a.go.play();
-        // Green light starts — play the doll song
         startDollSong();
-        lightPhaseRef.current = \"green\";
+        lightPhaseRef.current = LightPhase.GREEN;
       }
       return;
     }
 
-    if (gamePhaseRef.current !== \"playing\") {
-      // Tick fall animations of dead players
+    if (gamePhaseRef.current !== GamePhase.PLAYING) {
       for (const p of players) {
         if (!p.alive && p.fallProgress < 1) p.fallProgress = Math.min(1, p.fallProgress + dt * 2);
       }
       return;
     }
 
-    /* ── TIME TICK ─────────────────────────────────────────────────────── */
     timeLeftRef.current -= dt;
     if (timeLeftRef.current <= 0) {
-      gamePhaseRef.current = \"timeout\";
+      gamePhaseRef.current = GamePhase.TIMEOUT;
       stopDollSong();
       a.heartbeat.stop();
-      onGameOver(\"timeout\", Math.floor(scoreRef.current));
+      onGameOver(GamePhase.TIMEOUT, Math.floor(scoreRef.current));
       return;
     }
 
-    /* ── LIGHT STATE MACHINE ──────────────────────────────────────────── */
     const lp = lightPhaseRef.current;
 
-    if (lp === \"turning_red\") {
+    if (lp === LightPhase.TURNING_RED) {
       turnTRef.current += dt / TURN_DURATION;
       if (turnTRef.current >= 1) {
         turnTRef.current = 1;
-        lightPhaseRef.current = \"red\";
+        lightPhaseRef.current = LightPhase.RED;
         redTimerRef.current = 0;
         a.redLight.play();
         a.heartbeat.play();
       }
-    } else if (lp === \"red\") {
+    } else if (lp === LightPhase.RED) {
       redTimerRef.current += dt;
-      // Red duration scales with difficulty (decreases over time)
       const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / ROUND_TIMER * 0.5);
       if (redTimerRef.current >= redDur) {
-        // Turn back to green
-        lightPhaseRef.current = \"turning_green\";
-        turnDirRef.current    = \"to_green\";
+        lightPhaseRef.current = LightPhase.TURNING_GREEN;
+        turnDirRef.current    = "to_green";
         turnTRef.current      = 0;
       }
-    } else if (lp === \"turning_green\") {
+    } else if (lp === LightPhase.TURNING_GREEN) {
       turnTRef.current += dt / TURN_DURATION;
       if (turnTRef.current >= 1) {
         turnTRef.current = 0;
-        lightPhaseRef.current = \"green\";
+        lightPhaseRef.current = LightPhase.GREEN;
         a.greenLight.play();
         a.heartbeat.stop();
         startDollSong();
       }
     }
 
-    /* ── MOVEMENT — HUMAN ─────────────────────────────────────────────── */
     if (human.alive && !human.finished) {
       const input = inputRef.current;
       const wantMove = input.forward;
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
       const targetVz = wantMove ? -speed : 0;
-      // Smoother stops vs starts
       const accel = wantMove ? 14 : 26;
       human.vz = THREE.MathUtils.lerp(human.vz, targetVz, Math.min(1, dt * accel));
-      // Subtle x drift = 0
       human.vx = 0;
       human.z += human.vz * dt;
 
-      // Step sound
       if (wantMove) {
         lastStepRef.current += dt;
         if (lastStepRef.current > 0.32) {
@@ -883,24 +806,22 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         }
       }
 
-      // Reaching finish?
       if (human.z <= FINISH_Z) {
         human.finished = true;
         human.z = FINISH_Z;
         human.vz = 0;
-        gamePhaseRef.current = \"victory\";
+        gamePhaseRef.current = GamePhase.VICTORY;
         stopDollSong();
         a.heartbeat.stop();
         a.victory.play();
         a.cheer.play();
         scoreRef.current += 5000;
         scoreRef.current += timeLeftRef.current * 50;
-        onGameOver(\"victory\", Math.floor(scoreRef.current));
+        onGameOver(GamePhase.VICTORY, Math.floor(scoreRef.current));
       }
     }
 
-    /* ── MOVEMENT — NPCs ─────────────────────────────────────────────── */
-    const isGreenForNPC = lp === \"green\" || (lp === \"turning_red\" && turnTRef.current < 0.45);
+    const isGreenForNPC = lp === LightPhase.GREEN || (lp === LightPhase.TURNING_RED && turnTRef.current < 0.45);
     for (let i = 1; i < players.length; i++) {
       const p = players[i];
       if (!p.alive || p.finished) {
@@ -909,7 +830,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       }
 
       if (isGreenForNPC) {
-        // Approach moving state with reaction delay on transition
         p.npcResumeTimer += dt * 1000;
         if (!p.npcMoving && p.npcResumeTimer >= p.npcResumeOffsetMs) {
           p.npcMoving = true;
@@ -923,7 +843,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         }
       }
 
-      // Velocity
       const npcSpeed = 5 + (p.id % 5) * 0.5;
       const targetVz = p.npcMoving ? -npcSpeed : 0;
       const accel = p.npcMoving ? 8 : 18;
@@ -937,22 +856,19 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       }
     }
 
-    /* ── ELIMINATION DETECTION DURING RED ─────────────────────────────── */
-    if (lp === \"red\") {
-      // Human
+    if (lp === LightPhase.RED) {
       if (human.alive && !human.finished && Math.abs(human.vz) > MOVE_THRESHOLD) {
         human.alive = false;
         human.fallProgress = 0;
-        gamePhaseRef.current = \"eliminated\";
+        gamePhaseRef.current = GamePhase.ELIMINATED;
         shakeRef.current = 0.35;
         stopDollSong();
         a.heartbeat.stop();
         a.shatter.play();
         a.elimination.play();
         a.gasp.play();
-        onGameOver(\"eliminated\", Math.floor(scoreRef.current));
+        onGameOver(GamePhase.ELIMINATED, Math.floor(scoreRef.current));
       }
-      // NPCs — chance based on whether they're still moving when red landed
       for (let i = 1; i < players.length; i++) {
         const p = players[i];
         if (!p.alive || p.finished) continue;
@@ -964,18 +880,13 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
       }
     }
 
-    /* ── CAMERA SHAKE DECAY ──────────────────────────────────────────── */
     shakeRef.current = Math.max(0, shakeRef.current - dt * 1.5);
-
-    /* ── SCORE GROWTH ─────────────────────────────────────────────────── */
     if (human.alive) scoreRef.current += dt * 25;
 
-    /* ── ALIVE COUNT ──────────────────────────────────────────────────── */
     let alive = 0;
     for (const p of players) if (p.alive) alive++;
     aliveCountRef.current = alive;
 
-    /* ── HUD push (throttled) ─────────────────────────────────────────── */
     hudThrottleRef.current += dt;
     if (hudThrottleRef.current > 0.08) {
       hudThrottleRef.current = 0;
@@ -991,18 +902,17 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
     }
   });
 
-  /* ── RENDER ──────────────────────────────────────────────────────────── */
-
-  const isRed = lightPhaseRef.current === \"red\";
+  const isRed = lightPhaseRef.current === LightPhase.RED;
   const turnProg =
-    lightPhaseRef.current === \"turning_red\" ? turnTRef.current :
-    lightPhaseRef.current === \"turning_green\" ? turnTRef.current :
-    lightPhaseRef.current === \"red\" ? 1 : 0;
-  const facing: \"away\" | \"players\" = (lightPhaseRef.current === \"green\" || lightPhaseRef.current === \"turning_red\")
-    ? (turnTRef.current < 0.5 ? \"away\" : \"players\")
-    : (lightPhaseRef.current === \"turning_green\"
-        ? (turnTRef.current < 0.5 ? \"players\" : \"away\")
-        : \"players\");
+    lightPhaseRef.current === LightPhase.TURNING_RED ? turnTRef.current :
+    lightPhaseRef.current === LightPhase.TURNING_GREEN ? turnTRef.current :
+    lightPhaseRef.current === LightPhase.RED ? 1 : 0;
+  
+  const facing: "away" | "players" = (lightPhaseRef.current === LightPhase.GREEN || lightPhaseRef.current === LightPhase.TURNING_RED)
+    ? (turnTRef.current < 0.5 ? "away" : "players")
+    : (lightPhaseRef.current === LightPhase.TURNING_GREEN
+        ? (turnTRef.current < 0.5 ? "players" : "away")
+        : "players");
 
   return (
     <>
@@ -1012,9 +922,7 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         phase={gamePhaseRef.current}
         shake={shakeRef.current}
       />
-
-      {/* Lighting */}
-      <ambientLight intensity={0.55} color=\"#fff2dc\" />
+      <ambientLight intensity={0.55} color="#fff2dc" />
       <directionalLight
         position={[15, 20, 20]}
         intensity={1.05}
@@ -1027,17 +935,12 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         shadow-camera-bottom={-30}
         shadow-camera-near={1}
         shadow-camera-far={80}
-        color=\"#fff8e8\"
+        color="#fff8e8"
       />
-      <hemisphereLight args={[\"#bcd9ff\", \"#3a2a1d\", 0.45]} />
-
-      {/* Sky color */}
-      <color attach=\"background\" args={[isRed ? \"#3a1a1c\" : \"#a7c3df\"]} />
-      <fog attach=\"fog\" args={[isRed ? \"#5b1a1c\" : \"#a7c3df\", 35, 140]} />
-
+      <hemisphereLight args={["#bcd9ff", "#3a2a1d", 0.45]} />
+      <color attach="background" args={[isRed ? "#3a1a1c" : "#a7c3df"]} />
+      <fog attach="fog" args={[isRed ? "#5b1a1c" : "#a7c3df", 35, 140]} />
       <Arena />
-
-      {/* Doll at finish line, behind it */}
       <Doll
         position={[0, 0, -12.5]}
         facing={facing}
@@ -1045,8 +948,6 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
         isRed={isRed}
         scanIntensity={Math.min(1, redTimerRef.current * 1.2)}
       />
-
-      {/* Players */}
       {playersRef.current.map((p) => (
         <PlayerMesh key={p.id} player={p} isMoving={Math.abs(p.vz) > 0.2} />
       ))}
@@ -1055,19 +956,25 @@ function Scene({ audioRef, onGameOver, onHudUpdate, pausedRef, inputRef, resetSi
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  MAIN COMPONENT — wraps Canvas, owns UI overlay
+ * MAIN COMPONENT
  * ────────────────────────────────────────────────────────────────────────────*/
 
 interface RLGLProps {
   onExit?: () => void;
-  onComplete?: (score: number, outcome: \"victory\" | \"eliminated\") => void;
+  onComplete?: (score: number, outcome: "victory" | "eliminated") => void;
 }
 
 export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) {
   const settings = useGameStore((s) => s.settings);
   const addScore = useGameStore((s) => s.addScore);
+  const updateBestScore = useGameStore((s) => s.updateBestScore);
+  const setRuntimePhase = useGameStore((s) => s.setRuntimePhase);
 
-  /* ── Audio ── */
+  // Initialize runtime state properly via store
+  useEffect(() => {
+    setRuntimePhase("countdown");
+  }, [setRuntimePhase]);
+
   const audioRef = useRef<AudioHandles | null>(null);
   useEffect(() => {
     audioRef.current = buildAudio({
@@ -1081,10 +988,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       Object.values(a).forEach((h) => h.unload());
       audioRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live-update volumes
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -1104,63 +1009,57 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     a.shatter.volume(0.7 * settings.sfxVolume * m);
   }, [settings.masterVolume, settings.sfxVolume, settings.musicVolume]);
 
-  /* ── Input ── */
   const inputRef = useRef({ forward: false, sprint: false });
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === \"Escape\") {
+      if (e.code === "Escape") {
         if (audioRef.current) {
           Object.values(audioRef.current).forEach((h) => h.stop());
         }
         onExit?.();
         return;
       }
-      if (e.code === \"KeyW\" || e.code === \"ArrowUp\" || e.code === \"Space\") {
+      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "Space") {
         inputRef.current.forward = true;
         e.preventDefault();
       }
-      if (e.code === \"ShiftLeft\" || e.code === \"ShiftRight\") {
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
         inputRef.current.sprint = true;
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === \"KeyW\" || e.code === \"ArrowUp\" || e.code === \"Space\") {
+      if (e.code === "KeyW" || e.code === "ArrowUp" || e.code === "Space") {
         inputRef.current.forward = false;
       }
-      if (e.code === \"ShiftLeft\" || e.code === \"ShiftRight\") {
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
         inputRef.current.sprint = false;
       }
     };
-    window.addEventListener(\"keydown\", onKeyDown);
-    window.addEventListener(\"keyup\", onKeyUp);
-    // Blur clears input
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
     const onBlur = () => { inputRef.current.forward = false; inputRef.current.sprint = false; };
-    window.addEventListener(\"blur\", onBlur);
+    window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener(\"keydown\", onKeyDown);
-      window.removeEventListener(\"keyup\", onKeyUp);
-      window.removeEventListener(\"blur\", onBlur);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
     };
   }, [onExit]);
 
-  /* ── Pause state ── */
   const pausedRef = useRef(false);
   const [paused, setPaused] = useState(false);
   const togglePause = useCallback(() => {
     setPaused((p) => {
       pausedRef.current = !p;
-      // Pause audio loops
       const a = audioRef.current;
       if (a) {
         if (!p) {
-          // pausing now
           a.heartbeat.pause();
           if (a.dollSong.playing()) a.dollSong.pause();
         } else {
-          // resuming
           a.heartbeat.play();
-          if (!a.dollSong.playing() && (a.dollSong as unknown as { _state?: string })._state === \"paused\") {
+          if (!a.dollSong.playing() && (a.dollSong as unknown as { _state?: string })._state === "paused") {
             a.dollSong.play();
           }
         }
@@ -1169,38 +1068,41 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     });
   }, []);
 
-  /* ── HUD live state ── */
   const [hud, setHud] = useState({
     timeLeft: ROUND_TIMER,
     aliveCount: NPC_COUNT + 1,
-    lightPhase: \"green\" as LightPhase,
+    lightPhase: LightPhase.GREEN,
     score: 0,
     playerProgressPct: 0,
   });
   const handleHudUpdate = useCallback((d: typeof hud) => setHud(d), []);
 
-  /* ── End game ── */
   const [endState, setEndState] = useState<{ phase: GamePhase; score: number } | null>(null);
+  
+  // Handled GameOver synced to Store
   const handleGameOver = useCallback((phase: GamePhase, score: number) => {
     setEndState({ phase, score });
-    if (phase === \"victory\") {
+    if (phase === GamePhase.VICTORY) {
       addScore(score);
-      onComplete?.(score, \"victory\");
-    } else if (phase === \"eliminated\" || phase === \"timeout\") {
+      updateBestScore("red-light-green-light", score);
+      setRuntimePhase("victory");
+      onComplete?.(score, "victory");
+    } else if (phase === GamePhase.ELIMINATED || phase === GamePhase.TIMEOUT) {
       addScore(score);
-      onComplete?.(score, \"eliminated\");
+      updateBestScore("red-light-green-light", score);
+      setRuntimePhase("eliminated");
+      onComplete?.(score, "eliminated");
     }
-  }, [addScore, onComplete]);
+  }, [addScore, updateBestScore, setRuntimePhase, onComplete]);
 
-  /* ── Restart ── */
   const [resetSignal, setResetSignal] = useState(0);
   const handleRestart = useCallback(() => {
     setEndState(null);
-    setHud({ timeLeft: ROUND_TIMER, aliveCount: NPC_COUNT + 1, lightPhase: \"green\", score: 0, playerProgressPct: 0 });
+    setRuntimePhase("countdown");
+    setHud({ timeLeft: ROUND_TIMER, aliveCount: NPC_COUNT + 1, lightPhase: LightPhase.GREEN, score: 0, playerProgressPct: 0 });
     setResetSignal((n) => n + 1);
-  }, []);
+  }, [setRuntimePhase]);
 
-  /* ── Touch button refs ── */
   const moveHoldHandlers = useMemo(() => ({
     onPointerDown: (e: React.PointerEvent) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); inputRef.current.forward = true; },
     onPointerUp:   () => { inputRef.current.forward = false; },
@@ -1210,18 +1112,18 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 
   return (
     <div
-      data-testid=\"rlgl3d-root\"
+      data-testid="rlgl3d-root"
       style={{
-        position: \"fixed\", inset: 0, width: \"100vw\", height: \"100dvh\",
-        background: \"#000\", overflow: \"hidden\",
-        fontFamily: \"var(--font-mono, 'JetBrains Mono', monospace)\",
-        userSelect: \"none\",
+        position: "fixed", inset: 0, width: "100vw", height: "100dvh",
+        background: "#000", overflow: "hidden",
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+        userSelect: "none",
       }}
     >
       <Canvas
         shadows
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: \"high-performance\" }}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
         camera={{ fov: 55, near: 0.1, far: 250, position: [0, 6, 95] }}
         onPointerMissed={() => { /* noop */ }}
       >
@@ -1237,7 +1139,6 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         </Suspense>
       </Canvas>
 
-      {/* ── HUD Overlay ─────────────────────────────────────────────────── */}
       <HUDOverlay
         hud={hud}
         onExit={onExit}
@@ -1245,42 +1146,39 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         paused={paused}
       />
 
-      {/* ── Red-Light Vignette ──────────────────────────────────────────── */}
-      {hud.lightPhase === \"red\" && (
+      {hud.lightPhase === LightPhase.RED && (
         <div
           aria-hidden
           style={{
-            position: \"absolute\", inset: 0, pointerEvents: \"none\", zIndex: 5,
-            boxShadow: \"inset 0 0 220px 60px rgba(220,20,20,0.55)\",
-            animation: \"rlgl3d-pulse 1.4s ease-in-out infinite alternate\",
+            position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5,
+            boxShadow: "inset 0 0 220px 60px rgba(220,20,20,0.55)",
+            animation: "rlgl3d-pulse 1.4s ease-in-out infinite alternate",
           }}
         />
       )}
 
-      {/* ── Pause Overlay ──────────────────────────────────────────────── */}
       {paused && (
         <div
           style={{
-            position: \"absolute\", inset: 0, zIndex: 30,
-            background: \"rgba(0,0,0,0.75)\", backdropFilter: \"blur(8px)\",
-            display: \"flex\", flexDirection: \"column\", alignItems: \"center\", justifyContent: \"center\", gap: 24,
+            position: "absolute", inset: 0, zIndex: 30,
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24,
           }}
         >
-          <div style={{ fontFamily: \"var(--font-bebas)\", fontSize: 64, letterSpacing: \"0.2em\", color: \"#ff0066\" }}>
+          <div style={{ fontFamily: "var(--font-bebas)", fontSize: 64, letterSpacing: "0.2em", color: "#ff0066" }}>
             PAUSED
           </div>
-          <button onClick={togglePause} data-testid=\"rlgl3d-resume\" style={btnStyle(\"#00ffb2\")}>
+          <button onClick={togglePause} data-testid="rlgl3d-resume" style={btnStyle("#00ffb2")}>
             RESUME
           </button>
           {onExit && (
-            <button onClick={onExit} data-testid=\"rlgl3d-pause-exit\" style={btnStyle(\"#ff0066\")}>
+            <button onClick={onExit} data-testid="rlgl3d-pause-exit" style={btnStyle("#ff0066")}>
               EXIT TO MENU
             </button>
           )}
         </div>
       )}
 
-      {/* ── End Game Overlay ───────────────────────────────────────────── */}
       {endState && (
         <EndScreen
           phase={endState.phase}
@@ -1291,34 +1189,32 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         />
       )}
 
-      {/* ── Touch controls (mobile) ─────────────────────────────────────── */}
       <div
-        data-testid=\"rlgl3d-mobile-controls\"
+        data-testid="rlgl3d-mobile-controls"
         style={{
-          position: \"absolute\", bottom: 28, left: 0, right: 0, zIndex: 25,
-          display: \"flex\", justifyContent: \"center\", gap: 24, pointerEvents: \"none\",
+          position: "absolute", bottom: 28, left: 0, right: 0, zIndex: 25,
+          display: "flex", justifyContent: "center", gap: 24, pointerEvents: "none",
         }}
-        className=\"rlgl3d-touch-only\"
+        className="rlgl3d-touch-only"
       >
         <button
           {...moveHoldHandlers}
-          data-testid=\"rlgl3d-move-btn\"
+          data-testid="rlgl3d-move-btn"
           style={{
-            pointerEvents: \"auto\",
+            pointerEvents: "auto",
             width: 110, height: 110, borderRadius: 60,
-            background: \"rgba(15,160,125,0.75)\",
-            border: \"3px solid rgba(255,255,255,0.6)\",
-            color: \"#fff\", fontSize: 14, fontWeight: 800, letterSpacing: \"0.18em\",
-            backdropFilter: \"blur(6px)\",
-            boxShadow: \"0 0 32px rgba(15,160,125,0.5)\",
-            touchAction: \"none\",
+            background: "rgba(15,160,125,0.75)",
+            border: "3px solid rgba(255,255,255,0.6)",
+            color: "#fff", fontSize: 14, fontWeight: 800, letterSpacing: "0.18em",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 0 32px rgba(15,160,125,0.5)",
+            touchAction: "none",
           }}
         >
           HOLD<br/>TO RUN
         </button>
       </div>
 
-      {/* ── Style ─────────────────────────────────────────────────────── */}
       <style>{`
         @keyframes rlgl3d-pulse {
           from { box-shadow: inset 0 0 180px 50px rgba(220,20,20,0.45); }
@@ -1333,7 +1229,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  HUD OVERLAY
+ * HUD OVERLAY
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function HUDOverlay({
@@ -1344,13 +1240,14 @@ function HUDOverlay({
   onPause: () => void;
   paused: boolean;
 }) {
-  const isRed = hud.lightPhase === \"red\";
-  const isTurning = hud.lightPhase === \"turning_red\" || hud.lightPhase === \"turning_green\";
-  const lightCol = isRed ? \"#ff2640\" : isTurning ? \"#ffae2a\" : \"#00ffb2\";
-  const lightLabel = hud.lightPhase === \"green\" ? \"GREEN LIGHT\"
-    : hud.lightPhase === \"red\" ? \"RED LIGHT\"
-    : hud.lightPhase === \"turning_red\" ? \"WARNING\"
-    : \"RESUMING\";
+  const isRed = hud.lightPhase === LightPhase.RED;
+  const isTurning = hud.lightPhase === LightPhase.TURNING_RED || hud.lightPhase === LightPhase.TURNING_GREEN;
+  const lightCol = isRed ? "#ff2640" : isTurning ? "#ffae2a" : "#00ffb2";
+  
+  const lightLabel = hud.lightPhase === LightPhase.GREEN ? "GREEN LIGHT"
+    : hud.lightPhase === LightPhase.RED ? "RED LIGHT"
+    : hud.lightPhase === LightPhase.TURNING_RED ? "WARNING"
+    : "RESUMING";
 
   const tMin = Math.floor(hud.timeLeft / 60);
   const tSec = Math.floor(hud.timeLeft % 60);
@@ -1358,155 +1255,149 @@ function HUDOverlay({
 
   return (
     <>
-      {/* Top bar */}
       <div
-        data-testid=\"rlgl3d-hud-top\"
+        data-testid="rlgl3d-hud-top"
         style={{
-          position: \"absolute\", top: 0, left: 0, right: 0, zIndex: 10,
-          padding: \"16px 22px\",
-          display: \"flex\", justifyContent: \"space-between\", alignItems: \"flex-start\",
-          pointerEvents: \"none\",
+          position: "absolute", top: 0, left: 0, right: 0, zIndex: 10,
+          padding: "16px 22px",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+          pointerEvents: "none",
         }}
       >
-        {/* Left — alive count + exit */}
-        <div style={{ display: \"flex\", gap: 12, pointerEvents: \"auto\" }}>
+        <div style={{ display: "flex", gap: 12, pointerEvents: "auto" }}>
           {onExit && (
             <button
               onClick={onExit}
-              data-testid=\"rlgl3d-exit-btn\"
+              data-testid="rlgl3d-exit-btn"
               style={{
-                padding: \"8px 14px\",
-                background: \"rgba(8,8,14,0.78)\",
-                border: \"1px solid rgba(255,255,255,0.18)\",
+                padding: "8px 14px",
+                background: "rgba(8,8,14,0.78)",
+                border: "1px solid rgba(255,255,255,0.18)",
                 borderRadius: 4,
-                color: \"rgba(245,245,245,0.85)\",
-                fontSize: 11, letterSpacing: \"0.18em\", fontWeight: 700,
-                textTransform: \"uppercase\", cursor: \"pointer\",
-                backdropFilter: \"blur(8px)\",
+                color: "rgba(245,245,245,0.85)",
+                fontSize: 11, letterSpacing: "0.18em", fontWeight: 700,
+                textTransform: "uppercase", cursor: "pointer",
+                backdropFilter: "blur(8px)",
               }}
             >
               ← MENU
             </button>
           )}
           <div style={panelStyle()}>
-            <span style={{ color: \"rgba(255,255,255,0.45)\", fontSize: 9, letterSpacing: \"0.2em\" }}>ALIVE</span>
-            <span style={{ color: \"#fff\", fontWeight: 800, marginLeft: 8, fontSize: 16 }}>
-              {hud.aliveCount.toString().padStart(2, \"0\")}<span style={{ color: \"rgba(255,255,255,0.3)\" }}>/{NPC_COUNT + 1}</span>
+            <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 9, letterSpacing: "0.2em" }}>ALIVE</span>
+            <span style={{ color: "#fff", fontWeight: 800, marginLeft: 8, fontSize: 16 }}>
+              {hud.aliveCount.toString().padStart(2, "0")}<span style={{ color: "rgba(255,255,255,0.3)" }}>/{NPC_COUNT + 1}</span>
             </span>
           </div>
         </div>
 
-        {/* Center — light state */}
         <div
-          data-testid=\"rlgl3d-hud-light\"
+          data-testid="rlgl3d-hud-light"
           style={{
-            position: \"absolute\", left: \"50%\", transform: \"translateX(-50%)\",
-            display: \"flex\", flexDirection: \"column\", alignItems: \"center\", gap: 6,
-            pointerEvents: \"none\",
+            position: "absolute", left: "50%", transform: "translateX(-50%)",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+            pointerEvents: "none",
           }}
         >
           <div style={{
-            padding: \"10px 26px\",
+            padding: "10px 26px",
             border: `1.5px solid ${lightCol}`,
             background: `${lightCol}18`,
             borderRadius: 4,
-            display: \"flex\", alignItems: \"center\", gap: 10,
-            fontFamily: \"var(--font-bebas)\",
-            fontSize: 24, letterSpacing: \"0.32em\", color: lightCol,
-            backdropFilter: \"blur(10px)\",
+            display: "flex", alignItems: "center", gap: 10,
+            fontFamily: "var(--font-bebas)",
+            fontSize: 24, letterSpacing: "0.32em", color: lightCol,
+            backdropFilter: "blur(10px)",
             boxShadow: `0 0 38px ${lightCol}50`,
             textShadow: `0 0 16px ${lightCol}`,
           }}>
             <span style={{
               width: 10, height: 10, borderRadius: 10, background: lightCol,
               boxShadow: `0 0 12px ${lightCol}`,
-              animation: isRed ? \"rlgl3d-blink 0.7s linear infinite\" : \"none\",
+              animation: isRed ? "rlgl3d-blink 0.7s linear infinite" : "none",
             }} />
             {lightLabel}
           </div>
           <div style={{
-            fontFamily: \"var(--font-mono, 'JetBrains Mono', monospace)\",
-            fontSize: 28, fontWeight: 700, color: lowTime ? \"#ff2640\" : \"#fff\",
-            textShadow: lowTime ? \"0 0 18px rgba(255,38,64,0.7)\" : \"none\",
-            letterSpacing: \"0.06em\",
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: 28, fontWeight: 700, color: lowTime ? "#ff2640" : "#fff",
+            textShadow: lowTime ? "0 0 18px rgba(255,38,64,0.7)" : "none",
+            letterSpacing: "0.06em",
           }}>
-            {tMin.toString().padStart(2, \"0\")}:{tSec.toString().padStart(2, \"0\")}
+            {tMin.toString().padStart(2, "0")}:{tSec.toString().padStart(2, "0")}
           </div>
         </div>
 
-        {/* Right — score + pause */}
-        <div style={{ display: \"flex\", gap: 12, pointerEvents: \"auto\" }}>
+        <div style={{ display: "flex", gap: 12, pointerEvents: "auto" }}>
           <div style={panelStyle()}>
-            <span style={{ color: \"rgba(255,255,255,0.45)\", fontSize: 9, letterSpacing: \"0.2em\" }}>SCORE</span>
-            <span style={{ color: \"#00ffb2\", fontWeight: 800, marginLeft: 8, fontSize: 16, textShadow: \"0 0 10px rgba(0,255,178,0.55)\" }}>
-              {hud.score.toLocaleString(\"en-US\").padStart(6, \"0\")}
+            <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 9, letterSpacing: "0.2em" }}>SCORE</span>
+            <span style={{ color: "#00ffb2", fontWeight: 800, marginLeft: 8, fontSize: 16, textShadow: "0 0 10px rgba(0,255,178,0.55)" }}>
+              {hud.score.toLocaleString("en-US").padStart(6, "0")}
             </span>
           </div>
           <button
             onClick={onPause}
-            data-testid=\"rlgl3d-pause-btn\"
-            aria-label={paused ? \"Resume\" : \"Pause\"}
+            data-testid="rlgl3d-pause-btn"
+            aria-label={paused ? "Resume" : "Pause"}
             style={{
-              padding: \"8px 14px\",
-              background: \"rgba(8,8,14,0.78)\",
-              border: \"1px solid rgba(255,255,255,0.18)\",
+              padding: "8px 14px",
+              background: "rgba(8,8,14,0.78)",
+              border: "1px solid rgba(255,255,255,0.18)",
               borderRadius: 4,
-              color: \"rgba(245,245,245,0.85)\",
-              fontSize: 11, letterSpacing: \"0.18em\", fontWeight: 700,
-              textTransform: \"uppercase\", cursor: \"pointer\",
-              backdropFilter: \"blur(8px)\",
+              color: "rgba(245,245,245,0.85)",
+              fontSize: 11, letterSpacing: "0.18em", fontWeight: 700,
+              textTransform: "uppercase", cursor: "pointer",
+              backdropFilter: "blur(8px)",
             }}
           >
-            {paused ? \"▶ PLAY\" : \"❚❚ PAUSE\"}
+            {paused ? "▶ PLAY" : "❚❚ PAUSE"}
           </button>
         </div>
       </div>
 
-      {/* Progress bar (bottom-center) */}
       <div
-        data-testid=\"rlgl3d-progress\"
+        data-testid="rlgl3d-progress"
         style={{
-          position: \"absolute\", left: \"50%\", transform: \"translateX(-50%)\",
-          bottom: 18, width: \"min(640px, 80%)\", zIndex: 10,
-          padding: \"8px 14px\",
-          background: \"rgba(8,8,14,0.6)\",
-          border: \"1px solid rgba(255,255,255,0.1)\",
+          position: "absolute", left: "50%", transform: "translateX(-50%)",
+          bottom: 18, width: "min(640px, 80%)", zIndex: 10,
+          padding: "8px 14px",
+          background: "rgba(8,8,14,0.6)",
+          border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 4,
-          backdropFilter: \"blur(8px)\",
+          backdropFilter: "blur(8px)",
         }}
       >
-        <div style={{ display: \"flex\", justifyContent: \"space-between\", marginBottom: 6, fontSize: 9, letterSpacing: \"0.22em\", color: \"rgba(255,255,255,0.45)\" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.45)" }}>
           <span>START</span>
           <span>{Math.round(hud.playerProgressPct * 100)}%</span>
           <span>FINISH</span>
         </div>
-        <div style={{ height: 6, background: \"rgba(255,255,255,0.12)\", borderRadius: 4, overflow: \"hidden\" }}>
+        <div style={{ height: 6, background: "rgba(255,255,255,0.12)", borderRadius: 4, overflow: "hidden" }}>
           <div
             style={{
-              height: \"100%\",
+              height: "100%",
               width: `${hud.playerProgressPct * 100}%`,
-              background: \"linear-gradient(90deg, #00ffb2 0%, #ffd83d 60%, #ff0066 100%)\",
-              transition: \"width 0.18s linear\",
-              boxShadow: \"0 0 12px rgba(0,255,178,0.6)\",
+              background: "linear-gradient(90deg, #00ffb2 0%, #ffd83d 60%, #ff0066 100%)",
+              transition: "width 0.18s linear",
+              boxShadow: "0 0 12px rgba(0,255,178,0.6)",
             }}
           />
         </div>
       </div>
 
-      {/* Controls hint */}
       <div style={{
-        position: \"absolute\", left: 22, bottom: 76, zIndex: 10,
-        padding: \"8px 12px\",
-        background: \"rgba(8,8,14,0.6)\",
-        border: \"1px solid rgba(255,255,255,0.1)\",
+        position: "absolute", left: 22, bottom: 76, zIndex: 10,
+        padding: "8px 12px",
+        background: "rgba(8,8,14,0.6)",
+        border: "1px solid rgba(255,255,255,0.1)",
         borderRadius: 4,
-        fontSize: 10, letterSpacing: \"0.16em\", color: \"rgba(255,255,255,0.6)\",
-        backdropFilter: \"blur(6px)\",
-        pointerEvents: \"none\",
+        fontSize: 10, letterSpacing: "0.16em", color: "rgba(255,255,255,0.6)",
+        backdropFilter: "blur(6px)",
+        pointerEvents: "none",
       }}
-        className=\"rlgl3d-desktop-only\"
+        className="rlgl3d-desktop-only"
       >
-        HOLD <b style={{ color: \"#00ffb2\" }}>W</b> / <b style={{ color: \"#00ffb2\" }}>↑</b> / <b style={{ color: \"#00ffb2\" }}>SPACE</b> TO RUN · <b>SHIFT</b> SPRINT · <b>ESC</b> EXIT
+        HOLD <b style={{ color: "#00ffb2" }}>W</b> / <b style={{ color: "#00ffb2" }}>↑</b> / <b style={{ color: "#00ffb2" }}>SPACE</b> TO RUN · <b>SHIFT</b> SPRINT · <b>ESC</b> EXIT
       </div>
       <style>{`
         @keyframes rlgl3d-blink {
@@ -1521,7 +1412,7 @@ function HUDOverlay({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  END SCREEN
+ * END SCREEN
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function EndScreen({
@@ -1530,42 +1421,42 @@ function EndScreen({
   phase: GamePhase; score: number; aliveCount: number;
   onRestart: () => void; onExit?: () => void;
 }) {
-  const isWin = phase === \"victory\";
-  const title = isWin ? \"YOU SURVIVED\" : phase === \"timeout\" ? \"TIME'S UP\" : \"ELIMINATED\";
-  const sub   = isWin ? \"ROUND CLEARED\" : phase === \"timeout\" ? \"FAILED TO REACH FINISH\" : \"MOVED DURING RED LIGHT\";
-  const color = isWin ? \"#00ffb2\" : \"#ff2640\";
+  const isWin = phase === GamePhase.VICTORY;
+  const title = isWin ? "YOU SURVIVED" : phase === GamePhase.TIMEOUT ? "TIME'S UP" : "ELIMINATED";
+  const sub   = isWin ? "ROUND CLEARED" : phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH" : "MOVED DURING RED LIGHT";
+  const color = isWin ? "#00ffb2" : "#ff2640";
 
   return (
     <div
-      data-testid=\"rlgl3d-endscreen\"
+      data-testid="rlgl3d-endscreen"
       style={{
-        position: \"absolute\", inset: 0, zIndex: 40,
-        background: \"rgba(0,0,0,0.82)\",
-        backdropFilter: \"blur(14px)\",
-        display: \"flex\", flexDirection: \"column\", alignItems: \"center\", justifyContent: \"center\", gap: 22,
-        animation: \"rlgl3d-fadein 0.5s ease\",
+        position: "absolute", inset: 0, zIndex: 40,
+        background: "rgba(0,0,0,0.82)",
+        backdropFilter: "blur(14px)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22,
+        animation: "rlgl3d-fadein 0.5s ease",
       }}
     >
       <div style={{
-        fontFamily: \"var(--font-bebas, 'Bebas Neue', sans-serif)\",
-        fontSize: \"clamp(48px, 11vw, 110px)\", letterSpacing: \"0.15em\",
+        fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
+        fontSize: "clamp(48px, 11vw, 110px)", letterSpacing: "0.15em",
         color, textShadow: `0 0 50px ${color}`,
       }}>
         {title}
       </div>
-      <div style={{ fontSize: 12, letterSpacing: \"0.32em\", color: \"rgba(255,255,255,0.55)\", textTransform: \"uppercase\" }}>
+      <div style={{ fontSize: 12, letterSpacing: "0.32em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>
         {sub}
       </div>
-      <div style={{ display: \"flex\", gap: 32, marginTop: 10 }}>
-        <Stat label=\"SCORE\" value={score.toLocaleString(\"en-US\")} accent=\"#ffd83d\" />
-        <Stat label=\"SURVIVORS\" value={`${aliveCount}/${NPC_COUNT + 1}`} accent=\"#00ffb2\" />
+      <div style={{ display: "flex", gap: 32, marginTop: 10 }}>
+        <Stat label="SCORE" value={score.toLocaleString("en-US")} accent="#ffd83d" />
+        <Stat label="SURVIVORS" value={`${aliveCount}/${NPC_COUNT + 1}`} accent="#00ffb2" />
       </div>
-      <div style={{ display: \"flex\", gap: 14, marginTop: 16 }}>
-        <button data-testid=\"rlgl3d-restart\" onClick={onRestart} style={btnStyle(\"#00ffb2\")}>
+      <div style={{ display: "flex", gap: 14, marginTop: 16 }}>
+        <button data-testid="rlgl3d-restart" onClick={onRestart} style={btnStyle("#00ffb2")}>
           PLAY AGAIN
         </button>
         {onExit && (
-          <button data-testid=\"rlgl3d-end-exit\" onClick={onExit} style={btnStyle(\"#ff0066\")}>
+          <button data-testid="rlgl3d-end-exit" onClick={onExit} style={btnStyle("#ff0066")}>
             ← MENU
           </button>
         )}
@@ -1582,9 +1473,9 @@ function EndScreen({
 
 function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div style={{ display: \"flex\", flexDirection: \"column\", alignItems: \"center\", gap: 4 }}>
-      <span style={{ fontSize: 10, letterSpacing: \"0.3em\", color: \"rgba(255,255,255,0.4)\" }}>{label}</span>
-      <span style={{ fontSize: 28, fontWeight: 800, color: accent, textShadow: `0 0 16px ${accent}88`, fontFamily: \"var(--font-mono)\" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <span style={{ fontSize: 10, letterSpacing: "0.3em", color: "rgba(255,255,255,0.4)" }}>{label}</span>
+      <span style={{ fontSize: 28, fontWeight: 800, color: accent, textShadow: `0 0 16px ${accent}88`, fontFamily: "var(--font-mono)" }}>
         {value}
       </span>
     </div>
@@ -1592,34 +1483,32 @@ function Stat({ label, value, accent }: { label: string; value: string; accent: 
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- *  STYLE HELPERS
+ * STYLE HELPERS
  * ────────────────────────────────────────────────────────────────────────────*/
 
 function panelStyle(): React.CSSProperties {
   return {
-    padding: \"8px 14px\",
-    background: \"rgba(8,8,14,0.78)\",
-    border: \"1px solid rgba(255,255,255,0.14)\",
+    padding: "8px 14px",
+    background: "rgba(8,8,14,0.78)",
+    border: "1px solid rgba(255,255,255,0.14)",
     borderRadius: 4,
-    backdropFilter: \"blur(8px)\",
-    display: \"flex\", alignItems: \"center\",
-    fontFamily: \"var(--font-mono, 'JetBrains Mono', monospace)\",
+    backdropFilter: "blur(8px)",
+    display: "flex", alignItems: "center",
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
   };
 }
 
 function btnStyle(accent: string): React.CSSProperties {
   return {
-    padding: \"12px 30px\",
-    background: \"transparent\",
+    padding: "12px 30px",
+    background: "transparent",
     border: `1.5px solid ${accent}`,
     borderRadius: 4,
     color: accent,
-    fontSize: 13, letterSpacing: \"0.22em\", fontWeight: 800,
-    fontFamily: \"var(--font-bebas, 'Bebas Neue', sans-serif)\",
-    cursor: \"pointer\",
-    textTransform: \"uppercase\",
-    transition: \"all 140ms\",
+    fontSize: 13, letterSpacing: "0.22em", fontWeight: 800,
+    fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
+    cursor: "pointer",
+    textTransform: "uppercase",
+    transition: "all 140ms",
   };
 }
-"
-Observation: Create successful: /app/frontend/src/components/games/RedLightGreenLight3D.tsx
