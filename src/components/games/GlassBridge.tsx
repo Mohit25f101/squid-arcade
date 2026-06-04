@@ -277,9 +277,6 @@ function getCtx2d(c: HTMLCanvasElement | OffscreenCanvas): CanvasRenderingContex
   return c.getContext("2d") as CanvasRenderingContext2D;
 }
 
-// ─── FULL SQUID GAME: Glass Bridge Cavern ───────────────────────────────────
-// Replace the background baking and doll drawing in GlassBridge.tsx
-
 function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
@@ -324,13 +321,6 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
 
   return c;
 }
-
-// Update the drawDoll function in GlassBridge.tsx to utilize the realistic renderer
-// NOTE: Copy the exact implementation of `drawDoll` from RedLightGreenLight.tsx patch 3
-// and paste it here, ensuring the `targetY` calculates relative to the fallen player.
-// To save tokens, I invoke the exact signature.
-
-
 
 function bakeCrackStages(w: number, h: number): Array<HTMLCanvasElement | OffscreenCanvas> {
   return [0.25, 0.5, 0.75, 1.0].map((progress) => {
@@ -568,12 +558,19 @@ function updatePlayer(gs: GameState, dtSec: number): void {
     gs.currentRow = p.row;
     gs.inputConsumed = false;
 
+    if (p.col !== null && !p.jumping) {
+      const currentPanel = gs.panels[p.row - 1]?.[p.col];
+      if (currentPanel?.safe && !gs.audioEvents.has(`land-${p.row}-${p.col}`)) {
+        gs.audioEvents.add(`land-${p.row}-${p.col}`);
+        SoundManager.getInstance().play("jump"); // Safe panel land sound
+      }
+    }
+
     if (p.row > gs.totalRows) {
       triggerVictory(gs);
       return;
     }
 
-    // FIXED: Safely default to 0 if null, and if the panel doesn't exist, trigger elimination not victory
     const safeColIndex = p.col !== null ? p.col : 0;
     const panel = gs.panels[p.row - 1]?.[safeColIndex];
     if (!panel) {
@@ -703,7 +700,6 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
   gs.elapsed += dtSec;
 }
 
-// ─── REALISTIC ANIMATRONIC DOLL — RLGL-grade ──────────────────────────────
 function drawDoll(
   ctx: CanvasRenderingContext2D,
   dollX: number,
@@ -714,34 +710,30 @@ function drawDoll(
   const S = 130 * scale;
   const t = gs.atmosphericT ?? performance.now() * 0.001;
 
-  // Tracking: head rotates toward the player's current column smoothly
   const targetCol = gs.player.col ?? gs.player.targetCol ?? 1;
   const colOffsets = [-0.32, 0, 0.32];
   const targetTilt = colOffsets[targetCol];
-  // Stateless smoothing using a stored value on gs
-  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  
+  // @ts-expect-error: WebKit prefix
   gs.__dollHeadTilt = gs.__dollHeadTilt ?? 0;
-  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  // @ts-expect-error: WebKit prefix
   gs.__dollHeadTilt += (targetTilt - gs.__dollHeadTilt) * 0.18;
-  // @ts-expect-error: WebKit prefix required for iOS Safari fullscreen support
+  // @ts-expect-error: WebKit prefix
   const headTilt: number = gs.__dollHeadTilt;
 
   const isFalling  = gs.phase === "falling";
   const isHostile  = isFalling || gs.timeLeft < 12;
 
-  // Mechanical micro-tremor when hostile (servo whine visual)
   const tremor = isHostile ? (Math.sin(t * 36) * 0.4 + Math.sin(t * 17) * 0.6) : 0;
 
   ctx.save();
   ctx.translate(dollX + tremor, dollY);
 
-  // ── Long ground shadow ──
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.beginPath();
   ctx.ellipse(0, S * 0.85, S * 0.55, S * 0.08, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Dress (gradient) ──
   const dressGrad = ctx.createLinearGradient(0, -S * 0.2, 0, S * 0.8);
   dressGrad.addColorStop(0, "#f9a03f");
   dressGrad.addColorStop(0.55, "#e0651a");
@@ -755,22 +747,18 @@ function drawDoll(
   ctx.closePath();
   ctx.fill();
 
-  // Yellow shirt
   ctx.fillStyle = "#fde74c";
   ctx.fillRect(-S * 0.25, -S * 0.22, S * 0.5, S * 0.32);
 
-  // ── Head group (rotates with tilt) ──
   ctx.save();
   ctx.translate(0, -S * 0.38);
   ctx.rotate(headTilt);
 
-  // Back hair
   ctx.fillStyle = "#0a0a0a";
   ctx.beginPath();
   ctx.arc(0, 0, S * 0.34, 0, Math.PI * 2);
   ctx.fill();
 
-  // Face sphere with subsurface gradient
   const faceGrad = ctx.createRadialGradient(-S * 0.05, -S * 0.05, S * 0.04, 0, 0, S * 0.30);
   faceGrad.addColorStop(0, "#ffe1d4");
   faceGrad.addColorStop(1, "#d49a82");
@@ -779,12 +767,10 @@ function drawDoll(
   ctx.arc(0, 0, S * 0.30, 0, Math.PI * 2);
   ctx.fill();
 
-  // Pigtails (orange)
   ctx.fillStyle = "#c8521a";
   ctx.beginPath(); ctx.arc(-S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc( S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
 
-  // ── Eye sockets ──
   const eyeY = -S * 0.04;
   const eyeOffX = S * 0.12;
   ctx.fillStyle = "#000";
@@ -792,7 +778,6 @@ function drawDoll(
   ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.055, 0, Math.PI * 2); ctx.fill();
 
   if (isHostile) {
-    // ── GLOWING RED EYES (mechanical, pulsing) ──
     const pulse = 0.7 + Math.sin(t * 8) * 0.3;
     ctx.shadowColor = "#ff0000";
     ctx.shadowBlur  = 28 * pulse;
@@ -801,29 +786,22 @@ function drawDoll(
     ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Hot white core
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
   } else {
-    // Dead matte eyes
     ctx.fillStyle = "#1a1a1a";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
   }
 
-  ctx.restore(); // end head
+  ctx.restore(); 
 
-  // ── LASERS INTO THE ABYSS when player falls ──
   if (isFalling) {
-    // Lasers shoot DOWN through the broken column into the void.
-    // We aim at the player's failed-column world-x relative to the doll.
     const playerColIdx = gs.player.col ?? gs.player.targetCol ?? 1;
-    // approximate horizontal delta from doll (center) to player column
     const colDelta = (playerColIdx - 1) * 180 * scale;
-    const abyssY   = 3000; // far down into the pit
+    const abyssY   = 3000; 
 
-    // Outer red glow beam (both eyes converge on the falling target)
     ctx.strokeStyle = "rgba(255,0,30,0.85)";
     ctx.lineWidth   = 5 * scale;
     ctx.shadowColor = "#ff0000";
@@ -836,7 +814,6 @@ function drawDoll(
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Inner white-hot core
     ctx.strokeStyle = "rgba(255,220,220,0.95)";
     ctx.lineWidth   = 1.5 * scale;
     ctx.beginPath();
@@ -846,7 +823,6 @@ function drawDoll(
     ctx.lineTo(colDelta, abyssY);
     ctx.stroke();
 
-    // Impact dot at the fall column
     ctx.fillStyle = "rgba(255,40,40,0.9)";
     ctx.shadowColor = "#ff0000";
     ctx.shadowBlur  = 24 * scale;
@@ -874,9 +850,13 @@ function renderPanel(
   if (wy < -PANEL_H - 20 || wy > WORLD_H + 20) return;
 
   const wobble = Math.sin(atmosphericT * 1.2 + panel.wobblePhase) * panel.wobbleAmp * 0.3;
+  
+  const safeHoverOffset = (panel.safe && isPlayerOn) 
+    ? Math.sin(atmosphericT * 2.5) * 3 
+    : 0;
 
   ctx.save();
-  ctx.translate(wx, wy + wobble);
+  ctx.translate(wx, wy + wobble + safeHoverOffset);
 
   switch (panel.state) {
     case "gone": ctx.restore(); return;
@@ -917,6 +897,15 @@ function renderPanel(
   ctx.fillStyle = `rgba(220,240,255,${glintVal})`;
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
+  if (panel.safe && isPlayerOn) {
+    const glowPulse = 0.6 + Math.sin(atmosphericT * 3) * 0.4;
+    ctx.shadowColor = `rgba(${br}, ${bg + 100}, ${bb + 100}, ${glowPulse})`;
+    ctx.shadowBlur = 35;
+    ctx.fillStyle = `rgba(${br + 80}, ${bg + 120}, ${bb + 100}, ${glowPulse * 0.4})`;
+    ctx.fillRect(0, 0, PANEL_W, PANEL_H);
+    ctx.shadowBlur = 0;
+  }
+
   const borderAlpha = isPlayerOn ? 0.7 : 0.25 + glintVal * 0.3;
   ctx.strokeStyle = rgb(br, bg + 20, bb + 20, borderAlpha);
   ctx.lineWidth = isPlayerOn ? 2.5 : 1.5;
@@ -925,6 +914,39 @@ function renderPanel(
   ctx.strokeStyle = rgb(255, 255, 255, 0.08 + glintVal * 0.15);
   ctx.lineWidth = 1;
   ctx.strokeRect(3, 3, PANEL_W - 6, PANEL_H - 6);
+
+  // GEOMETRIC SHAPE INDICATOR: Draw figure on ALL panels based on column
+  if (quality === "high") {
+    const figureSize = 16;
+    const figureX = PANEL_W / 2;
+    const figureY = PANEL_H / 2;
+    const figureGlow = isPlayerOn ? 0.6 : 0.15;
+    
+    ctx.save();
+    ctx.translate(figureX, figureY);
+    ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
+    ctx.shadowBlur = isPlayerOn ? 15 : 5;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${figureGlow * 1.5})`;
+    ctx.lineWidth = 2.5;
+    
+    ctx.beginPath();
+    if (panel.col === 0) {
+      // Square
+      ctx.rect(-figureSize, -figureSize, figureSize * 2, figureSize * 2);
+    } else if (panel.col === 1) {
+      // Triangle
+      ctx.moveTo(0, -figureSize - 2);
+      ctx.lineTo(-figureSize * 1.1, figureSize * 0.8);
+      ctx.lineTo(figureSize * 1.1, figureSize * 0.8);
+      ctx.closePath();
+    } else {
+      // Circle
+      ctx.arc(0, 0, figureSize * 1.1, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
 
   if (isPlayerOn && quality === "high") {
     ctx.shadowColor = rgb(br, bg, bb, 0.8);
@@ -1148,7 +1170,6 @@ function useGameLoop(callback: (dt: number) => void, active: boolean): React.Mut
   const lastRef = useRef<number>(0);
   const scaleValRef = useRef(1);
 
-  // Safely initialize ref using a stable function instance evaluated strictly on mount
   const scaleRef = useRef<((s: number) => void)>((s: number) => { scaleValRef.current = s; });
 
   const callbackRef = useRef(callback);
@@ -1414,7 +1435,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     
     hudSync.tick(performance.now());   
 
-    // FIXED: Passed onComplete to globally sync the gameover outcome, preventing the ResultScreen from defaulting to the previous game's victory state
     if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
       hudSync.write({ health: 0, lives: 0 });
       hudSync.forceFlush();
@@ -1429,7 +1449,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
       setUiPhase("gameover");
     }
 
-    // FIXED: Passed onComplete to globally sync the victory outcome
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
       const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
       const score = (TOTAL_ROWS * 100) + timeBonus;

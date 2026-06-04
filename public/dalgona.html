@@ -593,6 +593,8 @@ let candyOffscreen = null;
 let crackOffscreen = null;
 let frame = 0;
 let rafId = null;
+let needlePathHistory = [];
+const MAX_PATH_HISTORY = 150;
 
 // ── Left & Right soldier state ──────────────────────────
 let leftGuardX = 0;
@@ -610,6 +612,7 @@ let elimSequencePhase = 0; // 0=aim, 1=fire, 2=impact, 3=blood
 // ── Victory sequence timing ──────────────────────────────
 let victoryTimer = 0;
 let candySeparation = 0;
+let outerCandyPieces = [];
 
 let atmosphericDust = [];
 for (let i = 0; i < 40; i++) {
@@ -951,6 +954,7 @@ function initGame(id){
   elimSequencePhase = 0;
   victoryTimer = 0;
   candySeparation = 0;
+  outerCandyPieces = [];
 
   rebuildOffscreens();
 }
@@ -1109,6 +1113,14 @@ function processCarve(){
   const worldX = needleX / scale;
   const worldY = needleY / scale;
   
+  // Track needle path for smooth carving visuals
+  if (needleDown) {
+    needlePathHistory.push({x: needleX, y: needleY, time: performance.now()});
+    if (needlePathHistory.length > MAX_PATH_HISTORY) needlePathHistory.shift();
+  } else {
+    needlePathHistory = [];
+  }
+  
   const SLAB_MARGIN = 6;
   const inSlab = (
     worldX >= CANDY_X - SLAB_MARGIN && worldX <= CANDY_X + CANDY_W + SLAB_MARGIN &&
@@ -1128,13 +1140,13 @@ function processCarve(){
     const { gx: ogx, gy: ogy } = worldToGrid(needleX, needleY);
     const oidx = cellIdx(ogx, ogy);
     edgeStressGrid[oidx] = Math.min(1, edgeStressGrid[oidx] + 0.06 * excess);
-    candyIntegrity = Math.max(0, candyIntegrity - 0.015 * excess);  // CHANGED: 0.09 -> 0.015
+    candyIntegrity = Math.max(0, candyIntegrity - 0.015 * excess);  
     shakeIntensity = Math.max(shakeIntensity, 5 * excess);
     if(candyIntegrity <= 0){ triggerInstantFail('off-path-damage'); }
     return;
   }
 
-  if(needleVel < 0.15) return;  // CHANGED: 0.3 -> 0.15
+  if(needleVel < 0.15) return;
 
   for(let i=0; i<shapePath.length; i++){
     const a = shapePath[i], b = shapePath[(i+1)%shapePath.length];
@@ -1604,20 +1616,73 @@ function render(){
     }
     ctx.restore();
     
-    // Victory separation effect
+    // Victory separation effect with OUTER CANDY SHATTER
     if (phase === 'victory' && candySeparation > 0) {
+      // Generate candy pieces once at start of victory
+      if (outerCandyPieces.length === 0 && candySeparation > 0.05) {
+        for (let i = 0; i < 24; i++) {
+          const angle = (i / 24) * Math.PI * 2;
+          const distance = 60 + Math.random() * 40;
+          outerCandyPieces.push({
+            x: CANDY_X * scale + (CANDY_W * scale / 2) + Math.cos(angle) * distance * scale,
+            y: CANDY_Y * scale + (CANDY_H * scale / 2) + Math.sin(angle) * distance * scale,
+            vx: Math.cos(angle) * (2 + Math.random() * 3) * scale,
+            vy: Math.sin(angle) * (2 + Math.random() * 3) * scale + Math.random() * 2 * scale,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.15,
+            size: (15 + Math.random() * 25) * scale,
+            alpha: 1
+          });
+        }
+      }
+      
+      // Animate and draw falling pieces
+      for (let piece of outerCandyPieces) {
+        piece.x += piece.vx;
+        piece.y += piece.vy;
+        piece.vy += 0.4 * scale; // gravity
+        piece.rotation += piece.rotSpeed;
+        piece.alpha = Math.max(0, piece.alpha - 0.015);
+        
+        ctx.save();
+        ctx.globalAlpha = piece.alpha;
+        ctx.translate(piece.x, piece.y);
+        ctx.rotate(piece.rotation);
+        ctx.fillStyle = '#d08820';
+        ctx.fillRect(-piece.size / 2, -piece.size / 2, piece.size, piece.size);
+        ctx.restore();
+      }
+      
+      // Draw perfectly carved shape rising and glowing
       const sepDist = candySeparation * 8 * scale;
       ctx.save();
       ctx.translate(0, -sepDist);
-      ctx.globalAlpha = 1 - (candySeparation * 0.3);
-      ctx.shadowColor = 'rgba(245,200,66,0.6)';
-      ctx.shadowBlur = 20 * scale * candySeparation;
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = 'rgba(245,200,66,0.95)';
+      ctx.shadowBlur = 30 * scale * candySeparation;
       
       ctx.beginPath();
       shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
       ctx.closePath();
-      ctx.fillStyle = 'rgba(245,210,80,0.85)';
+      
+      const victoryGrad = ctx.createRadialGradient(
+        CANDY_X * scale + (CANDY_W * scale / 2), 
+        CANDY_Y * scale + (CANDY_H * scale / 2), 
+        0,
+        CANDY_X * scale + (CANDY_W * scale / 2), 
+        CANDY_Y * scale + (CANDY_H * scale / 2), 
+        CANDY_W * scale * 0.6
+      );
+      victoryGrad.addColorStop(0, '#ffee88');
+      victoryGrad.addColorStop(0.6, '#f5d050');
+      victoryGrad.addColorStop(1, '#e8b030');
+      ctx.fillStyle = victoryGrad;
       ctx.fill();
+      
+      ctx.strokeStyle = 'rgba(255,240,150,0.95)';
+      ctx.lineWidth = 4 * scale;
+      ctx.stroke();
+      
       ctx.shadowBlur = 0;
       ctx.restore();
     }
@@ -1657,6 +1722,23 @@ function render(){
       shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
       ctx.closePath();
       ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    
+    // SMOOTH CONTINUOUS CARVED GROOVE
+    if (needlePathHistory.length > 1) {
+      ctx.strokeStyle = 'rgba(180,120,30,0.85)';
+      ctx.lineWidth = 18 * scale;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(200,140,40,0.6)';
+      ctx.shadowBlur = 8 * scale;
+      ctx.beginPath();
+      ctx.moveTo(needlePathHistory[0].x, needlePathHistory[0].y);
+      for (let i = 1; i < needlePathHistory.length; i++) {
+        ctx.lineTo(needlePathHistory[i].x, needlePathHistory[i].y);
+      }
+      ctx.stroke();
       ctx.shadowBlur = 0;
     }
     
@@ -1953,7 +2035,7 @@ function loop(timestamp) {
   // Handled separately from 'eliminating' to allow timer continuation
   if (phase === 'snap' && elimSequencePhase === 3) {
     elimSequenceTimer += dt;
-    if (elimSequenceTimer > 1400) {
+    if (elimSequenceTimer > 2900) {
       setPhase('eliminated');
     }
   }
