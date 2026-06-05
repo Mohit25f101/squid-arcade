@@ -1,3 +1,4 @@
+// src/components/games/RedLightGreenLight.tsx
 "use client";
 
 import React, {
@@ -246,17 +247,14 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
     const speed = Math.abs(player.vz);
     const isSprinting = speed > 10;
     
-    // Animation state: instant switch between RUN and IDLE
     if (!player.alive) {
       animStateRef.current = "fall";
     } else if (player.finished) {
       animStateRef.current = "victory";
-    } else if (speed > 0.01) {
-      // Moving: switch to run/sprint instantly
-      animStateRef.current = isSprinting ? "sprint" : "run";
-    } else {
-      // Stopped: switch to "idle" instead of "freeze" so limbs stand up smoothly
+    } else if (speed === 0) {
       animStateRef.current = "idle";
+    } else {
+      animStateRef.current = isSprinting ? "sprint" : "run";
     }
 
     if (!player.alive) {
@@ -277,7 +275,7 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 
     const t = state.clock.elapsedTime;
 
-   if (animStateRef.current === "victory") {
+    if (animStateRef.current === "victory") {
       group.current.position.y = 0.05 + Math.sin(t * 4) * 0.03;
       if (armLRef.current) armLRef.current.rotation.x = -2.8;
       if (armRRef.current) armRRef.current.rotation.x = -2.8;
@@ -1123,15 +1121,13 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
 
     if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
       const input = inputRef.current;
+      const keyHeld = snap.heldKeys.has("ArrowUp") || snap.heldKeys.has("KeyW");
       
-      // Fix 1 & 2: Added 'input.forward' for mobile, and blocked movement during elimination locking
-      const wantMove = (snap.up || snap.action || input.forward) && elimStateRef.current === "idle";
+      // ADD the elimination check back so you can't run while being shot!
+      const wantMove = (keyHeld || input.forward) && elimStateRef.current === "idle";
+      
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
 
-      // RLGL Movement: Instant stop/start (match Pomu RLGL)
-      // HOLD INPUT: run immediately
-      // RELEASE INPUT: stop immediately
-      // No inertia, no momentum, no smoothing
       human.vz = wantMove ? -speed : 0;
       human.vx = 0;
       human.z += human.vz * dt;
@@ -1192,8 +1188,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
       const npcSpeed = baseSpeed + speedVariation;
 
-      // RLGL NPC Movement: Instant stop/start (match player behavior)
-      // No inertia, no momentum, no smoothing
       p.vz = p.npcMoving ? -npcSpeed : 0;
 
       if (p.npcMoving) {

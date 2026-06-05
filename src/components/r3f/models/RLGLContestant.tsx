@@ -1,3 +1,4 @@
+// src/components/r3f/models/RLGLContestant.tsx
 "use client";
 
 import React, { useRef } from "react";
@@ -42,7 +43,8 @@ export const RLGLContestant = React.memo(function RLGLContestant({ player, isMov
   const armLRef = useRef<THREE.Group>(null);
   const armRRef = useRef<THREE.Group>(null);
 
-  const animStateRef = useRef<"run" | "sprint" | "freeze" | "fall" | "victory">("freeze");
+  // Excluded "freeze" to stop TS errors and logic issues
+  const animStateRef = useRef<"idle" | "run" | "sprint" | "fall" | "victory">("idle");
   const animPhaseRef = useRef(0);
 
   useFrame((state, delta) => {
@@ -58,12 +60,12 @@ export const RLGLContestant = React.memo(function RLGLContestant({ player, isMov
       animStateRef.current = "fall";
     } else if (player.finished) {
       animStateRef.current = "victory";
-    } else if (speed > 0.01) {
+    } else if (speed === 0) {
+      // Stopped: switch to "idle" instead of "freeze" so limbs stand up smoothly
+      animStateRef.current = "idle";
+    } else {
       // Moving: switch to run/sprint instantly
       animStateRef.current = isSprinting ? "sprint" : "run";
-    } else {
-      // Stopped: switch to freeze instantly
-      animStateRef.current = "freeze";
     }
 
     if (!player.alive) {
@@ -93,8 +95,20 @@ export const RLGLContestant = React.memo(function RLGLContestant({ player, isMov
       if (legLRef.current) legLRef.current.rotation.x = 0;
       if (legRRef.current) legRRef.current.rotation.x = 0;
       if (headRef.current) headRef.current.rotation.x = -0.2;
-    } else if (animStateRef.current === "freeze") {
-      group.current.position.y = 0;
+    } else if (animStateRef.current === "idle") {
+      animPhaseRef.current = t;
+      const breathe = Math.sin(t * 2.5) * 0.015;
+      group.current.position.y = breathe;
+      
+      if (torsoRef.current) {
+        torsoRef.current.scale.y = 1 + breathe;
+        torsoRef.current.scale.x = 1 - breathe * 0.3;
+      }
+      
+      if (armLRef.current) armLRef.current.rotation.x = THREE.MathUtils.lerp(armLRef.current.rotation.x, 0.1, 0.1);
+      if (armRRef.current) armRRef.current.rotation.x = THREE.MathUtils.lerp(armRRef.current.rotation.x, 0.1, 0.1);
+      if (legLRef.current) legLRef.current.rotation.x = THREE.MathUtils.lerp(legLRef.current.rotation.x, 0, 0.1);
+      if (legRRef.current) legRRef.current.rotation.x = THREE.MathUtils.lerp(legRRef.current.rotation.x, 0, 0.1);
     } else if (animStateRef.current === "run" || animStateRef.current === "sprint") {
       const freq = animStateRef.current === "sprint" ? 14 : 11;
       animPhaseRef.current += delta * freq;
