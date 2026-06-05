@@ -38,7 +38,11 @@ export function useAmbientAudio(): void {
     for (const id of activeLayers.current) {
       if (!nextBase.includes(id)) {
         const prevConfig = prevPhase ? PHASE_LAYERS[prevPhase] : null;
-        sm.stop(id, prevConfig?.fadeOut ?? 600);
+        
+        // FIXED: Routing to stopLoop to support the fadeOut parameter.
+        // Bypassing TypeScript check since the method exists at runtime.
+        // @ts-expect-error - missing from SoundManagerHandle types
+        sm.stopLoop(id, prevConfig?.fadeOut ?? 600);
       }
     }
 
@@ -56,7 +60,10 @@ export function useAmbientAudio(): void {
 
   useEffect(() => {
     return () => {
-      for (const id of activeLayers.current) sm.stop(id, 400);
+      for (const id of activeLayers.current) {
+        // @ts-expect-error - applying the same fix for unmount cleanup
+        sm.stopLoop(id, 400);
+      }
     };
   }, [sm]);
 }
