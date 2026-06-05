@@ -6,7 +6,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Update your GameId type to look something like this:
-export type GameId = "menu" | "red-light-green-light" | "glass-bridge" | "dalgona" | "glass-breaker";
+export type GameId = "menu" | "red-light-green-light" | "glass-bridge" | "dalgona" ;
 
 export type RuntimePhase =
   | "idle"
