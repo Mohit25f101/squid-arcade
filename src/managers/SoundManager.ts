@@ -3,6 +3,9 @@
 import { Howl, Howler } from "howler";
 import { useGameStore } from "@/store/gameStore";
 
+// ADDED: Exported SoundCategory to satisfy index.ts without losing features
+export type SoundCategory = "ui" | "sfx" | "music" | "ambient" | "voice";
+
 export type SoundId =
   | "hover"
   | "click"
