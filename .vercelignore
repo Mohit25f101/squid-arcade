@@ -1,0 +1,8 @@
+# Exclude large/dead-weight artifacts from the Vercel deployment bundle.
+# None of these are referenced by the app at runtime.
+*.zip
+full-repo-structure.txt
+node_modules
+.next
+.git
+src.zip
