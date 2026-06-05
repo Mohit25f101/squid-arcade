@@ -28,6 +28,11 @@ export default function GameRouter() {
   // Stable ref — prevents duplicate event listener accumulation on shell mounts
   const handleExit = useCallback(() => setActiveGame("menu"), [setActiveGame]);
 
+  // BUG FIX: handleComplete was referenced in JSX but never defined, causing a runtime
+  // crash on every game victory. Now defined as a stable callback that returns the player
+  // to the menu after a win — extend this with leaderboard / session-history calls as needed.
+  const handleComplete = useCallback(() => setActiveGame("menu"), [setActiveGame]);
+
   const [transitionState, setTransitionState] = useState("idle");
   const prevGameRef = useRef(activeGame);
 
@@ -69,19 +74,22 @@ export default function GameRouter() {
 
         {activeGame === "glass-bridge" && (
           <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
-            <GlassBridge onExit={handleExit} />
+            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+            <GlassBridge onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "red-light-green-light" && (
           <SceneWrapper key="red-light-green-light" transition={transitionState} showGlobalHUD={false}>
-            <RedLightGreenLight onExit={handleExit} />
+            {/* BUG FIX: handleComplete is now defined above and wired in here */}
+            <RedLightGreenLight onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "dalgona" && (
           <GameShell key="dalgona" worldW={390} worldH={844} transition={transitionState}>
-            <DalgonaCandy onExit={handleExit} />
+            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+            <DalgonaCandy onExit={handleExit} onComplete={handleComplete} />
           </GameShell>
         )}
       </Suspense>

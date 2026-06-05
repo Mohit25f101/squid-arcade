@@ -7,7 +7,9 @@ export type MusicTrackId = "menu" | "rlgl_green" | "rlgl_red";
 
 const MUSIC_DEFS: Record<MusicTrackId, { src: string[]; loop?: boolean; volume?: number }> = {
   menu:       { src: ["/audio/music/backsong.mp3"],   loop: true,  volume: 0.6 },
-  rlgl_green: { src: ["/audio/stingers/doll_song.mp3"], loop: true,  volume: 1.0 },
+  // BUG FIX: loop was `true` — the "end" event never fired, so the game state machine
+  // could never transition out of Green Light into the Warning / Red Light phase.
+  rlgl_green: { src: ["/audio/stingers/doll_song.mp3"], loop: false, volume: 1.0 },
   rlgl_red:   { src: ["/audio/stingers/exhale-texture.mp3"], loop: false, volume: 1.7 },
 };
 
