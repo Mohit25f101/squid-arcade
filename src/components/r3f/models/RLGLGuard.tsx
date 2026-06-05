@@ -5,13 +5,16 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
 /**
- * RLGL Guard (Procedural Squid Game Style)
- * 
- * Requirements:
- * - Guard near doll
- * - Guard near finish area
- * - Aim animation
- * - Fire animation
+ * RLGL Guard — Squid Game pink-suit soldier (procedural)
+ *
+ * Quality:
+ *  - Pink uniform (jacket + trousers)
+ *  - Black mask with circle insignia
+ *  - Visible rifle (slung at rest, raised when aiming)
+ *  - Aiming animation  (arms + rifle lerp up to shoulder)
+ *  - Firing animation  (muzzle flash mesh + point-light pulse)
+ *  - Recoil            (rifle pushes back, torso pitches)
+ *  - Idle breathing    (subtle torso scale)
  */
 
 interface RLGLGuardProps {
@@ -22,202 +25,277 @@ interface RLGLGuardProps {
   targetPosition?: [number, number, number];
 }
 
-export function RLGLGuard({ 
-  position, 
-  rotationY = 0, 
-  isAiming = false, 
+export function RLGLGuard({
+  position,
+  rotationY = 0,
+  isAiming = false,
   isFiring = false,
-  targetPosition 
 }: RLGLGuardProps) {
-  const group = useRef<THREE.Group>(null);
-  const torsoRef = useRef<THREE.Group>(null);
-  const leftArmRef = useRef<THREE.Group>(null);
-  const rightArmRef = useRef<THREE.Group>(null);
-  const rifleRef = useRef<THREE.Group>(null);
-  const muzzleFlashRef = useRef<THREE.PointLight>(null);
+  const group           = useRef<THREE.Group>(null);
+  const torsoRef        = useRef<THREE.Group>(null);
+  const leftArmRef      = useRef<THREE.Group>(null);
+  const rightArmRef     = useRef<THREE.Group>(null);
+  const rifleRef        = useRef<THREE.Group>(null);
+  const muzzleFlashRef  = useRef<THREE.PointLight>(null);
+  const muzzleMeshRef   = useRef<THREE.Mesh>(null);
+  const recoilRef       = useRef(0);
 
-  useFrame((state) => {
+  useFrame((_, dt) => {
     if (!group.current) return;
-    const t = state.clock.elapsedTime;
+    const clampedDt = Math.min(dt, 0.05);
+    const t = performance.now() * 0.001;
 
-    // Breathing animation when idle
-    if (torsoRef.current && !isAiming) {
-      const breathCycle = Math.sin(t * 1.5) * 0.012;
-      torsoRef.current.scale.y = 1 + breathCycle;
-      torsoRef.current.position.y = 1.3 + breathCycle * 0.5;
+    // ---------- Idle breathing -------------------------------------------
+    if (torsoRef.current && !isAiming && !isFiring) {
+      const breath = Math.sin(t * 1.5) * 0.012;
+      torsoRef.current.scale.y = 1 + breath;
+      torsoRef.current.position.y = 1.3 + breath * 0.5;
     }
 
-    // Aim animation
-    if (isAiming && leftArmRef.current && rightArmRef.current && rifleRef.current) {
-      leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -1.4, 0.12);
-      leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.3, 0.12);
-      rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -1.4, 0.12);
-      rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, 0.3, 0.12);
-      rifleRef.current.rotation.x = THREE.MathUtils.lerp(rifleRef.current.rotation.x, -Math.PI / 2, 0.12);
-      rifleRef.current.position.z = THREE.MathUtils.lerp(rifleRef.current.position.z, 0.4, 0.12);
+    // ---------- Aiming / Rest transitions --------------------------------
+    const ease = 1 - Math.exp(-9 * clampedDt);
 
-      if (torsoRef.current) {
-        torsoRef.current.rotation.x = Math.sin(t * 2) * 0.01;
-      }
-    } else {
-      // Rest position
+    if (isAiming || isFiring) {
       if (leftArmRef.current) {
-        leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0.15, 0.1);
-        leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.15, 0.1);
+        leftArmRef.current.rotation.x = THREE.MathUtils.lerp(
+          leftArmRef.current.rotation.x, -1.45, ease
+        );
+        leftArmRef.current.rotation.z = THREE.MathUtils.lerp(
+          leftArmRef.current.rotation.z, -0.30, ease
+        );
       }
       if (rightArmRef.current) {
-        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, 0.15, 0.1);
-        rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, 0.15, 0.1);
+        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(
+          rightArmRef.current.rotation.x, -1.45, ease
+        );
+        rightArmRef.current.rotation.z = THREE.MathUtils.lerp(
+          rightArmRef.current.rotation.z, 0.30, ease
+        );
       }
       if (rifleRef.current) {
-        rifleRef.current.rotation.x = THREE.MathUtils.lerp(rifleRef.current.rotation.x, Math.PI / 2.5, 0.1);
-        rifleRef.current.position.z = THREE.MathUtils.lerp(rifleRef.current.position.z, 0.2, 0.1);
+        rifleRef.current.rotation.x = THREE.MathUtils.lerp(
+          rifleRef.current.rotation.x, -Math.PI / 2, ease
+        );
+        rifleRef.current.position.y = THREE.MathUtils.lerp(
+          rifleRef.current.position.y, 1.5, ease
+        );
+        rifleRef.current.position.z = THREE.MathUtils.lerp(
+          rifleRef.current.position.z, 0.40, ease
+        );
+      }
+      if (torsoRef.current) {
+        torsoRef.current.rotation.x = THREE.MathUtils.lerp(
+          torsoRef.current.rotation.x,
+          Math.sin(t * 2) * 0.012,
+          ease
+        );
+      }
+    } else {
+      if (leftArmRef.current) {
+        leftArmRef.current.rotation.x = THREE.MathUtils.lerp(
+          leftArmRef.current.rotation.x, 0.12, ease
+        );
+        leftArmRef.current.rotation.z = THREE.MathUtils.lerp(
+          leftArmRef.current.rotation.z, -0.12, ease
+        );
+      }
+      if (rightArmRef.current) {
+        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(
+          rightArmRef.current.rotation.x, 0.12, ease
+        );
+        rightArmRef.current.rotation.z = THREE.MathUtils.lerp(
+          rightArmRef.current.rotation.z, 0.12, ease
+        );
+      }
+      if (rifleRef.current) {
+        rifleRef.current.rotation.x = THREE.MathUtils.lerp(
+          rifleRef.current.rotation.x, Math.PI / 2.5, ease
+        );
+        rifleRef.current.position.y = THREE.MathUtils.lerp(
+          rifleRef.current.position.y, 1.15, ease
+        );
+        rifleRef.current.position.z = THREE.MathUtils.lerp(
+          rifleRef.current.position.z, 0.20, ease
+        );
+      }
+      if (torsoRef.current) {
+        torsoRef.current.rotation.x = THREE.MathUtils.lerp(
+          torsoRef.current.rotation.x, 0, ease
+        );
       }
     }
 
-    // Fire animation (recoil)
-    if (isFiring && rifleRef.current && torsoRef.current) {
-      const recoilPhase = (Math.sin(t * 35) + 1) * 0.5;
-      rifleRef.current.position.z -= recoilPhase * 0.08;
-      torsoRef.current.rotation.x = -recoilPhase * 0.15;
-      
-      if (muzzleFlashRef.current) {
-        muzzleFlashRef.current.intensity = 25 * recoilPhase;
-      }
-    } else if (muzzleFlashRef.current) {
-      muzzleFlashRef.current.intensity = 0;
+    // ---------- Recoil impulse -------------------------------------------
+    if (isFiring) {
+      // Spike on the first frame of fire, then decay
+      recoilRef.current = Math.min(1, recoilRef.current + clampedDt * 12);
+    }
+    recoilRef.current = THREE.MathUtils.lerp(recoilRef.current, 0, ease * 0.75);
+
+    if (rifleRef.current) {
+      rifleRef.current.position.z -= recoilRef.current * 0.10;
+    }
+    if (torsoRef.current) {
+      torsoRef.current.rotation.x -= recoilRef.current * 0.18;
+    }
+
+    // ---------- Muzzle flash ---------------------------------------------
+    if (muzzleFlashRef.current) {
+      muzzleFlashRef.current.intensity = isFiring
+        ? 22 * recoilRef.current
+        : 0;
+    }
+    if (muzzleMeshRef.current) {
+      const s = isFiring ? 0.5 + recoilRef.current * 1.2 : 0.0001;
+      muzzleMeshRef.current.scale.set(s, s, s);
+      muzzleMeshRef.current.rotation.z = Math.random() * Math.PI * 2;
     }
   });
+
+  const PINK       = "#e34a8a";
+  const PINK_DARK  = "#c43278";
+  const BLACK      = "#0a0a0a";
+  const METAL      = "#2a2a2a";
 
   return (
     <group ref={group} position={position} rotation={[0, rotationY, 0]}>
       {/* Boots */}
       <mesh position={[-0.13, 0.05, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.1, 0.22]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
+        <boxGeometry args={[0.14, 0.10, 0.22]} />
+        <meshStandardMaterial color={BLACK} roughness={0.7} metalness={0.1} />
       </mesh>
       <mesh position={[0.13, 0.05, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.1, 0.22]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
+        <boxGeometry args={[0.14, 0.10, 0.22]} />
+        <meshStandardMaterial color={BLACK} roughness={0.7} metalness={0.1} />
       </mesh>
 
-      {/* Legs (pink guard suit) */}
+      {/* Pink trousers */}
       <mesh position={[-0.13, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
-        <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+        <cylinderGeometry args={[0.11, 0.095, 0.90, 12]} />
+        <meshStandardMaterial color={PINK} roughness={0.75} />
       </mesh>
       <mesh position={[0.13, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
-        <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+        <cylinderGeometry args={[0.11, 0.095, 0.90, 12]} />
+        <meshStandardMaterial color={PINK} roughness={0.75} />
       </mesh>
 
+      {/* Belt */}
       <mesh position={[0, 1.0, 0]} castShadow>
         <cylinderGeometry args={[0.22, 0.25, 0.12, 16]} />
-        <meshStandardMaterial color="#c43278" roughness={0.8} />
+        <meshStandardMaterial color={PINK_DARK} roughness={0.8} />
       </mesh>
       <mesh position={[0, 1.0, 0]} castShadow>
         <boxGeometry args={[0.42, 0.08, 0.35]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
+        <meshStandardMaterial color={BLACK} roughness={0.5} />
       </mesh>
 
-      {/* Torso */}
+      {/* Pink jacket torso */}
       <group ref={torsoRef}>
-        <mesh position={[0, 1.3, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.5, 0.75, 0.28]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+        <mesh position={[0, 1.30, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.50, 0.75, 0.28]} />
+          <meshStandardMaterial color={PINK} roughness={0.75} />
         </mesh>
         <mesh position={[0, 1.45, 0.145]} castShadow>
-          <boxGeometry args={[0.3, 0.4, 0.02]} />
-          <meshStandardMaterial color="#c43278" roughness={0.8} />
+          <boxGeometry args={[0.30, 0.40, 0.02]} />
+          <meshStandardMaterial color={PINK_DARK} roughness={0.8} />
         </mesh>
-        <mesh position={[0, 1.45, 0.16]} castShadow>
+        <mesh position={[0, 1.45, 0.160]} castShadow>
           <boxGeometry args={[0.015, 0.45, 0.01]} />
-          <meshStandardMaterial color="#888888" roughness={0.3} metalness={0.6} />
+          <meshStandardMaterial color="#888" roughness={0.3} metalness={0.6} />
         </mesh>
       </group>
 
       {/* Neck */}
       <mesh position={[0, 1.75, 0]} castShadow>
-        <cylinderGeometry args={[0.1, 0.11, 0.15, 12]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
+        <cylinderGeometry args={[0.10, 0.11, 0.15, 12]} />
+        <meshStandardMaterial color={BLACK} roughness={0.4} />
       </mesh>
 
-      {/* Head (mask) */}
+      {/* Black mask / helmet */}
       <mesh position={[0, 1.95, 0]} castShadow receiveShadow>
         <sphereGeometry args={[0.24, 20, 20]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.3} metalness={0.1} />
+        <meshStandardMaterial color={BLACK} roughness={0.3} metalness={0.1} />
       </mesh>
-
-      {/* Mask symbol */}
-      <mesh position={[0, 1.95, 0.24]}>
-        <planeGeometry args={[0.22, 0.22]} />
+      {/* Circle insignia on mask */}
+      <mesh position={[0, 1.95, 0.245]}>
+        <circleGeometry args={[0.10, 24]} />
         <meshBasicMaterial color="#ffffff" />
       </mesh>
-      <mesh position={[0, 1.95, 0.235]}>
-        <planeGeometry args={[0.16, 0.16]} />
-        <meshBasicMaterial color="#0a0a0a" />
+      <mesh position={[0, 1.95, 0.246]}>
+        <circleGeometry args={[0.065, 24]} />
+        <meshBasicMaterial color={BLACK} />
       </mesh>
 
       {/* Left arm */}
-      <group ref={leftArmRef} position={[-0.35, 1.5, 0]}>
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+      <group ref={leftArmRef} position={[-0.35, 1.50, 0]}>
+        <mesh position={[0, -0.30, 0]} castShadow>
+          <cylinderGeometry args={[0.09, 0.08, 0.60, 12]} />
+          <meshStandardMaterial color={PINK} roughness={0.75} />
         </mesh>
         <mesh position={[0, -0.65, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+          <cylinderGeometry args={[0.08, 0.07, 0.30, 12]} />
+          <meshStandardMaterial color={PINK} roughness={0.75} />
         </mesh>
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
+          <meshStandardMaterial color={BLACK} roughness={0.5} />
         </mesh>
       </group>
 
       {/* Right arm */}
-      <group ref={rightArmRef} position={[0.35, 1.5, 0]}>
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+      <group ref={rightArmRef} position={[0.35, 1.50, 0]}>
+        <mesh position={[0, -0.30, 0]} castShadow>
+          <cylinderGeometry args={[0.09, 0.08, 0.60, 12]} />
+          <meshStandardMaterial color={PINK} roughness={0.75} />
         </mesh>
         <mesh position={[0, -0.65, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
+          <cylinderGeometry args={[0.08, 0.07, 0.30, 12]} />
+          <meshStandardMaterial color={PINK} roughness={0.75} />
         </mesh>
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
+          <meshStandardMaterial color={BLACK} roughness={0.5} />
         </mesh>
       </group>
 
       {/* Rifle */}
-      <group ref={rifleRef} position={[0, 1.15, 0.2]} rotation={[Math.PI / 2.5, 0, 0]}>
+      <group
+        ref={rifleRef}
+        position={[0, 1.15, 0.20]}
+        rotation={[Math.PI / 2.5, 0, 0]}
+      >
+        {/* Stock */}
         <mesh position={[0, 0, -0.25]} castShadow>
-          <boxGeometry args={[0.08, 0.15, 0.3]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
+          <boxGeometry args={[0.08, 0.15, 0.30]} />
+          <meshStandardMaterial color={BLACK} roughness={0.6} />
         </mesh>
+        {/* Receiver */}
         <mesh position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[0.06, 0.1, 0.35]} />
-          <meshStandardMaterial color="#2a2a2a" roughness={0.4} metalness={0.3} />
+          <boxGeometry args={[0.06, 0.10, 0.35]} />
+          <meshStandardMaterial color={METAL} roughness={0.4} metalness={0.3} />
         </mesh>
+        {/* Barrel */}
         <mesh position={[0, 0, 0.35]} castShadow>
-          <cylinderGeometry args={[0.022, 0.025, 0.5, 12]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.5} />
+          <cylinderGeometry args={[0.022, 0.025, 0.50, 12]} />
+          <meshStandardMaterial color={BLACK} roughness={0.3} metalness={0.5} />
         </mesh>
+        {/* Sight */}
         <mesh position={[0, 0.04, 0.55]} castShadow>
           <boxGeometry args={[0.01, 0.03, 0.01]} />
-          <meshStandardMaterial color="#333333" roughness={0.4} />
+          <meshStandardMaterial color="#333" roughness={0.4} />
         </mesh>
+        {/* Magazine */}
         <mesh position={[0, -0.12, 0.05]} castShadow>
-          <boxGeometry args={[0.04, 0.18, 0.1]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
+          <boxGeometry args={[0.04, 0.18, 0.10]} />
+          <meshStandardMaterial color={BLACK} roughness={0.5} />
         </mesh>
-        <mesh position={[0, 0.08, 0.1]} castShadow>
+        {/* Scope */}
+        <mesh position={[0, 0.08, 0.10]} castShadow>
           <cylinderGeometry args={[0.025, 0.025, 0.15, 16]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.2} metalness={0.4} />
+          <meshStandardMaterial color={BLACK} roughness={0.2} metalness={0.4} />
         </mesh>
-        
-        {/* Muzzle flash point light */}
+
+        {/* Muzzle flash light */}
         <pointLight
           ref={muzzleFlashRef}
           position={[0, 0, 0.62]}
@@ -226,14 +304,11 @@ export function RLGLGuard({
           color="#ffaa33"
           decay={2}
         />
-        
-        {/* Muzzle flash geometry */}
-        {isFiring && (
-          <mesh position={[0, 0, 0.65]} rotation={[0, 0, Math.random() * Math.PI * 2]}>
-            <coneGeometry args={[0.12, 0.25, 6]} />
-            <meshBasicMaterial color="#ffdd44" transparent opacity={0.9} />
-          </mesh>
-        )}
+        {/* Muzzle flash geometry — always mounted, scaled to ~0 when idle */}
+        <mesh ref={muzzleMeshRef} position={[0, 0, 0.65]}>
+          <coneGeometry args={[0.12, 0.25, 6]} />
+          <meshBasicMaterial color="#ffdd44" transparent opacity={0.9} />
+        </mesh>
       </group>
     </group>
   );

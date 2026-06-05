@@ -24,6 +24,11 @@ import { useGameStore } from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
 import { SoundManager } from "@/managers/SoundManager";
 import { MusicManager } from "@/managers/MusicManager";
+import {
+  RLGLDoll,
+  RLGLGuard,
+  RLGLContestant,
+} from "@/components/r3f/models";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * CONSTANTS — world layout, gameplay tunables
@@ -86,611 +91,10 @@ interface PlayerEntity {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * DOLL MODEL (PROCEDURAL) - ENHANCED YOUNG-HEE STYLE
+ * DOLL / PLAYER / GUARD MODELS
+ * Moved to src/components/r3f/models/{RLGLDoll,RLGLContestant,RLGLGuard}.tsx
+ * Imported above as RLGLDoll, RLGLContestant, RLGLGuard.
  * ────────────────────────────────────────────────────────────────────────────*/
-
-interface DollProps {
-  position: [number, number, number];
-  targetRotation: number;
-  isRed: boolean;
-  scanIntensity: number;      
-}
-
-function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
-  const group = useRef<THREE.Group>(null);
-  const bodyRef = useRef<THREE.Group>(null);
-  const headRef = useRef<THREE.Group>(null);
-
-  const bodyLean = isRed ? -0.12 : 0;
-  const bodyRise = isRed ? 0.08 : 0;
-
-  useFrame((state, dt) => {
-    if (!group.current) return;
-
-    // RLGL Doll: Smooth body and head turn
-    // GREEN LIGHT: faces tree (rotation = 0)
-    // RED LIGHT: turns toward contestants (rotation = Math.PI)
-    
-    // Body turn: smooth rotation toward target
-    const bodySpeed = 1 - Math.exp(-5.5 * dt);
-    group.current.rotation.y = THREE.MathUtils.lerp(
-      group.current.rotation.y,
-      targetRotation,
-      bodySpeed
-    );
-
-    if (headRef.current) {
-      // Head turn: smooth rotation with slight overshoot
-      const headTargetY = targetRotation * 1.18;
-      const headSpeed = 1 - Math.exp(-4.0 * dt);
-      headRef.current.rotation.y = THREE.MathUtils.lerp(
-        headRef.current.rotation.y,
-        headTargetY,
-        headSpeed
-      );
-    }
-    
-    if (isRed) {
-      group.current.position.y = position[1] + bodyRise + Math.sin(state.clock.elapsedTime * 3) * 0.02;
-      group.current.rotation.x = bodyLean;
-      group.current.rotation.z = 0;
-    } else if (Math.abs(targetRotation) < 0.1) {
-      const t = state.clock.elapsedTime;
-      group.current.rotation.z = Math.sin(t * 1.8) * 0.035;
-      group.current.position.y = position[1] + Math.sin(t * 1.2) * 0.04;
-      group.current.rotation.x = Math.sin(t * 0.8) * 0.015;
-    } else {
-      group.current.rotation.z = 0;
-      group.current.rotation.x = 0;
-      group.current.position.y = position[1];
-    }
-  });
-
-  const eyeColor = isRed ? "#ff0000" : "#111";
-  const eyeIntensity = isRed ? (0.8 + scanIntensity * 0.2) * 8 : 0;
-
-  return (
-    <group ref={group} position={position}>
-      <group ref={bodyRef}>
-        <mesh position={[0, 1.8, 0]}>
-          <coneGeometry args={[1.5, 3.6, 32]} />
-          <meshStandardMaterial color="#f9a03f" roughness={0.7} />
-        </mesh>
-        <mesh position={[0, 3.2, 0]}>
-          <cylinderGeometry args={[0.7, 1.2, 1.0, 32]} />
-          <meshStandardMaterial color="#fde74c" roughness={0.8} />
-        </mesh>
-      </group>
-      
-      <group ref={headRef}>
-        <mesh position={[0, 4.3, 0]}>
-          <sphereGeometry args={[0.7, 32, 32]} />
-          <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 4.4, -0.1]}>
-          <sphereGeometry args={[0.72, 32, 32]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
-        </mesh>
-        <mesh position={[-0.8, 4.2, -0.2]}>
-          <sphereGeometry args={[0.3, 16, 16]} />
-          <meshStandardMaterial color="#0a0a0a" />
-        </mesh>
-        <mesh position={[0.8, 4.2, -0.2]}>
-          <sphereGeometry args={[0.3, 16, 16]} />
-          <meshStandardMaterial color="#0a0a0a" />
-        </mesh>
-        <mesh position={[-0.25, 4.4, 0.62]} rotation={[Math.PI/2, 0, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.1, 16]} />
-          <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={eyeIntensity} />
-        </mesh>
-        <mesh position={[0.25, 4.4, 0.62]} rotation={[Math.PI/2, 0, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.1, 16]} />
-          <meshStandardMaterial color={eyeColor} emissive={eyeColor} emissiveIntensity={eyeIntensity} />
-        </mesh>
-      </group>
-
-      {isRed && (
-        <>
-          <spotLight
-            position={[0, 4.4, 0.6]}
-            target-position={[0, 0, 40]}
-            intensity={8 + scanIntensity * 12}
-            angle={0.85}
-            penumbra={0.2}
-            color="#ff1a1a"
-            distance={140}
-            decay={1.8}
-            castShadow
-          />
-          <spotLight
-            position={[0, 4.4, 0]}
-            target-position={[0, 0, 50]}
-            intensity={4}
-            angle={1.2}
-            penumbra={0.5}
-            color="#ff4444"
-            distance={100}
-            decay={2}
-          />
-        </>
-      )}
-    </group>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * PLAYER MODEL (PROCEDURAL) - ENHANCED CONTESTANT STYLE
- * ────────────────────────────────────────────────────────────────────────────*/
-
-interface PlayerMeshProps {
-  player: PlayerEntity;
-  isMoving: boolean;
-}
-
-const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMeshProps) {
-  const group = useRef<THREE.Group>(null);
-  const torsoRef = useRef<THREE.Group>(null);
-  const headRef = useRef<THREE.Group>(null);
-  const legLRef = useRef<THREE.Group>(null);
-  const legRRef = useRef<THREE.Group>(null);
-  const armLRef = useRef<THREE.Group>(null);
-  const armRRef = useRef<THREE.Group>(null);
-
-  const animStateRef = useRef<"idle" | "run" | "sprint" | "fall" | "victory">("idle");
-  const animPhaseRef = useRef(0);
-
-  useFrame((state, delta) => {
-    if (!group.current) return;
-    group.current.position.x = player.x;
-    group.current.position.z = player.z;
-
-    const speed = Math.abs(player.vz);
-    const isSprinting = speed > 10;
-    
-    if (!player.alive) {
-      animStateRef.current = "fall";
-    } else if (player.finished) {
-      animStateRef.current = "victory";
-    } else if (speed === 0) {
-      animStateRef.current = "idle";
-    } else {
-      animStateRef.current = isSprinting ? "sprint" : "run";
-    }
-
-    if (!player.alive) {
-      const t = Math.min(1, player.fallProgress);
-      group.current.rotation.x = -player.fallAxis[0] * t * Math.PI / 2;
-      group.current.rotation.z = -player.fallAxis[2] * t * Math.PI / 2;
-      group.current.position.y = THREE.MathUtils.lerp(0, -0.35, t);
-      
-      if (legLRef.current) legLRef.current.rotation.x = THREE.MathUtils.lerp(0, 1.2, t);
-      if (legRRef.current) legRRef.current.rotation.x = THREE.MathUtils.lerp(0, -1.2, t);
-      if (armLRef.current) armLRef.current.rotation.x = THREE.MathUtils.lerp(0, 1.8, t);
-      if (armRRef.current) armRRef.current.rotation.x = THREE.MathUtils.lerp(0, -1.8, t);
-      return;
-    }
-
-    group.current.rotation.x = 0;
-    group.current.rotation.z = 0;
-
-    const t = state.clock.elapsedTime;
-
-    if (animStateRef.current === "victory") {
-      group.current.position.y = 0.05 + Math.sin(t * 4) * 0.03;
-      if (armLRef.current) armLRef.current.rotation.x = -2.8;
-      if (armRRef.current) armRRef.current.rotation.x = -2.8;
-      if (armLRef.current) armLRef.current.rotation.z = -0.3;
-      if (armRRef.current) armRRef.current.rotation.z = 0.3;
-      if (legLRef.current) legLRef.current.rotation.x = 0;
-      if (legRRef.current) legRRef.current.rotation.x = 0;
-      if (headRef.current) headRef.current.rotation.x = -0.2;
-    } else if (animStateRef.current === "idle") {
-      animPhaseRef.current = t;
-      const breathe = Math.sin(t * 2.5) * 0.015;
-      group.current.position.y = breathe;
-      
-      if (torsoRef.current) {
-        torsoRef.current.scale.y = 1 + breathe;
-        torsoRef.current.scale.x = 1 - breathe * 0.3;
-      }
-      
-      if (armLRef.current) armLRef.current.rotation.x = THREE.MathUtils.lerp(armLRef.current.rotation.x, 0.1, 0.1);
-      if (armRRef.current) armRRef.current.rotation.x = THREE.MathUtils.lerp(armRRef.current.rotation.x, 0.1, 0.1);
-      if (legLRef.current) legLRef.current.rotation.x = THREE.MathUtils.lerp(legLRef.current.rotation.x, 0, 0.1);
-      if (legRRef.current) legRRef.current.rotation.x = THREE.MathUtils.lerp(legRRef.current.rotation.x, 0, 0.1);
-    } else if (animStateRef.current === "run" || animStateRef.current === "sprint") {
-      const freq = animStateRef.current === "sprint" ? 14 : 11;
-      animPhaseRef.current += delta * freq;
-      
-      const swingAmount = animStateRef.current === "sprint" ? 0.65 : 0.5;
-      const swing = Math.sin(animPhaseRef.current) * swingAmount;
-      
-      if (legLRef.current) legLRef.current.rotation.x = swing;
-      if (legRRef.current) legRRef.current.rotation.x = -swing;
-      
-      if (armLRef.current) armLRef.current.rotation.x = -swing * 0.75;
-      if (armRRef.current) armRRef.current.rotation.x = swing * 0.75;
-      
-      const bob = Math.abs(Math.sin(animPhaseRef.current)) * (animStateRef.current === "sprint" ? 0.08 : 0.06);
-      group.current.position.y = bob;
-      
-      if (torsoRef.current) {
-        const lean = animStateRef.current === "sprint" ? -0.15 : -0.08;
-        torsoRef.current.rotation.x = THREE.MathUtils.lerp(torsoRef.current.rotation.x, lean, 0.1);
-      }
-      
-      if (headRef.current) {
-        headRef.current.rotation.x = Math.sin(animPhaseRef.current * 2) * 0.04;
-      }
-    }
-  });
-
-  return (
-    <group ref={group}>
-      <group ref={legLRef} position={[-0.14, 0.92, 0]}>
-        <mesh position={[0, -0.42, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.085, 0.84, 12]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.2, 0]} castShadow>
-          <sphereGeometry args={[0.1, 10, 10]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, -0.87, 0.05]} castShadow>
-          <boxGeometry args={[0.14, 0.08, 0.22]} />
-          <meshStandardMaterial color="#f5f5f5" roughness={0.6} />
-        </mesh>
-        <mesh position={[0, -0.88, 0.1]} castShadow>
-          <boxGeometry args={[0.12, 0.06, 0.08]} />
-          <meshStandardMaterial color="#e0e0e0" roughness={0.7} />
-        </mesh>
-      </group>
-
-      <group ref={legRRef} position={[0.14, 0.92, 0]}>
-        <mesh position={[0, -0.42, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.085, 0.84, 12]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.2, 0]} castShadow>
-          <sphereGeometry args={[0.1, 10, 10]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, -0.87, 0.05]} castShadow>
-          <boxGeometry args={[0.14, 0.08, 0.22]} />
-          <meshStandardMaterial color="#f5f5f5" roughness={0.6} />
-        </mesh>
-        <mesh position={[0, -0.88, 0.1]} castShadow>
-          <boxGeometry args={[0.12, 0.06, 0.08]} />
-          <meshStandardMaterial color="#e0e0e0" roughness={0.7} />
-        </mesh>
-      </group>
-
-      <group ref={torsoRef}>
-        <mesh position={[0, 1.25, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.45, 0.65, 0.26]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, 1.25, 0.135]} castShadow>
-          <boxGeometry args={[0.012, 0.6, 0.01]} />
-          <meshStandardMaterial color="#0d5a4d" roughness={0.4} />
-        </mesh>
-        <mesh position={[-0.12, 1.35, 0.135]} castShadow>
-          <boxGeometry args={[0.08, 0.1, 0.01]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0.12, 1.35, 0.135]} castShadow>
-          <boxGeometry args={[0.08, 0.1, 0.01]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, 0.93, 0]} castShadow>
-          <cylinderGeometry args={[0.24, 0.24, 0.08, 16]} />
-          <meshStandardMaterial color="#0d5a4d" roughness={0.7} />
-        </mesh>
-      </group>
-
-      <mesh position={[0, 1.62, 0]} castShadow>
-        <cylinderGeometry args={[0.08, 0.09, 0.12, 12]} />
-        <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
-      </mesh>
-
-      <group ref={headRef} position={[0, 1.78, 0]}>
-        <mesh castShadow receiveShadow>
-          <sphereGeometry args={[0.19, 20, 20]} />
-          <meshStandardMaterial color="#ffe1d4" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 0.08, 0]} castShadow>
-          <sphereGeometry args={[0.195, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
-          <meshStandardMaterial color="#2a2a2a" roughness={0.9} />
-        </mesh>
-        <mesh position={[-0.08, 0.04, 0.17]}>
-          <sphereGeometry args={[0.02, 8, 8]} />
-          <meshStandardMaterial color="#1a1a1a" />
-        </mesh>
-        <mesh position={[0.08, 0.04, 0.17]}>
-          <sphereGeometry args={[0.02, 8, 8]} />
-          <meshStandardMaterial color="#1a1a1a" />
-        </mesh>
-      </group>
-
-      <group ref={armLRef} position={[-0.3, 1.48, 0]}>
-        <mesh position={[0, -0.22, 0]} castShadow>
-          <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.44, 0]} castShadow>
-          <sphereGeometry args={[0.072, 10, 10]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, -0.66, 0]} castShadow>
-          <cylinderGeometry args={[0.065, 0.06, 0.4, 10]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.88, 0]} castShadow>
-          <sphereGeometry args={[0.07, 10, 10]} />
-          <meshStandardMaterial color="#ffe1d4" roughness={0.6} />
-        </mesh>
-      </group>
-
-      <group ref={armRRef} position={[0.3, 1.48, 0]}>
-        <mesh position={[0, -0.22, 0]} castShadow>
-          <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.44, 0]} castShadow>
-          <sphereGeometry args={[0.072, 10, 10]} />
-          <meshStandardMaterial color="#158070" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, -0.66, 0]} castShadow>
-          <cylinderGeometry args={[0.065, 0.06, 0.4, 10]} />
-          <meshStandardMaterial color="#1a8a7a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.88, 0]} castShadow>
-          <sphereGeometry args={[0.07, 10, 10]} />
-          <meshStandardMaterial color="#ffe1d4" roughness={0.6} />
-        </mesh>
-      </group>
-      
-      <Html position={[0, 1.2, -0.15]} center distanceFactor={6} occlude={false}>
-        <div
-          style={{
-            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#fff",
-            letterSpacing: "0.04em",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          {player.number.toString().padStart(3, "0")}
-        </div>
-      </Html>
-
-      {!player.alive && (
-        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.6 + player.fallProgress * 0.45, 20]} />
-          <meshBasicMaterial color="#9b1414" transparent opacity={0.7} />
-        </mesh>
-      )}
-    </group>
-  );
-});
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * GUARD (PROCEDURAL) - ENHANCED SQUID GAME STYLE
- * ────────────────────────────────────────────────────────────────────────────*/
-
-interface GuardProps {
-  position: [number, number, number];
-  rotationY?: number;
-  isAiming?: boolean;
-  isFiring?: boolean;
-  targetPosition?: [number, number, number];
-}
-
-function Guard({ 
-  position, 
-  rotationY = 0, 
-  isAiming = false, 
-  isFiring = false,
-  targetPosition 
-}: GuardProps) {
-  const group = useRef<THREE.Group>(null);
-  const torsoRef = useRef<THREE.Group>(null);
-  const leftArmRef = useRef<THREE.Group>(null);
-  const rightArmRef = useRef<THREE.Group>(null);
-  const rifleRef = useRef<THREE.Group>(null);
-  const muzzleFlashRef = useRef<THREE.PointLight>(null);
-
-  useFrame((state) => {
-    if (!group.current) return;
-    const t = state.clock.elapsedTime;
-
-    if (torsoRef.current && !isAiming) {
-      const breathCycle = Math.sin(t * 1.5) * 0.012;
-      torsoRef.current.scale.y = 1 + breathCycle;
-      torsoRef.current.position.y = 1.3 + breathCycle * 0.5;
-    }
-
-    if (isAiming && leftArmRef.current && rightArmRef.current && rifleRef.current) {
-      leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -1.4, 0.12);
-      leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.3, 0.12);
-      rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -1.4, 0.12);
-      rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, 0.3, 0.12);
-      rifleRef.current.rotation.x = THREE.MathUtils.lerp(rifleRef.current.rotation.x, -Math.PI / 2, 0.12);
-      rifleRef.current.position.z = THREE.MathUtils.lerp(rifleRef.current.position.z, 0.4, 0.12);
-
-      if (torsoRef.current) {
-        torsoRef.current.rotation.x = Math.sin(t * 2) * 0.01;
-      }
-    } else {
-      if (leftArmRef.current) {
-        leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, 0.15, 0.1);
-        leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, -0.15, 0.1);
-      }
-      if (rightArmRef.current) {
-        rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, 0.15, 0.1);
-        rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, 0.15, 0.1);
-      }
-      if (rifleRef.current) {
-        rifleRef.current.rotation.x = THREE.MathUtils.lerp(rifleRef.current.rotation.x, Math.PI / 2.5, 0.1);
-        rifleRef.current.position.z = THREE.MathUtils.lerp(rifleRef.current.position.z, 0.2, 0.1);
-      }
-    }
-
-    if (isFiring && rifleRef.current && torsoRef.current) {
-      const recoilPhase = (Math.sin(t * 35) + 1) * 0.5;
-      rifleRef.current.position.z -= recoilPhase * 0.08;
-      torsoRef.current.rotation.x = -recoilPhase * 0.15;
-      
-      if (muzzleFlashRef.current) {
-        muzzleFlashRef.current.intensity = 25 * recoilPhase;
-      }
-    } else if (muzzleFlashRef.current) {
-      muzzleFlashRef.current.intensity = 0;
-    }
-  });
-
-  return (
-    <group ref={group} position={position} rotation={[0, rotationY, 0]}>
-      {/* Boots - styled as actual footwear, not debug boxes */}
-      <mesh position={[-0.13, 0.05, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.1, 0.22]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
-      </mesh>
-      <mesh position={[0.13, 0.05, 0.02]} castShadow>
-        <boxGeometry args={[0.14, 0.1, 0.22]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.7} metalness={0.1} />
-      </mesh>
-
-      {/* Legs - proper pink guard suit color */}
-      <mesh position={[-0.13, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
-        <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-      </mesh>
-      <mesh position={[0.13, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.11, 0.095, 0.9, 12]} />
-        <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-      </mesh>
-
-      <mesh position={[0, 1.0, 0]} castShadow>
-        <cylinderGeometry args={[0.22, 0.25, 0.12, 16]} />
-        <meshStandardMaterial color="#c43278" roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 1.0, 0]} castShadow>
-        <boxGeometry args={[0.42, 0.08, 0.35]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
-      </mesh>
-
-      <group ref={torsoRef}>
-        <mesh position={[0, 1.3, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.5, 0.75, 0.28]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, 1.45, 0.145]} castShadow>
-          <boxGeometry args={[0.3, 0.4, 0.02]} />
-          <meshStandardMaterial color="#c43278" roughness={0.8} />
-        </mesh>
-        <mesh position={[0, 1.45, 0.16]} castShadow>
-          <boxGeometry args={[0.015, 0.45, 0.01]} />
-          <meshStandardMaterial color="#888888" roughness={0.3} metalness={0.6} />
-        </mesh>
-      </group>
-
-      <mesh position={[0, 1.75, 0]} castShadow>
-        <cylinderGeometry args={[0.1, 0.11, 0.15, 12]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.4} />
-      </mesh>
-
-      <mesh position={[0, 1.95, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.24, 20, 20]} />
-        <meshStandardMaterial color="#0a0a0a" roughness={0.3} metalness={0.1} />
-      </mesh>
-
-      <mesh position={[0, 1.95, 0.24]}>
-        <planeGeometry args={[0.22, 0.22]} />
-        <meshBasicMaterial color="#ffffff" />
-      </mesh>
-      <mesh position={[0, 1.95, 0.235]}>
-        <planeGeometry args={[0.16, 0.16]} />
-        <meshBasicMaterial color="#0a0a0a" />
-      </mesh>
-
-      <group ref={leftArmRef} position={[-0.35, 1.5, 0]}>
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.65, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.85, 0]} castShadow>
-          <sphereGeometry args={[0.09, 12, 12]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
-        </mesh>
-      </group>
-
-      <group ref={rightArmRef} position={[0.35, 1.5, 0]}>
-        <mesh position={[0, -0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.09, 0.08, 0.6, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.65, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.07, 0.3, 12]} />
-          <meshStandardMaterial color="#e34a8a" roughness={0.75} />
-        </mesh>
-        <mesh position={[0, -0.85, 0]} castShadow>
-          <sphereGeometry args={[0.09, 12, 12]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.5} />
-        </mesh>
-      </group>
-
-      <group ref={rifleRef} position={[0, 1.15, 0.2]} rotation={[Math.PI / 2.5, 0, 0]}>
-        <mesh position={[0, 0, -0.25]} castShadow>
-          <boxGeometry args={[0.08, 0.15, 0.3]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
-        </mesh>
-        <mesh position={[0, 0, 0]} castShadow>
-          <boxGeometry args={[0.06, 0.1, 0.35]} />
-          <meshStandardMaterial color="#2a2a2a" roughness={0.4} metalness={0.3} />
-        </mesh>
-        <mesh position={[0, 0, 0.35]} castShadow>
-          <cylinderGeometry args={[0.022, 0.025, 0.5, 12]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.5} />
-        </mesh>
-        <mesh position={[0, 0.04, 0.55]} castShadow>
-          <boxGeometry args={[0.01, 0.03, 0.01]} />
-          <meshStandardMaterial color="#333333" roughness={0.4} />
-        </mesh>
-        <mesh position={[0, -0.12, 0.05]} castShadow>
-          <boxGeometry args={[0.04, 0.18, 0.1]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 0.08, 0.1]} castShadow>
-          <cylinderGeometry args={[0.025, 0.025, 0.15, 16]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.2} metalness={0.4} />
-        </mesh>
-        
-        <pointLight
-          ref={muzzleFlashRef}
-          position={[0, 0, 0.62]}
-          intensity={0}
-          distance={20}
-          color="#ffaa33"
-          decay={2}
-        />
-        
-        {isFiring && (
-          <mesh position={[0, 0, 0.65]} rotation={[0, 0, Math.random() * Math.PI * 2]}>
-            <coneGeometry args={[0.12, 0.25, 6]} />
-            <meshBasicMaterial color="#ffdd44" transparent opacity={0.9} />
-          </mesh>
-        )}
-      </group>
-    </group>
-  );
-}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * ENVIRONMENT DYNAMIC FEATURES
@@ -803,26 +207,26 @@ function Arena({
         color="#000"
       />
       
-      <Guard 
+      <RLGLGuard 
         position={[-FIELD_WIDTH / 2 + 2, 0, FINISH_Z + 1.5]} 
         rotationY={Math.PI / 2} 
         isAiming={isRed} 
         isFiring={eliminationGuardRef.current?.guardIdx === 0 && performance.now() - guardFlashRef.current < 150}
         targetPosition={eliminationGuardRef.current?.targetPos}
       />
-      <Guard 
+      <RLGLGuard 
         position={[FIELD_WIDTH / 2 - 2, 0, FINISH_Z + 1.5]} 
         rotationY={-Math.PI / 2} 
         isAiming={isRed}
         isFiring={eliminationGuardRef.current?.guardIdx === 1 && performance.now() - guardFlashRef.current < 150}
       />
-      <Guard position={[-FIELD_WIDTH / 2 + 4, 0, FINISH_Z - 2]} rotationY={Math.PI / 3} />
-      <Guard position={[FIELD_WIDTH / 2 - 4, 0, FINISH_Z - 2]} rotationY={-Math.PI / 3} />
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 4, 0, FINISH_Z - 2]} rotationY={Math.PI / 3} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 4, 0, FINISH_Z - 2]} rotationY={-Math.PI / 3} />
       
-      <Guard position={[-FIELD_WIDTH / 2 + 1, 0, START_Z - 20]} rotationY={Math.PI / 2} />
-      <Guard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
-      <Guard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
-      <Guard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 1, 0, START_Z - 20]} rotationY={Math.PI / 2} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
 
       {isRed && <GuardLasers />}
     </group>
@@ -1128,6 +532,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
 
+      // RLGL Movement: Instant stop/start
       human.vz = wantMove ? -speed : 0;
       human.vx = 0;
       human.z += human.vz * dt;
@@ -1188,6 +593,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
       const npcSpeed = baseSpeed + speedVariation;
 
+      // RLGL NPC Movement: Instant stop/start
       p.vz = p.npcMoving ? -npcSpeed : 0;
 
       if (p.npcMoving) {
@@ -1416,14 +822,19 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
         eliminationGuardRef={eliminationGuardRef} 
         guardFlashRef={guardFlashRef} 
       />
-      <Doll
+      <RLGLDoll
         position={[0, 0, -12.5]}
         targetRotation={dollRotationRef.current}
         isRed={isRed}
         scanIntensity={Math.min(1, redTimerRef.current * 1.2)}
       />
       {playersRef.current.map((p) => (
-        <PlayerMesh key={p.id} player={p} isMoving={Math.abs(p.vz) > 0.2} />
+        <RLGLContestant 
+          key={p.id} 
+          player={p} 
+          isMoving={Math.abs(p.vz) > 0.2} 
+          isRedLight={isRed} 
+        />
       ))}
 
       <R3FLine ref={shotLineRef} geometry={lineGeometry}>
@@ -1584,7 +995,10 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   }, [setRuntimePhase, difficultyTimer]);
 
   const moveHoldHandlers = useMemo(() => ({
-    onPointerDown: (e: React.PointerEvent) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); inputRef.current.forward = true; },
+    onPointerDown: (e: React.PointerEvent) => { 
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId); 
+      inputRef.current.forward = true; 
+    },
     onPointerUp:   () => { inputRef.current.forward = false; },
     onPointerLeave:() => { inputRef.current.forward = false; },
     onPointerCancel:() => { inputRef.current.forward = false; },
