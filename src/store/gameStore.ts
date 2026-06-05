@@ -5,7 +5,8 @@ import { subscribeWithSelector } from "zustand/middleware";
 // SECTION 1 — UNION TYPES (all exported for use across the codebase)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type GameId = "red-light-green-light" | "dalgona" | "glass-bridge" | "menu";
+// Update your GameId type to look something like this:
+export type GameId = "menu" | "red-light-green-light" | "glass-bridge" | "dalgona" | "glass-breaker";
 
 export type RuntimePhase =
   | "idle"
