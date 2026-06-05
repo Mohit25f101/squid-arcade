@@ -278,16 +278,16 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   }
 
   const spotlight = ctx.createRadialGradient(w / 2, h * 0.2, 0, w / 2, h * 0.4, w * 0.9);
-  spotlight.addColorStop(0, "rgba(200, 60, 120, 0.08)");
-  spotlight.addColorStop(0.5, "rgba(140, 40, 80, 0.04)");
+  spotlight.addColorStop(0, "rgba(200, 60, 120, 0.10)");
+  spotlight.addColorStop(0.5, "rgba(140, 40, 80, 0.06)");
   spotlight.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = spotlight;
   ctx.fillRect(0, 0, w, h);
   
   const fogGrad = ctx.createLinearGradient(0, h * 0.5, 0, h);
   fogGrad.addColorStop(0, "rgba(0,0,0,0)");
-  fogGrad.addColorStop(0.6, "rgba(10,4,8,0.4)");
-  fogGrad.addColorStop(1, "rgba(5,2,4,0.7)");
+  fogGrad.addColorStop(0.6, "rgba(10,4,8,0.5)");
+  fogGrad.addColorStop(1, "rgba(5,2,4,0.8)");
   ctx.fillStyle = fogGrad;
   ctx.fillRect(0, 0, w, h);
 
@@ -841,25 +841,25 @@ function renderPanel(
   }
 
   const [br, bg, bb] = panel.safe ? SAFE_BLUE : FRAGILE_BLUE;
-  const baseAlpha = 0.18 + Math.sin(atmosphericT * 0.7 + panel.wobblePhase) * 0.04;
+  const baseAlpha = 0.20 + Math.sin(atmosphericT * 0.7 + panel.wobblePhase) * 0.06;
 
   ctx.fillStyle = rgb(br, bg, bb, baseAlpha);
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
   const refCanvas = panel.safe ? assets.safeReflection : assets.fragileReflection;
-  ctx.globalAlpha = panel.reflectionAlpha + Math.sin(panel.glintTimer) * 0.04;
+  ctx.globalAlpha = panel.reflectionAlpha + Math.sin(panel.glintTimer) * 0.06;
   ctx.drawImage(refCanvas as CanvasImageSource, 0, 0, PANEL_W, PANEL_H);
   ctx.globalAlpha = 1;
 
   const glint1 = (Math.sin(panel.glintTimer * panel.glintPhase) + 1) * 0.5;
   let glintVal: number;
   if (panel.safe) {
-    glintVal = glint1 * 0.25;
+    glintVal = glint1 * 0.32;
   } else {
     const glint2 = (Math.sin(panel.glintTimer * panel.glintPhase2 + 1.7) + 1) * 0.5;
-    glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.18;
+    glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.22;
     if (glint2 > 0.8) {
-      ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.15})`;
+      ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.18})`;
       const shimX = PANEL_W * 0.3 + glint2 * PANEL_W * 0.4;
       ctx.fillRect(shimX, 0, 3, PANEL_H);
     }
@@ -868,21 +868,21 @@ function renderPanel(
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
   
   if (isPlayerOn) {
-    const glowPulse = 0.6 + Math.sin(atmosphericT * 3) * 0.4;
-    ctx.shadowColor = `rgba(${br}, ${bg + 100}, ${bb + 100}, ${glowPulse})`;
-    ctx.shadowBlur = 35;
-    ctx.fillStyle = `rgba(${br + 80}, ${bg + 120}, ${bb + 100}, ${glowPulse * 0.4})`;
+    const glowPulse = 0.7 + Math.sin(atmosphericT * 3) * 0.3;
+    ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
+    ctx.shadowBlur = 40;
+    ctx.fillStyle = `rgba(${br + 100}, ${bg + 140}, ${bb + 120}, ${glowPulse * 0.5})`;
     ctx.fillRect(0, 0, PANEL_W, PANEL_H);
     ctx.shadowBlur = 0;
   }
 
-  const borderAlpha = isPlayerOn ? 0.7 : 0.25 + glintVal * 0.3;
-  ctx.strokeStyle = rgb(br, bg + 20, bb + 20, borderAlpha);
-  ctx.lineWidth = isPlayerOn ? 2.5 : 1.5;
+  const borderAlpha = isPlayerOn ? 0.85 : 0.30 + glintVal * 0.4;
+  ctx.strokeStyle = rgb(br, bg + 30, bb + 30, borderAlpha);
+  ctx.lineWidth = isPlayerOn ? 3 : 1.8;
   ctx.strokeRect(0.75, 0.75, PANEL_W - 1.5, PANEL_H - 1.5);
 
-  ctx.strokeStyle = rgb(255, 255, 255, 0.08 + glintVal * 0.15);
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = rgb(255, 255, 255, 0.10 + glintVal * 0.18);
+  ctx.lineWidth = 1.2;
   ctx.strokeRect(3, 3, PANEL_W - 6, PANEL_H - 6);
 
   if (quality === "high") {
@@ -1272,6 +1272,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     return () => {
       SoundManager.getInstance().stopAll(0);
+      SoundManager.getInstance().stopAllLoops(0);
     };
   }, []);
 

@@ -301,8 +301,9 @@ export const useGameStore = create<GameStoreState>()(
       if (typeof window !== 'undefined') {
         const { SoundManager } = require('@/managers/SoundManager');
         const { musicManager } = require('@/managers/MusicManager');
-        SoundManager.getInstance().stopAll(300);
-        musicManager.stop(300);
+        SoundManager.getInstance().stopAll(0);
+        SoundManager.getInstance().stopAllLoops(0);
+        musicManager.stopAll();
       }
       set({
         activeGame: "menu",

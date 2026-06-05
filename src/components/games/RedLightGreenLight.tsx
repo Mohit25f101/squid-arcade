@@ -881,7 +881,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     
     return () => {
       sm.stopAll(0);
-      mm.stop(0);
+      sm.stopAllLoops(0);
+      mm.stopAll();
     };
   }, []);
 
@@ -903,7 +904,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Escape") {
         SoundManager.getInstance().stopAll(0);
-        MusicManager.getInstance().stop(0);
+        SoundManager.getInstance().stopAllLoops(0);
+        MusicManager.getInstance().stopAll();
         onExit?.();
         return;
       }
@@ -977,7 +979,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   const handleRestart = useCallback(() => {
     // Clean stop all audio before restart
     SoundManager.getInstance().stopAll(0);
-    MusicManager.getInstance().stop(0);
+    SoundManager.getInstance().stopAllLoops(0);
+    MusicManager.getInstance().stopAll();
     
     // Reset UI state
     setEndState(null);
@@ -1068,7 +1071,8 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
           {onExit && (
             <button onClick={() => {
               SoundManager.getInstance().stopAll(0);
-              MusicManager.getInstance().stop(0);
+              SoundManager.getInstance().stopAllLoops(0);
+              MusicManager.getInstance().stopAll();
               onExit();
             }} data-testid="rlgl3d-pause-exit" style={btnStyle("#ff0066")}>
               EXIT TO MENU
@@ -1166,7 +1170,8 @@ function HUDOverlay({
             <button
               onClick={() => {
                 SoundManager.getInstance().stopAll(0);
-                MusicManager.getInstance().stop(0);
+                SoundManager.getInstance().stopAllLoops(0);
+                MusicManager.getInstance().stopAll();
                 onExit();
               }}
               data-testid="rlgl3d-exit-btn"
@@ -1359,7 +1364,8 @@ function EndScreen({
         {onExit && (
           <button data-testid="rlgl3d-end-exit" onClick={() => {
             SoundManager.getInstance().stopAll(0);
-            MusicManager.getInstance().stop(0);
+            SoundManager.getInstance().stopAllLoops(0);
+            MusicManager.getInstance().stopAll();
             onExit();
           }} style={btnStyle("#ff0066")}>
             ← MENU

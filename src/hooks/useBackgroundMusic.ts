@@ -22,8 +22,12 @@ export function useBackgroundMusic(): void {
     if (MUSIC_VIEWS.has(currentView)) {
       musicManager.play("menu", 300);
     } else {
-      musicManager.stop(300);
+      musicManager.stopAll();
     }
+    
+    return () => {
+      musicManager.stopAll();
+    };
   }, [currentView]);
 
   useEffect(() => {

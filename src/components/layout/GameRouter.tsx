@@ -33,6 +33,16 @@ export default function GameRouter() {
 
   useEffect(() => {
     if (prevGameRef.current === activeGame) return;
+    
+    // Cleanup audio when switching games
+    if (typeof window !== 'undefined') {
+      const { SoundManager } = require('@/managers/SoundManager');
+      const { MusicManager } = require('@/managers/MusicManager');
+      SoundManager.getInstance().stopAll(0);
+      SoundManager.getInstance().stopAllLoops(0);
+      MusicManager.getInstance().stopAll();
+    }
+    
     prevGameRef.current = activeGame;
 
     setTransitionState("entering");
