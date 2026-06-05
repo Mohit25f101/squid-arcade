@@ -77,13 +77,16 @@ export default function SettingsOverlay({ onClose, onHover, onClick }: SettingsO
   // Apply settings to audio managers whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const sm = require('@/managers/SoundManager').SoundManager.getInstance();
-      const mm = require('@/managers/MusicManager').MusicManager.getInstance();
-      
-      sm.setMasterVolume(settings.masterVolume);
-      sm.setSFXVolume(settings.sfxVolume);
-      sm.setMusicVolume(settings.musicVolume);
-      mm.updateVolume();
+      import('@/managers/SoundManager').then(({ SoundManager }) => {
+        const sm = SoundManager.getInstance();
+        sm.setMasterVolume(settings.masterVolume);
+        sm.setSFXVolume(settings.sfxVolume);
+        sm.setMusicVolume(settings.musicVolume);
+      }).catch(console.warn);
+
+      import('@/managers/MusicManager').then(({ musicManager }) => {
+        musicManager.updateVolume();
+      }).catch(console.warn);
     }
   }, [settings.masterVolume, settings.sfxVolume, settings.musicVolume]);
 
