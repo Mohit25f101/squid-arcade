@@ -9,6 +9,8 @@ import { usePlatformDetection } from "@/hooks/usePlatformDetection";
 import { useBackgroundMusic } from "@/hooks/useBackgroundMusic";
 import GameShell from "@/components/GameShell";
 import GameMenu from "@/components/ui/GameMenu";
+import { SoundManager } from "@/managers/SoundManager";
+import { musicManager } from "@/managers/MusicManager";
 
 // FIX: Use Next.js dynamic imports and strictly disable SSR to prevent the WebGL/React 19 crash
 const DalgonaCandy = dynamic(() => import("@/components/games/DalgonaCandy"), { ssr: false });
@@ -41,11 +43,13 @@ export default function GameRouter() {
     
     // Cleanup audio when switching games
     if (typeof window !== 'undefined') {
-      const { SoundManager } = require('@/managers/SoundManager');
-      const { MusicManager } = require('@/managers/MusicManager');
-      SoundManager.getInstance().stopAll(0);
-      SoundManager.getInstance().stopAllLoops(0);
-      MusicManager.getInstance().stopAll();
+      try {
+        SoundManager.getInstance().stopAll(0);
+        SoundManager.getInstance().stopAllLoops(0);
+        musicManager.stopAll();
+      } catch (e) {
+        console.warn('GameRouter: audio cleanup failed', e);
+      }
     }
     
     prevGameRef.current = activeGame;

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bebas_Neue, Space_Mono, Noto_Sans_KR, Rajdhani, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "./squid-menu.css";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const bebasNeue = Bebas_Neue({
   subsets: ["latin"],
@@ -64,7 +65,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="bg-black text-white antialiased overflow-hidden">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );

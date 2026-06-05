@@ -300,11 +300,20 @@ export const useGameStore = create<GameStoreState>()(
 
     clearActiveGame: () => {
       if (typeof window !== 'undefined') {
-        const { SoundManager } = require('@/managers/SoundManager');
-        const { musicManager } = require('@/managers/MusicManager');
-        SoundManager.getInstance().stopAll(0);
-        SoundManager.getInstance().stopAllLoops(0);
-        musicManager.stopAll();
+        try {
+          // Use dynamic import() instead of require() — require('@/...') fails
+          // silently in production because the bundler doesn't resolve path aliases
+          // for CommonJS require() calls.
+          import('@/managers/SoundManager').then(({ SoundManager }) => {
+            SoundManager.getInstance().stopAll(0);
+            SoundManager.getInstance().stopAllLoops(0);
+          }).catch(() => {});
+          import('@/managers/MusicManager').then(({ musicManager }) => {
+            musicManager.stopAll();
+          }).catch(() => {});
+        } catch (e) {
+          console.warn('clearActiveGame: audio cleanup failed', e);
+        }
       }
       set({
         activeGame: "menu",
