@@ -106,14 +106,12 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
   useFrame((state, dt) => {
     if (!group.current) return;
 
-    // Exponential decay: alpha = 1 - e^(-k*dt) gives the same effective
-    // angular speed regardless of frame rate (unlike a fixed per-frame lerp
-    // factor which runs faster at high frame rates and slower at low ones).
-    // bodySpeed ~5.5 rad/s effective: ~90° in ~0.25 s — natural doll-turn.
-    // headSpeed ~4.0 rad/s effective: slightly slower so body leads head.
+    // RLGL Doll: Smooth body and head turn
+    // GREEN LIGHT: faces tree (rotation = 0)
+    // RED LIGHT: turns toward contestants (rotation = Math.PI)
+    
+    // Body turn: smooth rotation toward target
     const bodySpeed = 1 - Math.exp(-5.5 * dt);
-    const headSpeed = 1 - Math.exp(-4.0 * dt);
-
     group.current.rotation.y = THREE.MathUtils.lerp(
       group.current.rotation.y,
       targetRotation,
@@ -121,8 +119,9 @@ function Doll({ position, targetRotation, isRed, scanIntensity }: DollProps) {
     );
 
     if (headRef.current) {
-      // Head overshoots body rotation by 18 % for a natural tracking look.
+      // Head turn: smooth rotation with slight overshoot
       const headTargetY = targetRotation * 1.18;
+      const headSpeed = 1 - Math.exp(-4.0 * dt);
       headRef.current.rotation.y = THREE.MathUtils.lerp(
         headRef.current.rotation.y,
         headTargetY,
@@ -236,7 +235,7 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
   const armLRef = useRef<THREE.Group>(null);
   const armRRef = useRef<THREE.Group>(null);
 
-  const animStateRef = useRef<"idle" | "run" | "sprint" | "freeze" | "fall" | "victory">("idle");
+  const animStateRef = useRef<"idle" | "run" | "sprint" | "fall" | "victory">("idle");
   const animPhaseRef = useRef(0);
 
   useFrame((state, delta) => {
@@ -247,15 +246,16 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
     const speed = Math.abs(player.vz);
     const isSprinting = speed > 10;
     
+    // Animation state: instant switch between RUN and IDLE
     if (!player.alive) {
       animStateRef.current = "fall";
     } else if (player.finished) {
       animStateRef.current = "victory";
-    } else if (isMoving && speed > 0.2) {
+    } else if (speed > 0.01) {
+      // Moving: switch to run/sprint instantly
       animStateRef.current = isSprinting ? "sprint" : "run";
-    } else if (speed < 0.01) {
-      animStateRef.current = "freeze";
     } else {
+      // Stopped: switch to "idle" instead of "freeze" so limbs stand up smoothly
       animStateRef.current = "idle";
     }
 
@@ -277,7 +277,7 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
 
     const t = state.clock.elapsedTime;
 
-    if (animStateRef.current === "victory") {
+   if (animStateRef.current === "victory") {
       group.current.position.y = 0.05 + Math.sin(t * 4) * 0.03;
       if (armLRef.current) armLRef.current.rotation.x = -2.8;
       if (armRRef.current) armRRef.current.rotation.x = -2.8;
@@ -286,8 +286,6 @@ const PlayerMesh = React.memo(function PlayerMesh({ player, isMoving }: PlayerMe
       if (legLRef.current) legLRef.current.rotation.x = 0;
       if (legRRef.current) legRRef.current.rotation.x = 0;
       if (headRef.current) headRef.current.rotation.x = -0.2;
-    } else if (animStateRef.current === "freeze") {
-      group.current.position.y = 0;
     } else if (animStateRef.current === "idle") {
       animPhaseRef.current = t;
       const breathe = Math.sin(t * 2.5) * 0.015;
@@ -1111,11 +1109,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       graceTimerRef.current += dt;
       const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / roundTimer * 0.5);
       if (redTimerRef.current >= redDur) {
-        // Return to GREEN: doll turns back smoothly (Doll component lerps rotation
-        // toward the new targetRotation=0), heartbeat and scan_tone stop, and the
-        // doll song restarts to begin the next GREEN→WARNING→RED cycle.
-        // Previously this set WARNING with turnTRef=0, making the doll rotate 0→PI
-        // again even though it was already at PI — wrong direction, wrong phase.
         lightPhaseRef.current = LightPhase.GREEN;
         redTimerRef.current   = 0;
         graceTimerRef.current = 0;
@@ -1130,23 +1123,16 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
 
     if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
       const input = inputRef.current;
-      const wantMove = snap.up || snap.action;
+      
+      // Fix 1 & 2: Added 'input.forward' for mobile, and blocked movement during elimination locking
+      const wantMove = (snap.up || snap.action || input.forward) && elimStateRef.current === "idle";
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
-      const targetVz = wantMove ? -speed : 0;
-      
-      // Frame-independent acceleration with proper decay constants
-      // These values ensure consistent stopping behavior at any framerate
-      const accelRate = wantMove ? 25.0 : 40.0;
-      const decayFactor = Math.exp(-accelRate * dt);
-      human.vz = human.vz * decayFactor + targetVz * (1 - decayFactor);
-      
-      // Stable stopping threshold: hard-clamp to zero when below deadzone
-      // This eliminates micro-drift and ensures immediate stopping
-      const STOP_THRESHOLD = 0.05;
-      if (!wantMove && Math.abs(human.vz) < STOP_THRESHOLD) {
-        human.vz = 0;
-      }
-      
+
+      // RLGL Movement: Instant stop/start (match Pomu RLGL)
+      // HOLD INPUT: run immediately
+      // RELEASE INPUT: stop immediately
+      // No inertia, no momentum, no smoothing
+      human.vz = wantMove ? -speed : 0;
       human.vx = 0;
       human.z += human.vz * dt;
 
@@ -1205,15 +1191,10 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       const baseSpeed = 5 + (p.id % 5) * 0.5;
       const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
       const npcSpeed = baseSpeed + speedVariation;
-      const targetVz = p.npcMoving ? -npcSpeed : 0;
-      
-      // Frame-independent NPC movement with proper decay
-      const accelRate = p.npcMoving ? 15.0 + (p.id % 3) * 3 : 35.0;
-      const decayFactor = Math.exp(-accelRate * dt);
-      p.vz = p.vz * decayFactor + targetVz * (1 - decayFactor);
-      
-      // Hard-stop threshold for NPCs
-      if (!p.npcMoving && Math.abs(p.vz) < 0.05) p.vz = 0;
+
+      // RLGL NPC Movement: Instant stop/start (match player behavior)
+      // No inertia, no momentum, no smoothing
+      p.vz = p.npcMoving ? -npcSpeed : 0;
 
       if (p.npcMoving) {
         const drift = Math.sin(performance.now() * 0.003 + p.id * 0.7) * 0.015;

@@ -7,6 +7,7 @@ import { useHUDSync } from "@/components/hud/useHUDSync";
 import { SoundManager } from "@/managers/SoundManager";
 import { ResultScreen } from "../ui/ResultScreen";
 import { lerp, clamp } from "@/utils/math";
+import { RLGLDoll, RLGLGuard, RLGLContestant } from "@/components/r3f/models";
 import { useGameStore } from "@/store/gameStore";
 
 interface GameProps {
