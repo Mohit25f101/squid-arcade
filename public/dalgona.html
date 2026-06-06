@@ -739,8 +739,8 @@ const SHAPES = {
 const SHAPE_ICONS = { triangle:'▲', circle:'⬤', star:'★', umbrella:'☂' };
 const SHAPE_NAMES = { triangle:'TRIANGLE', circle:'CIRCLE', star:'STAR', umbrella:'UMBRELLA' };
 
-// Procedurally generate 50+ Polygons and Stars!
-for(let sides=4; sides<=28; sides++) {
+// Procedurally generate exactly 11 extra shapes (15 total)
+for(let sides=5; sides<=7; sides++) {
   const id = `polygon_${sides}`;
   SHAPES[id] = () => {
     const pts = [];
@@ -749,7 +749,7 @@ for(let sides=4; sides<=28; sides++) {
   };
   SHAPE_ICONS[id] = '⬟'; SHAPE_NAMES[id] = `${sides}-SIDED POLYGON`;
 }
-for(let points=4; points<=30; points++) {
+for(let points=4; points<=6; points++) {
   const id = `star_${points}`;
   SHAPES[id] = () => {
     const pts = [];
@@ -763,7 +763,7 @@ for(let points=4; points<=30; points++) {
 }
 
 // Procedural Flowers
-for(let petals=3; petals<=20; petals++) {
+for(let petals=4; petals<=6; petals++) {
   const id = `flower_${petals}`;
   SHAPES[id] = () => {
     const pts = [];
@@ -779,7 +779,7 @@ for(let petals=3; petals<=20; petals++) {
 }
 
 // Procedural Gears
-for(let teeth=4; teeth<=24; teeth++) {
+for(let teeth=6; teeth<=7; teeth++) {
   const id = `gear_${teeth}`;
   SHAPES[id] = () => {
     const pts = [];

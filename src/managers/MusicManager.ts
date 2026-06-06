@@ -6,11 +6,11 @@ import { SoundManager } from "./SoundManager";
 export type MusicTrackId = "menu" | "rlgl_green" | "rlgl_red";
 
 const MUSIC_DEFS: Record<MusicTrackId, { src: string[]; loop?: boolean; volume?: number }> = {
-  menu:       { src: ["/audio/music/backsong.mp3"],   loop: true,  volume: 0.6 },
+  menu:       { src: ["/audio/music/menu-theme.mp3"], loop: true, volume: 0.6 },
   // BUG FIX: loop was `true` — the "end" event never fired, so the game state machine
   // could never transition out of Green Light into the Warning / Red Light phase.
-  rlgl_green: { src: ["/audio/stingers/doll_song.mp3"], loop: false, volume: 1.0 },
-  rlgl_red:   { src: ["/audio/stingers/exhale-texture.mp3"], loop: false, volume: 1.7 },
+  rlgl_green: { src: ["/audio/sfx/squid_game_doll_song.mp3"], loop: false, volume: 1.0 },
+  rlgl_red:   { src: ["/audio/music/rlgl-red-tension.mp3"], loop: true, volume: 0.8 },
 };
 
 export class MusicManager {

@@ -30,6 +30,7 @@ export type SoundId =
   | "drone_root"
   | "room_tone"
   | "scan_tone"
+  | "red_light_call"
   | "heartbeat";
 
 interface SoundDefinition {
@@ -64,6 +65,7 @@ const SOUND_DEFS: Record<SoundId, SoundDefinition> = {
   eliminated:  { src: ["/audio/sfx/elimination.mp3"], volume: 0.9, maxOverlap: 3 },
   victory:     { src: ["/audio/sfx/victory.mp3"], volume: 0.8, maxOverlap: 1 },
   heartbeat:   { src: ["/audio/sfx/heartbeat.mp3"], volume: 1.0, loop: true, maxOverlap: 1 },
+  red_light_call: { src: ["/audio/sfx/squid_game_red_green.mp3"], volume: 0.9, maxOverlap: 1 },
 };
 
 export class SoundManager {

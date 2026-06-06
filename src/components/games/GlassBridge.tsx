@@ -632,7 +632,10 @@ function updateElimination(gs: GameState, dtSec: number): void {
       break;
     case "showing":
       gs.fadeAlpha = clamp(gs.elimTimer / 0.4, 0, 1);
-      if (gs.elimTimer >= 0.6) gs.phase = "gameover";
+      if (gs.elimTimer >= 0.6) {
+        gs.phase = "gameover";
+        gs.audioEvents.add("eliminated");
+      }
       break;
   }
 }
@@ -780,12 +783,12 @@ function drawDoll(
 
   if (isHostile) {
     const pulse = 0.7 + Math.sin(t * 8) * 0.3;
-    ctx.shadowColor = "#ff0000";
-    ctx.shadowBlur  = 28 * pulse;
+    // ctx.shadowColor = "#ff0000";
+    // ctx.shadowBlur  = 28 * pulse;
     ctx.fillStyle   = "#ff3030";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
 
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
@@ -805,15 +808,15 @@ function drawDoll(
 
     ctx.strokeStyle = "rgba(255,0,30,0.85)";
     ctx.lineWidth   = 5 * scale;
-    ctx.shadowColor = "#ff0000";
-    ctx.shadowBlur  = 22 * scale;
+    // ctx.shadowColor = "#ff0000";
+    // ctx.shadowBlur  = 22 * scale;
     ctx.beginPath();
     ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
     ctx.lineTo(colDelta, abyssY);
     ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
     ctx.lineTo(colDelta, abyssY);
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
 
     ctx.strokeStyle = "rgba(255,220,220,0.95)";
     ctx.lineWidth   = 1.5 * scale;
@@ -825,12 +828,12 @@ function drawDoll(
     ctx.stroke();
 
     ctx.fillStyle = "rgba(255,40,40,0.9)";
-    ctx.shadowColor = "#ff0000";
-    ctx.shadowBlur  = 24 * scale;
+    // ctx.shadowColor = "#ff0000";
+    // ctx.shadowBlur  = 24 * scale;
     ctx.beginPath();
     ctx.arc(colDelta, 600, 9 * scale, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
   }
 
   ctx.restore();
@@ -900,11 +903,11 @@ function renderPanel(
   
   if (isPlayerOn) {
     const glowPulse = 0.7 + Math.sin(atmosphericT * 3) * 0.3;
-    ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
-    ctx.shadowBlur = 40;
+    // ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
+    // ctx.shadowBlur = 40;
     ctx.fillStyle = `rgba(${br + 100}, ${bg + 140}, ${bb + 120}, ${glowPulse * 0.5})`;
     ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
   }
 
   const borderAlpha = isPlayerOn ? 0.85 : 0.30 + glintVal * 0.4;
@@ -924,8 +927,8 @@ function renderPanel(
     
     ctx.save();
     ctx.translate(figureX, figureY);
-    ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
-    ctx.shadowBlur = isPlayerOn ? 15 : 5;
+    // ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
+    // ctx.shadowBlur = isPlayerOn ? 15 : 5;
     ctx.strokeStyle = `rgba(255, 255, 255, ${figureGlow * 1.5})`;
     ctx.lineWidth = 2.5;
     
@@ -941,17 +944,17 @@ function renderPanel(
       ctx.arc(0, 0, figureSize * 1.1, 0, Math.PI * 2);
     }
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
     ctx.restore();
   }
 
   if (isPlayerOn && quality === "high") {
-    ctx.shadowColor = rgb(br, bg, bb, 0.8);
-    ctx.shadowBlur = 18;
+    // ctx.shadowColor = rgb(br, bg, bb, 0.8);
+    // ctx.shadowBlur = 18;
     ctx.strokeStyle = rgb(br, bg, bb, 0.6);
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, PANEL_W, PANEL_H);
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur = 0;
   }
 
   if (panel.state === "cracking" && panel.crackTimer > 0) {
@@ -1418,6 +1421,9 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
               break;
             case "victory":
               sm.play("victory", 0);
+              break;
+            case "eliminated":
+              sm.play("eliminated", 0);
               break;
           }
         }
