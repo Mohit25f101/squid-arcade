@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ── TypeScript & ESLint ────────────────────────────────────────────────────────────
+  // ── TypeScript ──────────────────────────────────────────────────────────────
   typescript:  { ignoreBuildErrors: true },
-  eslint:      { ignoreDuringBuilds: true },
 
   // ── Compiler ──────────────────────────────────────────────────────────────
   compress:    true,   // gzip responses from the Node server
