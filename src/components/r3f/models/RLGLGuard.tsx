@@ -49,7 +49,7 @@ export function RLGLGuard({
     if (torsoRef.current && !isAiming && !isFiring) {
       const breath = Math.sin(t * 1.5) * 0.012;
       torsoRef.current.scale.y = 1 + breath;
-      torsoRef.current.position.y = 1.3 + breath * 0.5;
+      torsoRef.current.position.y = breath * 0.5;
     }
 
     // ---------- Aiming / Rest transitions --------------------------------
