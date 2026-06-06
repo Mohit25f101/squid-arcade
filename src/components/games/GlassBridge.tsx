@@ -491,6 +491,8 @@ function startJump(gs: GameState, targetCol: 0 | 1 | 2): void {
   gs.timeOnRow = 0;
   gs.player.facing = targetCol === 0 ? -1 : 1;
   gs.inputConsumed = true;
+  SoundManager.getInstance().play("exhale-texture");
+  SoundManager.getInstance().play("step", 0.4);
 }
 
 function triggerElimination(gs: GameState): void {
@@ -506,6 +508,7 @@ function triggerElimination(gs: GameState): void {
   gs.vignetteTarget = 1;
   gs.flashAlpha = 1;
   gs.audioEvents.add("shatter");
+  gs.audioEvents.add("fall");
 }
 
 function triggerVictory(gs: GameState): void {
@@ -547,7 +550,7 @@ function updatePlayer(gs: GameState, dtSec: number): void {
       const currentPanel = gs.panels[p.row - 1]?.[p.col];
       if (currentPanel?.safe && !gs.audioEvents.has(`land-${p.row}-${p.col}`)) {
         gs.audioEvents.add(`land-${p.row}-${p.col}`);
-        SoundManager.getInstance().play("jump");
+        SoundManager.getInstance().play("glass_step");
       } else if (currentPanel && !currentPanel.safe && !gs.audioEvents.has(`tension-${p.row}`)) {
         gs.audioEvents.add(`tension-${p.row}`);
       }
@@ -1298,6 +1301,9 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   }, []);
 
   useEffect(() => {
+    SoundManager.getInstance().preload([
+      "step", "exhale-texture", "glass_step", "shatter", "fall", "victory", "eliminated", "suspense"
+    ] as any[]);
     return () => {
       SoundManager.getInstance().stopAll(0);
       SoundManager.getInstance().stopAllLoops(0);
@@ -1406,6 +1412,9 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
           switch (ev) {
             case "shatter":
               sm.play("shatter", 0);
+              break;
+            case "fall":
+              sm.play("fall", 0);
               break;
             case "victory":
               sm.play("victory", 0);

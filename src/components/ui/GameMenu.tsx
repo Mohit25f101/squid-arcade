@@ -723,12 +723,6 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
           onConfirm={handleExitConfirm}
         />
       )}
-
-      {/* Portrait warning */}
-      <div className="portrait-warning" role="alert">
-        <div className="portrait-warning-icon">📱</div>
-        <p style={{ fontFamily:"var(--font-mono-sq)", letterSpacing:"0.1em" }}>ROTATE YOUR DEVICE</p>
-      </div>
     </div>
   );
 }

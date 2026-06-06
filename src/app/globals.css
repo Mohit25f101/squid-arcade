@@ -401,36 +401,7 @@ body {
   }
 }
 
-/* Portrait orientation warning */
-@media (orientation: portrait) and (max-width: 767px) {
-  .portrait-warning {
-    display: flex !important;
-  }
-}
 
-.portrait-warning {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: var(--color-bg-core);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-md);
-  text-align: center;
-  padding: var(--space-xl);
-}
-
-.portrait-warning-icon {
-  font-size: 3rem;
-  animation: rotate-hint 2s ease-in-out infinite;
-}
-
-@keyframes rotate-hint {
-  0%, 100% { transform: rotate(0deg); }
-  40%, 60% { transform: rotate(90deg); }
-}
 
 /* ── Fullscreen API classes ──────────────────────────────────────────── */
 :fullscreen .shell-header { display: none; } /* Hide chrome when fullscreen */

@@ -762,6 +762,39 @@ for(let points=4; points<=30; points++) {
   SHAPE_ICONS[id] = '★'; SHAPE_NAMES[id] = `${points}-POINT STAR`;
 }
 
+// Procedural Flowers
+for(let petals=3; petals<=20; petals++) {
+  const id = `flower_${petals}`;
+  SHAPES[id] = () => {
+    const pts = [];
+    const points = petals * 4; 
+    for(let j=0; j<points; j++) {
+       const theta = (j/points)*Math.PI*2 - Math.PI/2;
+       const r = 0.35 + Math.sin(theta * petals) * 0.1;
+       pts.push({nx: 0.5+Math.cos(theta)*r, ny: 0.5+Math.sin(theta)*r});
+    }
+    return pts;
+  };
+  SHAPE_ICONS[id] = '✿'; SHAPE_NAMES[id] = `${petals}-PETAL FLOWER`;
+}
+
+// Procedural Gears
+for(let teeth=4; teeth<=24; teeth++) {
+  const id = `gear_${teeth}`;
+  SHAPES[id] = () => {
+    const pts = [];
+    const points = teeth * 4;
+    for(let j=0; j<points; j++) {
+       const theta = (j/points)*Math.PI*2 - Math.PI/2;
+       const isTooth = Math.sin(theta * teeth) > 0;
+       const r = isTooth ? 0.45 : 0.35;
+       pts.push({nx: 0.5+Math.cos(theta)*r, ny: 0.5+Math.sin(theta)*r});
+    }
+    return pts;
+  };
+  SHAPE_ICONS[id] = '⚙'; SHAPE_NAMES[id] = `${teeth}-TOOTH GEAR`;
+}
+
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
 function lerp(a,b,t){return a+(b-a)*clamp(t,0,1);}
 function dist(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
@@ -2106,7 +2139,7 @@ function loop(timestamp) {
   // Handled separately from 'eliminating' to allow timer continuation
   if (phase === 'snap' && elimSequencePhase === 3) {
     elimSequenceTimer += dt;
-    if (elimSequenceTimer > 2900) {
+    if (elimSequenceTimer > 1200) {
       setPhase('eliminated');
     }
   }
@@ -2151,8 +2184,9 @@ if (diffParam === 'easy') {
 ON_EDGE_TOL = Math.max(2, ON_EDGE_TOL - (levelParam - 1));
 INSTABILITY_MULT = INSTABILITY_MULT * Math.pow(1.15, levelParam - 1);
 
-let shapeOptions = ['circle', 'triangle', 'star', 'umbrella'];
-let chosenShape = shapeOptions[Math.min(levelParam - 1, shapeOptions.length - 1)];
+let shapeOptions = Object.keys(SHAPES);
+// Randomize the initial shape so players immediately experience the 95+ shape pool!
+let chosenShape = shapeOptions[Math.floor(Math.random() * shapeOptions.length)];
 
 initGame(chosenShape);
 setPhase('intro');

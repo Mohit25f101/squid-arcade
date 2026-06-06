@@ -50,30 +50,13 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
 
   return (
     <div style={{ width: "100%", height: "100%", background: "#080401", position: "relative" }}>
-      <style>{`
-        .landscape-warning { display: none; }
-        @media (orientation: landscape) and (max-height: 600px) {
-          .landscape-warning { display: flex !important; }
-        }
-      `}</style>
+
       <iframe 
         src={`/dalgona.html?diff=${difficulty}&level=${dalgonaLevel}`} 
         style={{ width: "100%", height: "100%", border: "none" }}
         title="Dalgona Candy"
         sandbox="allow-scripts allow-same-origin"
       />
-      {/* Landscape Warning Overlay */}
-      <div 
-        className="landscape-warning flex-col items-center justify-center text-center p-8 absolute inset-0 z-[99999] bg-[#050508]"
-      >
-        <div className="font-bebas text-5xl text-[#FF0066] mb-4 neon-pink">ROTATE DEVICE</div>
-        <div className="font-mono-sq text-white/70 text-sm tracking-widest uppercase">
-          Dalgona must be played in portrait mode
-        </div>
-        <div className="mt-12 text-[#FF0066] opacity-80" style={{ animation: 'rotate-shape 2s ease-in-out infinite alternate', fontSize: '4rem' }}>
-          ↶📱
-        </div>
-      </div>
     </div>
   );
 }
