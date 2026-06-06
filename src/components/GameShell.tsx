@@ -62,7 +62,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useGameStore } from "@/store/gameStore";
+import { useGameStore, selectSessionStats } from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
 import { HUD } from "@/components/hud";
 import type { EliminationPayload, ViewportState } from "@/store/gameStore";
@@ -149,22 +149,15 @@ const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
     "flash" | "letterbox" | "card" | "hold" | "fadeout"
   >("flash");
 
+  const sessionStats = useGameStore(selectSessionStats);
+  const survivedRounds = sessionStats.survived;
+
   useEffect(() => {
     inputManager.reset();
-    // Sequence timer chain
     const t1 = setTimeout(() => setPhase("letterbox"), ELIM_FLASH_DURATION_MS);
     const t2 = setTimeout(() => setPhase("card"), ELIM_CARD_DELAY_MS);
-    const t3 = setTimeout(() => setPhase("hold"), ELIM_CARD_DELAY_MS + 600);
-    const t4 = setTimeout(() => setPhase("fadeout"), ELIM_OVERLAY_DURATION_MS - 400);
-    const t5 = setTimeout(onComplete, ELIM_OVERLAY_DURATION_MS);
-
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
-  }, [onComplete]);
-
-  const progressPct =
-    payload.progressMarker !== undefined && payload.progressTotal
-      ? Math.round((payload.progressMarker / payload.progressTotal) * 100)
-      : null;
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
 
   return (
     <div
@@ -172,108 +165,113 @@ const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
         position: "absolute",
         inset: 0,
         zIndex: 900,
-        pointerEvents: "auto",   // blocks game input during death sequence
+        pointerEvents: "auto",
         overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      {/* Red flash */}
+      {/* Background Gradient */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(220, 30, 30, 0.55)",
-          opacity: phase === "flash" ? 1 : 0,
-          transition: phase === "flash" ? "none" : "opacity 0.25s ease-out",
+          background: phase === "flash" ? "rgba(255, 51, 51, 0.85)" : "radial-gradient(circle at center, rgba(255, 51, 51, 0.15), #050508 80%)",
+          transition: phase === "flash" ? "none" : "background 0.5s ease-out",
         }}
       />
-
-      {/* Top letterbox bar */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: phase === "flash" ? "0%" : "12%",
-          background: "#000",
-          transition: "height 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      />
-
-      {/* Bottom letterbox bar */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: phase === "flash" ? "0%" : "12%",
-          background: "#000",
-          transition: "height 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      />
-
-      {/* Central ELIMINATED card */}
+      {/* Dark overlay */}
       <div
         style={{
           position: "absolute",
           inset: 0,
+          backgroundColor: "#050508",
+          opacity: phase === "flash" ? 0 : 0.8,
+          transition: "opacity 0.4s ease-out",
+        }}
+      />
+
+      {/* Floating Shapes */}
+      {(phase === "card" || phase === "hold" || phase === "fadeout") && (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <div className="absolute top-[10%] left-[15%] text-[#FF3333] opacity-30 anim-rotate-shape" style={{ fontSize: "5rem" }}>○</div>
+          <div className="absolute bottom-[20%] left-[10%] text-[#FF3333] opacity-20 anim-rotate-shape" style={{ fontSize: "6rem", animationDelay: '1s' }}>△</div>
+          <div className="absolute top-[25%] right-[15%] text-[#FF3333] opacity-25 anim-rotate-shape" style={{ fontSize: "7rem", animationDelay: '2s' }}>□</div>
+          <div className="absolute bottom-[15%] right-[20%] text-[#FF3333] opacity-40 anim-rotate-shape" style={{ fontSize: "4rem", animationDelay: '0.5s' }}>○</div>
+        </div>
+      )}
+
+      {/* Main Card Content */}
+      <div
+        className={phase === "card" || phase === "hold" ? "anim-eliminated" : ""}
+        style={{
+          position: "relative",
+          zIndex: 10,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
           opacity: phase === "card" || phase === "hold" ? 1 : 0,
-          transition:
-            phase === "card"
-              ? "opacity 0.4s ease-in"
-              : phase === "fadeout"
-              ? "opacity 0.4s ease-out"
-              : "none",
-          gap: 12,
+          transition: phase === "fadeout" ? "opacity 0.4s ease-out" : "none",
         }}
       >
+        <div className="font-korean text-sm tracking-[0.5em] text-[#FF3333] mb-4 opacity-80 neon-red">탈락</div>
         <div
+          className="font-bebas leading-none neon-red"
           style={{
-            fontFamily: "'Courier New', monospace",
-            fontSize: "clamp(36px, 6vw, 64px)",
-            fontWeight: "bold",
-            letterSpacing: "0.3em",
-            color: "rgba(255, 70, 70, 0.95)",
-            textTransform: "uppercase",
-            textShadow:
-              "0 0 60px rgba(255, 40, 40, 0.8), 0 0 120px rgba(200, 0, 0, 0.4)",
+            fontSize: "clamp(64px, 12vw, 120px)",
+            color: "#FF3333",
+            letterSpacing: "0.15em",
           }}
         >
           ELIMINATED
         </div>
 
+        {/* Player Badge */}
+        <div className="mt-8 mb-6 px-6 py-2 border border-glow-red rounded" style={{ background: "rgba(255,51,51,0.1)" }}>
+          <span className="font-mono-sq text-white/80 text-lg tracking-widest">PLAYER 456</span>
+        </div>
+
+        {/* Stats */}
+        <div className="flex gap-8 mb-12">
+          <div className="text-center">
+            <div className="font-mono-sq text-[#FF3333] text-xs tracking-widest mb-1">SURVIVED ROUNDS</div>
+            <div className="font-bebas text-white text-3xl">{survivedRounds}</div>
+          </div>
+          <div className="w-px bg-[#FF3333]/30" />
+          <div className="text-center">
+            <div className="font-mono-sq text-[#FF3333] text-xs tracking-widest mb-1">RANK</div>
+            <div className="font-bebas text-white text-3xl">#456</div>
+          </div>
+        </div>
+
         {payload.reason && (
-          <div
-            style={{
-              fontFamily: "'Courier New', monospace",
-              fontSize: "clamp(12px, 2vw, 16px)",
-              letterSpacing: "0.2em",
-              color: "rgba(180, 100, 100, 0.8)",
-              textTransform: "uppercase",
-            }}
-          >
-            {payload.reason}
+          <div className="font-mono-sq text-xs tracking-widest text-[#FF3333]/70 uppercase mb-8">
+            CAUSE: {payload.reason}
           </div>
         )}
 
-        {progressPct !== null && (
-          <div
-            style={{
-              fontFamily: "'Courier New', monospace",
-              fontSize: "clamp(11px, 1.5vw, 14px)",
-              letterSpacing: "0.15em",
-              color: "rgba(140, 140, 160, 0.7)",
-              marginTop: 8,
+        {/* Action Buttons */}
+        <div className="flex gap-6 pointer-events-auto">
+          <button 
+            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-white border border-white/20 bg-transparent hover:bg-white/10 hover-scale transition-colors"
+            onClick={() => {
+              setPhase("fadeout");
+              setTimeout(onComplete, 400);
             }}
           >
-            {`${payload.progressMarker} / ${payload.progressTotal} — ${progressPct}%`}
-          </div>
-        )}
+            MENU
+          </button>
+          <button 
+            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-[#050508] bg-[#FF3333] glow-red hover-scale transition-all"
+            onClick={() => {
+              setPhase("fadeout");
+              setTimeout(onComplete, 400);
+            }}
+          >
+            TRY AGAIN
+          </button>
+        </div>
       </div>
 
       {/* Fade-to-black curtain */}
@@ -283,8 +281,8 @@ const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
           inset: 0,
           background: "#000",
           opacity: phase === "fadeout" ? 1 : 0,
-          transition:
-            phase === "fadeout" ? "opacity 0.4s ease-in" : "none",
+          pointerEvents: "none",
+          transition: "opacity 0.4s ease-in",
         }}
       />
     </div>
@@ -299,21 +297,24 @@ interface VictoryOverlayProps {
 
 /**
  * Universal victory overlay.
- * Sequence: gold flash → "SURVIVED" card fade-in → hold → fade out.
+ * Sequence: gold flash → "WINNER" card fade-in → hold → fade out.
  */
 const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
-  const [phase, setPhase] = useState<"flash" | "card" | "hold" | "fadeout">(
-    "flash"
-  );
+  const [phase, setPhase] = useState<"flash" | "card" | "hold" | "fadeout">("flash");
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("card"), 250);
-    const t2 = setTimeout(() => setPhase("hold"), 900);
-    const t3 = setTimeout(() => setPhase("fadeout"), VICTORY_OVERLAY_DURATION_MS - 500);
-    const t4 = setTimeout(onComplete, VICTORY_OVERLAY_DURATION_MS);
+    return () => { clearTimeout(t1); };
+  }, []);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
-  }, [onComplete]);
+  // Generate particles (using a stable ref or memo so they don't regenerate)
+  const [particles] = useState(() => Array.from({ length: 24 }).map((_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    delay: `${Math.random() * 2}s`,
+    duration: `${3 + Math.random() * 2}s`,
+    size: `${8 + Math.random() * 12}px`,
+  })));
 
   return (
     <div
@@ -321,52 +322,107 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
         position: "absolute",
         inset: 0,
         zIndex: 900,
-        pointerEvents: "auto",   // blocks game input during victory sequence
+        pointerEvents: "auto",
         overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      {/* Gold flash */}
+      {/* Gold flash & Background */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(255, 220, 60, 0.35)",
-          opacity: phase === "flash" ? 1 : 0,
-          transition: phase === "flash" ? "none" : "opacity 0.35s ease-out",
+          background: phase === "flash" ? "rgba(255, 215, 0, 0.45)" : "radial-gradient(circle at center, rgba(255, 215, 0, 0.12), #050508 80%)",
+          transition: phase === "flash" ? "none" : "background 0.5s ease-out",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundColor: "#050508",
+          opacity: phase === "flash" ? 0 : 0.7,
+          transition: "opacity 0.4s ease-out",
         }}
       />
 
+      {/* Gold particles */}
+      {(phase === "card" || phase === "hold" || phase === "fadeout") && (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          {particles.map(p => (
+            <div
+              key={p.id}
+              className="absolute bottom-[-20px] bg-[#FFD700] rounded-sm anim-particle-rise glow-gold"
+              style={{
+                left: p.left,
+                width: p.size,
+                height: p.size,
+                animationDuration: p.duration,
+                animationDelay: p.delay,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* SURVIVED card */}
       <div
+        className={phase === "card" || phase === "hold" ? "anim-eliminated" : ""}
         style={{
-          position: "absolute",
-          inset: 0,
+          position: "relative",
+          zIndex: 10,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
           opacity: phase === "card" || phase === "hold" ? 1 : 0,
-          transition:
-            phase === "card"
-              ? "opacity 0.5s ease-in"
-              : phase === "fadeout"
-              ? "opacity 0.5s ease-out"
-              : "none",
+          transition: phase === "fadeout" ? "opacity 0.5s ease-out" : "none",
         }}
       >
+        <div className="font-korean text-sm tracking-[0.5em] text-[#FFD700] mb-4 opacity-80 neon-gold">우승자</div>
         <div
+          className="font-bebas leading-none neon-gold"
           style={{
-            fontFamily: "'Courier New', monospace",
-            fontSize: "clamp(32px, 5.5vw, 58px)",
-            fontWeight: "bold",
-            letterSpacing: "0.3em",
-            color: "rgba(80, 230, 160, 0.98)",
-            textTransform: "uppercase",
-            textShadow:
-              "0 0 60px rgba(60, 200, 130, 0.7), 0 0 120px rgba(40, 160, 100, 0.4)",
+            fontSize: "clamp(64px, 12vw, 120px)",
+            color: "#FFD700",
+            letterSpacing: "0.15em",
           }}
         >
-          SURVIVED
+          WINNER
+        </div>
+
+        {/* Player Badge */}
+        <div className="mt-8 mb-6 px-6 py-2 border border-glow-gold rounded glow-gold" style={{ background: "rgba(255,215,0,0.1)" }}>
+          <span className="font-mono-sq text-[#FFD700] text-lg tracking-widest">PLAYER 456</span>
+        </div>
+
+        {/* Prize */}
+        <div className="mb-12 text-center">
+          <div className="font-mono-sq text-white/50 text-xs tracking-widest mb-2">PRIZE ACCUMULATED</div>
+          <div className="font-bebas text-white text-5xl neon-gold" style={{ color: "#FFD700" }}>₩45,600,000,000</div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-6 pointer-events-auto">
+          <button 
+            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-white border border-white/20 bg-transparent hover:bg-white/10 hover-scale transition-colors"
+            onClick={() => {
+              setPhase("fadeout");
+              setTimeout(onComplete, 500);
+            }}
+          >
+            MENU
+          </button>
+          <button 
+            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-[#050508] bg-[#FFD700] glow-gold hover-scale transition-all"
+            onClick={() => {
+              setPhase("fadeout");
+              setTimeout(onComplete, 500);
+            }}
+          >
+            TRY AGAIN
+          </button>
         </div>
       </div>
 
@@ -377,8 +433,8 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
           inset: 0,
           background: "#000",
           opacity: phase === "fadeout" ? 1 : 0,
-          transition:
-            phase === "fadeout" ? "opacity 0.5s ease-in" : "none",
+          pointerEvents: "none",
+          transition: "opacity 0.5s ease-in",
         }}
       />
     </div>
