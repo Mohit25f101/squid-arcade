@@ -540,13 +540,13 @@ const CANDY_X = (WORLD_W - CANDY_W) / 2;
 const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 20;
 
 // ── Physics constants (REBALANCED — HARDER) ──────────
-const BASE_STRESS = 0.00120;
-const INSTABILITY_MULT = 0.018;
-const EDGE_TO_INTEGRITY = 0.48;
-const FRACTURE_THRESHOLD = 0.40;
-const CARVE_RADIUS = 14;
-const ON_EDGE_TOL = 22;
-const COMPLETION_WIN = 0.95;
+const BASE_STRESS = 0.00180;
+const INSTABILITY_MULT = 0.026;
+const EDGE_TO_INTEGRITY = 0.55;
+const FRACTURE_THRESHOLD = 0.35;
+const CARVE_RADIUS = 9;
+const ON_EDGE_TOL = 14;
+const COMPLETION_WIN = 0.96;
 const SCRAPE_AUDIO_MS = 90;
 
 const GRID = 32;
@@ -832,7 +832,7 @@ function resize(){
   const vh = window.innerHeight;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  const fitScale = Math.max(vw / WORLD_W, vh / WORLD_H);
+  const fitScale = Math.min(vw / WORLD_W, vh / WORLD_H);
   scale = fitScale * dpr;
 
   canvas.style.width  = vw + 'px';
@@ -951,7 +951,7 @@ function emitCrackSpark(x,y,severity){
 }
 
 function pickShape(exclude){
-  const all=['triangle','circle','star','umbrella'];
+  const all=Object.keys(SHAPES);
   const pool=exclude?all.filter(s=>s!==exclude):all;
   return pool[Math.floor(Math.random()*pool.length)];
 }
