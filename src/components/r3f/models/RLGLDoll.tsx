@@ -134,42 +134,42 @@ export function RLGLDoll({
         <group ref={torsoRef}>
           <mesh position={[0, 1.55, 0]} castShadow receiveShadow>
             <coneGeometry args={[1.25, 3.1, 32]} />
-            <meshStandardMaterial color="#f4a02a" roughness={0.78} />
+            <meshPhysicalMaterial color="#f4a02a" roughness={0.6} clearcoat={0.1} clearcoatRoughness={0.2} />
           </mesh>
           {/* Yellow top */}
           <mesh position={[0, 2.95, 0]} castShadow receiveShadow>
             <cylinderGeometry args={[0.55, 0.95, 0.85, 32]} />
-            <meshStandardMaterial color="#fbd435" roughness={0.78} />
+            <meshPhysicalMaterial color="#fbd435" roughness={0.5} clearcoat={0.2} clearcoatRoughness={0.3} />
           </mesh>
           {/* Collar */}
           <mesh position={[0, 3.42, 0]} castShadow>
             <cylinderGeometry args={[0.42, 0.55, 0.12, 24]} />
-            <meshStandardMaterial color="#e8be24" roughness={0.7} />
+            <meshPhysicalMaterial color="#e8be24" roughness={0.5} />
           </mesh>
           {/* Arms tucked at sides */}
           <mesh position={[-0.55, 2.55, 0]} rotation={[0, 0, 0.18]} castShadow>
             <cylinderGeometry args={[0.10, 0.085, 1.05, 14]} />
-            <meshStandardMaterial color="#ffd8b3" roughness={0.65} />
+            <meshPhysicalMaterial color="#ffd8b3" roughness={0.4} clearcoat={0.3} />
           </mesh>
           <mesh position={[0.55, 2.55, 0]} rotation={[0, 0, -0.18]} castShadow>
             <cylinderGeometry args={[0.10, 0.085, 1.05, 14]} />
-            <meshStandardMaterial color="#ffd8b3" roughness={0.65} />
+            <meshPhysicalMaterial color="#ffd8b3" roughness={0.4} clearcoat={0.3} />
           </mesh>
           {/* Hands */}
           <mesh position={[-0.66, 1.99, 0]} castShadow>
             <sphereGeometry args={[0.09, 12, 12]} />
-            <meshStandardMaterial color="#ffd8b3" roughness={0.6} />
+            <meshPhysicalMaterial color="#ffd8b3" roughness={0.4} clearcoat={0.3} />
           </mesh>
           <mesh position={[0.66, 1.99, 0]} castShadow>
             <sphereGeometry args={[0.09, 12, 12]} />
-            <meshStandardMaterial color="#ffd8b3" roughness={0.6} />
+            <meshPhysicalMaterial color="#ffd8b3" roughness={0.4} clearcoat={0.3} />
           </mesh>
         </group>
 
         {/* Neck */}
         <mesh position={[0, 3.62, 0]} castShadow>
           <cylinderGeometry args={[0.16, 0.18, 0.18, 16]} />
-          <meshStandardMaterial color="#ffd8b3" roughness={0.6} />
+          <meshPhysicalMaterial color="#ffd8b3" roughness={0.4} clearcoat={0.3} />
         </mesh>
       </group>
 
@@ -178,12 +178,12 @@ export function RLGLDoll({
         {/* Skin */}
         <mesh castShadow receiveShadow>
           <sphereGeometry args={[0.55, 32, 32]} />
-          <meshStandardMaterial color="#ffe0c2" roughness={0.55} />
+          <meshPhysicalMaterial color="#ffe0c2" roughness={0.4} clearcoat={0.3} />
         </mesh>
         {/* Black bob hair (back) */}
         <mesh position={[0, 0.08, -0.08]} castShadow>
           <sphereGeometry args={[0.58, 32, 32]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
+          <meshPhysicalMaterial color="#0a0a0a" roughness={0.6} clearcoat={0.5} />
         </mesh>
         {/* Bangs (front strip) */}
         <mesh
@@ -192,7 +192,7 @@ export function RLGLDoll({
           castShadow
         >
           <boxGeometry args={[0.85, 0.18, 0.15]} />
-          <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
+          <meshPhysicalMaterial color="#0a0a0a" roughness={0.6} clearcoat={0.5} />
         </mesh>
         {/* Cheeks (blush) */}
         <mesh position={[-0.34, -0.08, 0.42]}>
@@ -238,10 +238,9 @@ export function RLGLDoll({
             emissiveIntensity={0}
           />
         </mesh>
-        {/* Mouth */}
         <mesh position={[0, -0.18, 0.48]}>
           <boxGeometry args={[0.10, 0.025, 0.01]} />
-          <meshStandardMaterial color="#7a1a1a" roughness={0.6} />
+          <meshPhysicalMaterial color="#7a1a1a" roughness={0.4} clearcoat={0.8} />
         </mesh>
       </group>
 

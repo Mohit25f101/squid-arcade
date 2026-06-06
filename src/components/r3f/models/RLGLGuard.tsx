@@ -172,11 +172,11 @@ export function RLGLGuard({
       {/* Pink trousers */}
       <mesh position={[-0.13, 0.55, 0]} castShadow>
         <cylinderGeometry args={[0.11, 0.095, 0.90, 12]} />
-        <meshStandardMaterial color={PINK} roughness={0.75} />
+        <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
       </mesh>
       <mesh position={[0.13, 0.55, 0]} castShadow>
         <cylinderGeometry args={[0.11, 0.095, 0.90, 12]} />
-        <meshStandardMaterial color={PINK} roughness={0.75} />
+        <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
       </mesh>
 
       {/* Belt */}
@@ -193,7 +193,7 @@ export function RLGLGuard({
       <group ref={torsoRef}>
         <mesh position={[0, 1.30, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.50, 0.75, 0.28]} />
-          <meshStandardMaterial color={PINK} roughness={0.75} />
+          <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, 1.45, 0.145]} castShadow>
           <boxGeometry args={[0.30, 0.40, 0.02]} />
@@ -214,7 +214,7 @@ export function RLGLGuard({
       {/* Black mask / helmet */}
       <mesh position={[0, 1.95, 0]} castShadow receiveShadow>
         <sphereGeometry args={[0.24, 20, 20]} />
-        <meshStandardMaterial color={BLACK} roughness={0.3} metalness={0.1} />
+        <meshPhysicalMaterial color={BLACK} roughness={0.2} metalness={0.2} clearcoat={0.8} />
       </mesh>
       {/* Circle insignia on mask */}
       <mesh position={[0, 1.95, 0.245]}>
@@ -230,11 +230,11 @@ export function RLGLGuard({
       <group ref={leftArmRef} position={[-0.35, 1.50, 0]}>
         <mesh position={[0, -0.30, 0]} castShadow>
           <cylinderGeometry args={[0.09, 0.08, 0.60, 12]} />
-          <meshStandardMaterial color={PINK} roughness={0.75} />
+          <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.65, 0]} castShadow>
           <cylinderGeometry args={[0.08, 0.07, 0.30, 12]} />
-          <meshStandardMaterial color={PINK} roughness={0.75} />
+          <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />
@@ -246,11 +246,11 @@ export function RLGLGuard({
       <group ref={rightArmRef} position={[0.35, 1.50, 0]}>
         <mesh position={[0, -0.30, 0]} castShadow>
           <cylinderGeometry args={[0.09, 0.08, 0.60, 12]} />
-          <meshStandardMaterial color={PINK} roughness={0.75} />
+          <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.65, 0]} castShadow>
           <cylinderGeometry args={[0.08, 0.07, 0.30, 12]} />
-          <meshStandardMaterial color={PINK} roughness={0.75} />
+          <meshPhysicalMaterial color={PINK} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.85, 0]} castShadow>
           <sphereGeometry args={[0.09, 12, 12]} />

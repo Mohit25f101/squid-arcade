@@ -24,7 +24,6 @@ import { useGameStore } from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
 import { SoundManager } from "@/managers/SoundManager";
 import { MusicManager } from "@/managers/MusicManager";
-import { ResultScreen } from "@/components/ui/ResultScreen";
 import {
   RLGLDoll,
   RLGLGuard,
@@ -46,6 +45,8 @@ const GRACE_PERIOD       = 0.25;
 const VELOCITY_DEADZONE  = 0.02;        
 const RED_DURATION_BASE  = 3.2;         
 const RED_DURATION_MIN   = 2.0;
+const GREEN_DURATION_MAX = 4.0;         // force red after this many seconds even if song not done
+
 const MOVE_THRESHOLD     = 0.05;        
 const NPC_COUNT          = 18;
 
@@ -313,11 +314,12 @@ interface SceneProps {
   }) => void;
   pausedRef: React.MutableRefObject<boolean>;
   inputRef: React.MutableRefObject<{ forward: boolean; sprint: boolean }>;
-  resetSignal: number;
+
   roundTimer: number;
+  difficulty: "easy" | "normal" | "hard";
 }
 
-function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roundTimer }: SceneProps) {
+function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, difficulty }: SceneProps) {
   const playersRef    = useRef<PlayerEntity[]>([]);
   const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
   const turnTRef      = useRef(0);     
@@ -340,6 +342,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
 
   const shotLineRef = useRef<THREE.Line>(null);
   const shotTimerRef = useRef<number>(0);
+  const greenTimerRef = useRef(0); // how long we've been in green light
+  const redLightCallFiredRef = useRef(false); // prevents double-play per cycle
 
   const handleDollSongEnd = useCallback(() => {
     if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
@@ -405,6 +409,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
     }
     playersRef.current    = arr;
     lightPhaseRef.current = LightPhase.GREEN;
+    greenTimerRef.current = 0;
     turnTRef.current      = 0;
     redTimerRef.current   = 0;
     graceTimerRef.current = 0;
@@ -430,7 +435,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
     stopDollSong();
     SoundManager.getInstance().stopLoop("heartbeat" as any, 0);
 
-  }, [resetSignal, stopDollSong, roundTimer]);
+  }, [stopDollSong, roundTimer]);
 
   const countdownLastIntRef = useRef(3);
 
@@ -498,11 +503,20 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
     if (lp === LightPhase.WARNING) {
       turnTRef.current += dt / TURN_DURATION;
       dollRotationRef.current = THREE.MathUtils.lerp(0, Math.PI, turnTRef.current);
+
+      // Fire "Red Light" voice exactly 10ms before the doll finishes turning
+      const timeRemainingMs = (1 - turnTRef.current) * TURN_DURATION * 1000;
+      if (!redLightCallFiredRef.current && timeRemainingMs <= 10) {
+        redLightCallFiredRef.current = true;
+        sm.play("red_light_call" as any);
+      }
+
       if (turnTRef.current >= 1) {
         turnTRef.current = 1;
         lightPhaseRef.current = LightPhase.RED;
         redTimerRef.current = 0;
         graceTimerRef.current = 0;
+        greenTimerRef.current = 0;
         dollRotationRef.current = Math.PI;
         sm.loop("scan_tone" as any);
         sm.loop("heartbeat" as any);
@@ -510,11 +524,19 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
     } else if (lp === LightPhase.RED) {
       redTimerRef.current += dt;
       graceTimerRef.current += dt;
-      const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / roundTimer * 0.5);
+      const baseDur = difficulty === "hard" ? 4.5 : difficulty === "easy" ? 2.5 : RED_DURATION_BASE;
+      const minDur = difficulty === "hard" ? 3.0 : difficulty === "easy" ? 1.5 : RED_DURATION_MIN;
+      const redDur = Math.max(minDur, baseDur - timeLeftRef.current / roundTimer * 0.5);
+      
+      const rate = timeLeftRef.current < 15 ? 1.0 + ((15 - timeLeftRef.current) / 15) * 0.6 : 1.0;
+      sm.setLoopRate("heartbeat" as any, rate);
+      
       if (redTimerRef.current >= redDur) {
         lightPhaseRef.current = LightPhase.GREEN;
         redTimerRef.current   = 0;
         graceTimerRef.current = 0;
+        greenTimerRef.current = 0;
+        redLightCallFiredRef.current = false; // reset for next cycle
         dollRotationRef.current = 0;
         sm.stopLoop("heartbeat" as any, 400);
         sm.stopLoop("scan_tone" as any, 300);
@@ -522,13 +544,22 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       }
     } else if (lp === LightPhase.GREEN) {
       dollRotationRef.current = 0;
+      greenTimerRef.current += dt;
+      // Force transition to warning if green light has lasted too long
+      if (greenTimerRef.current >= GREEN_DURATION_MAX) {
+        greenTimerRef.current = 0;
+        redLightCallFiredRef.current = false; // reset for the new warning cycle
+        lightPhaseRef.current = LightPhase.WARNING;
+        turnTRef.current = 0;
+        MusicManager.getInstance().stop(0); // cut song short
+        sm.play("countdown_beep" as any);
+      }
     }
 
     if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
       const input = inputRef.current;
       const keyHeld = snap.heldKeys.has("ArrowUp") || snap.heldKeys.has("KeyW");
       
-      // ADD the elimination check back so you can't run while being shot!
       const wantMove = (keyHeld || input.forward) && elimStateRef.current === "idle";
       
       const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
@@ -958,11 +989,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   });
   const handleHudUpdate = useCallback((d: typeof hud) => setHud(d), []);
 
-  const [endState, setEndState] = useState<{ phase: GamePhase; score: number } | null>(null);
-  
   const handleGameOver = useCallback((phase: GamePhase, score: number) => {
-    setEndState({ phase, score });
-    
     const state = useGameStore.getState();
     state.addScore(score);
     state.updateBestScore("red-light-green-light", score);
@@ -971,49 +998,36 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       state.setRuntimePhase("victory");
       onComplete?.(score, "victory");
     } else if (phase === GamePhase.ELIMINATED || phase === GamePhase.TIMEOUT) {
-      state.setRuntimePhase("eliminated");
+      state.triggerElimination({ 
+        sourceGame: "red-light-green-light", 
+        reason: phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH LINE" : "MOTION DETECTED" 
+      });
       onComplete?.(score, "eliminated");
     }
   }, [onComplete]);
 
-  const [resetSignal, setResetSignal] = useState(0);
-  const handleRestart = useCallback(() => {
-    // Clean stop all audio before restart
-    SoundManager.getInstance().stopAll(0);
-    SoundManager.getInstance().stopAllLoops(0);
-    MusicManager.getInstance().stopAll();
-    
-    // Reset UI state
-    setEndState(null);
-    setRuntimePhase("countdown");
-    setHud({ 
-      timeLeft: difficultyTimer, 
-      aliveCount: NPC_COUNT + 1, 
-      lightPhase: LightPhase.GREEN, 
-      score: 0, 
-      playerProgressPct: 0 
-    });
-    
-    // Trigger scene reset via signal
-    setResetSignal((n) => n + 1);
-  }, [setRuntimePhase, difficultyTimer]);
-
-  const moveHoldHandlers = useMemo(() => ({
-    onPointerDown: (e: React.PointerEvent) => { 
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId); 
-      inputRef.current.forward = true; 
-    },
-    onPointerUp:   () => { inputRef.current.forward = false; },
-    onPointerLeave:() => { inputRef.current.forward = false; },
-    onPointerCancel:() => { inputRef.current.forward = false; },
-  }), []);
+  const activeTouchesRef = useRef(0);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    activeTouchesRef.current = e.touches.length;
+    inputRef.current.forward = true;
+  }, []);
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    activeTouchesRef.current = e.touches.length;
+    if (e.touches.length === 0) inputRef.current.forward = false;
+  }, []);
+  const handleTouchCancel = useCallback(() => {
+    activeTouchesRef.current = 0;
+    inputRef.current.forward = false;
+  }, []);
 
   return (
     <div
       data-testid="rlgl3d-root"
       style={{
-        position: "fixed", inset: 0, width: "100vw", height: "100dvh",
-        background: "#000", overflow: "hidden",
+        position: "absolute", inset: 0,
+        overflow: "hidden", background: "#000",
+        touchAction: "none",
         fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
         userSelect: "none",
       }}
@@ -1031,8 +1045,9 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
             onHudUpdate={handleHudUpdate}
             pausedRef={pausedRef}
             inputRef={inputRef}
-            resetSignal={resetSignal}
+
             roundTimer={difficultyTimer}
+            difficulty={settings.difficulty}
           />
         </Suspense>
       </Canvas>
@@ -1082,51 +1097,42 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         </div>
       )}
 
-      {endState && (
-        <ResultScreen
-          outcome={endState.phase === GamePhase.VICTORY ? "victory" : "eliminated"}
-          score={endState.score}
-          statLine={
-            endState.phase === GamePhase.VICTORY ? "ROUND CLEARED"
-            : endState.phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH LINE"
-            : "MOVED DURING RED LIGHT"
-          }
-          survived={hud.aliveCount}
-          total={NPC_COUNT + 1}
-          onTryAgain={handleRestart}
-          onMenu={onExit ? () => {
-            SoundManager.getInstance().stopAll(0);
-            SoundManager.getInstance().stopAllLoops(0);
-            MusicManager.getInstance().stopAll();
-            onExit();
-          } : undefined}
-        />
-      )}
 
       <div
-        data-testid="rlgl3d-mobile-controls"
-        style={{
-          position: "absolute", bottom: 28, left: 0, right: 0, zIndex: 25,
-          display: "flex", justifyContent: "center", gap: 24, pointerEvents: "none",
-        }}
+        data-testid="rlgl3d-touch-layer"
         className="rlgl3d-touch-only"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+        style={{
+          position: "absolute", inset: 0, zIndex: 8,
+          pointerEvents: "auto",
+          touchAction: "none",
+          background: "transparent",
+        }}
+      />
+      {/* Tap-to-move hint shown only before game starts or briefly at start */}
+      <div
+        className="rlgl3d-touch-only"
+        style={{
+          position: "absolute", bottom: 32, left: 0, right: 0, zIndex: 9,
+          display: "flex", justifyContent: "center", pointerEvents: "none",
+        }}
       >
-        <button
-          {...moveHoldHandlers}
-          data-testid="rlgl3d-move-btn"
-          style={{
-            pointerEvents: "auto",
-            width: 110, height: 110, borderRadius: 60,
-            background: "rgba(15,160,125,0.75)",
-            border: "3px solid rgba(255,255,255,0.6)",
-            color: "#fff", fontSize: 14, fontWeight: 800, letterSpacing: "0.18em",
-            backdropFilter: "blur(6px)",
-            boxShadow: "0 0 32px rgba(15,160,125,0.5)",
-            touchAction: "none",
-          }}
-        >
-          HOLD<br/>TO RUN
-        </button>
+        <div style={{
+          padding: "10px 24px",
+          background: "rgba(0,0,0,0.55)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          borderRadius: 40,
+          backdropFilter: "blur(8px)",
+          color: "rgba(255,255,255,0.65)",
+          fontSize: 12, letterSpacing: "0.18em", fontWeight: 700,
+          textTransform: "uppercase",
+          animation: "rlgl3d-hint-fade 3s ease-in-out 1.5s forwards",
+          opacity: 1,
+        }}>
+          HOLD SCREEN TO MOVE
+        </div>
       </div>
 
       <style>{`
@@ -1136,6 +1142,11 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         }
         @media (pointer: fine) {
           .rlgl3d-touch-only { display: none !important; }
+        }
+        @keyframes rlgl3d-hint-fade {
+          0%   { opacity: 1; }
+          70%  { opacity: 1; }
+          100% { opacity: 0; }
         }
       `}</style>
     </div>
@@ -1339,6 +1350,25 @@ function panelStyle(): React.CSSProperties {
     borderRadius: 4,
     backdropFilter: "blur(8px)",
     display: "flex", alignItems: "center",
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+  };
+}
+
+function btnStyle(color: string): React.CSSProperties {
+  return {
+    padding: "12px 20px",
+    background: "rgba(8,8,14,0.8)",
+    border: `1.5px solid ${color}`,
+    borderRadius: 4,
+    color: color,
+    fontSize: 14,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    cursor: "pointer",
+    backdropFilter: "blur(8px)",
+    boxShadow: `0 0 20px ${color}40`,
+    transition: "all 0.2s ease",
     fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
   };
 }

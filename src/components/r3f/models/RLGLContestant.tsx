@@ -269,7 +269,7 @@ export const RLGLContestant = React.memo(function RLGLContestant({
       <group ref={torsoRef}>
         <mesh position={[0, 1.25, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.45, 0.65, 0.26]} />
-          <meshStandardMaterial color={SUIT} roughness={0.75} />
+          <meshPhysicalMaterial color={SUIT} roughness={0.6} clearcoat={0.1} />
         </mesh>
         {/* Zipper */}
         <mesh position={[0, 1.25, 0.135]} castShadow>
@@ -279,11 +279,11 @@ export const RLGLContestant = React.memo(function RLGLContestant({
         {/* Chest panels */}
         <mesh position={[-0.12, 1.35, 0.135]} castShadow>
           <boxGeometry args={[0.08, 0.10, 0.01]} />
-          <meshStandardMaterial color={SUIT_DARK} roughness={0.8} />
+          <meshPhysicalMaterial color={SUIT_DARK} roughness={0.7} />
         </mesh>
         <mesh position={[0.12, 1.35, 0.135]} castShadow>
           <boxGeometry args={[0.08, 0.10, 0.01]} />
-          <meshStandardMaterial color={SUIT_DARK} roughness={0.8} />
+          <meshPhysicalMaterial color={SUIT_DARK} roughness={0.7} />
         </mesh>
         {/* Waistband */}
         <mesh position={[0, 0.93, 0]} castShadow>
@@ -295,21 +295,21 @@ export const RLGLContestant = React.memo(function RLGLContestant({
       {/* Neck */}
       <mesh position={[0, 1.62, 0]} castShadow>
         <cylinderGeometry args={[0.08, 0.09, 0.12, 12]} />
-        <meshStandardMaterial color={SKIN} roughness={0.5} />
+        <meshPhysicalMaterial color={SKIN} roughness={0.4} clearcoat={0.3} />
       </mesh>
 
       {/* Head */}
       <group ref={headRef} position={[0, 1.78, 0]}>
         <mesh castShadow receiveShadow>
           <sphereGeometry args={[0.19, 20, 20]} />
-          <meshStandardMaterial color={SKIN} roughness={0.5} />
+          <meshPhysicalMaterial color={SKIN} roughness={0.4} clearcoat={0.3} />
         </mesh>
         {/* Hair cap */}
         <mesh position={[0, 0.08, 0]} castShadow>
           <sphereGeometry
             args={[0.195, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.6]}
           />
-          <meshStandardMaterial color={HAIR} roughness={0.9} />
+          <meshPhysicalMaterial color={HAIR} roughness={0.7} clearcoat={0.4} />
         </mesh>
         {/* Eyes */}
         <mesh position={[-0.08, 0.04, 0.17]}>
@@ -326,7 +326,7 @@ export const RLGLContestant = React.memo(function RLGLContestant({
       <group ref={armLRef} position={[-0.30, 1.48, 0]}>
         <mesh position={[0, -0.22, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
-          <meshStandardMaterial color={SUIT} roughness={0.75} />
+          <meshPhysicalMaterial color={SUIT} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.44, 0]} castShadow>
           <sphereGeometry args={[0.072, 10, 10]} />
@@ -346,7 +346,7 @@ export const RLGLContestant = React.memo(function RLGLContestant({
       <group ref={armRRef} position={[0.30, 1.48, 0]}>
         <mesh position={[0, -0.22, 0]} castShadow>
           <cylinderGeometry args={[0.07, 0.065, 0.44, 10]} />
-          <meshStandardMaterial color={SUIT} roughness={0.75} />
+          <meshPhysicalMaterial color={SUIT} roughness={0.6} clearcoat={0.1} />
         </mesh>
         <mesh position={[0, -0.44, 0]} castShadow>
           <sphereGeometry args={[0.072, 10, 10]} />
