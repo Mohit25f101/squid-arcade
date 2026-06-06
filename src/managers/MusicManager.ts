@@ -19,7 +19,6 @@ export class MusicManager {
   private _howls: Map<MusicTrackId, Howl> = new Map();
   private _unlocked: boolean = false;
   private _pendingPlay: { id: MusicTrackId; fadeMs: number; onEnd?: () => void } | null = null;
-  private _transitioning: boolean = false;
 
   private constructor() {
     if (typeof window !== "undefined") {
@@ -45,7 +44,6 @@ export class MusicManager {
   }
 
   public play(id: MusicTrackId, fadeMs: number = 0, onEnd?: () => void): void {
-    if (this._transitioning) return;
     if (!this._unlocked) {
       this._pendingPlay = { id, fadeMs, onEnd };
       return;
@@ -60,9 +58,7 @@ export class MusicManager {
        return;
     }
 
-    this._transitioning = true;
     this.stop(fadeMs);
-    setTimeout(() => { this._transitioning = false; }, fadeMs + 50);
 
     const def = MUSIC_DEFS[id];
     if (!def) return;
@@ -95,7 +91,6 @@ export class MusicManager {
   }
 
   public stop(fadeMs: number = 0): void {
-    this._transitioning = false;
     if (!this._currentId) return;
     const howl = this._howls.get(this._currentId);
     

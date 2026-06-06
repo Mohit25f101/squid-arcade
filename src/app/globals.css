@@ -58,6 +58,17 @@ body {
   --color-safe:         #00f5c4;
   --color-safe-glow:    rgba(0, 245, 196, 0.4);
   --color-amber:        #d9772b;
+
+  /* Redesign Tokens */
+  --sq-pink: #FF0066;
+  --sq-teal: #00FFB2;
+  --sq-dark: #0A0A0F;
+  --sq-darker: #050508;
+  --sq-navy: #0D0D1A;
+  --sq-pink-dim: rgba(255, 0, 102, 0.15);
+  --sq-teal-dim: rgba(0, 255, 178, 0.15);
+  --sq-gold: #FFD700;
+
   
   --color-bg-core:      #050507;
   --color-surface:      #0e0f14;
@@ -538,3 +549,59 @@ body {
 .anim-eliminated { animation: eliminated-flash 1.5s ease-out forwards; }
 .anim-particle-rise { animation: particle-rise linear forwards; }
 .anim-rotate-shape { animation: rotate-shape 8s ease-in-out infinite; }
+
+/* Font families */
+.font-bebas { font-family: 'Bebas Neue', var(--font-display); }
+.font-mono-sq { font-family: 'Space Mono', var(--font-body); }
+.font-korean { font-family: 'Noto Sans KR', sans-serif; }
+
+/* Glass morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Animations */
+@keyframes pulse-pink {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 0, 102, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(255, 0, 102, 0.7), 0 0 60px rgba(255, 0, 102, 0.3); }
+}
+@keyframes pulse-teal {
+  0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 178, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(0, 255, 178, 0.7), 0 0 60px rgba(0, 255, 178, 0.3); }
+}
+@keyframes flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: 0.8; }
+  97% { opacity: 1; }
+  98% { opacity: 0.6; }
+  99% { opacity: 1; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-12px) rotate(2deg); }
+  66% { transform: translateY(-6px) rotate(-1deg); }
+}
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes slide-in-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.anim-float { animation: float 6s ease-in-out infinite; }
+.anim-flicker { animation: flicker 4s infinite; }
+.anim-pulse-pink { animation: pulse-pink 2s infinite; }
+.anim-pulse-teal { animation: pulse-teal 2s infinite; }
+.anim-slide-up { animation: slide-in-up 0.5s var(--ease-out-expo) forwards; }

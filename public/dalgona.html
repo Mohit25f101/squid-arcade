@@ -542,11 +542,11 @@ const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 20;
 
 // ── Physics constants (REBALANCED — HARDER) ──────────
 const BASE_STRESS = 0.00180;
-const INSTABILITY_MULT = 0.026;
+const INSTABILITY_MULT = 0.045;
 const EDGE_TO_INTEGRITY = 0.55;
 const FRACTURE_THRESHOLD = 0.35;
-const CARVE_RADIUS = 9;
-const ON_EDGE_TOL = 14;
+const CARVE_RADIUS = 6;
+const ON_EDGE_TOL = 8;
 const COMPLETION_WIN = 0.96;
 const SCRAPE_AUDIO_MS = 90;
 
@@ -1721,6 +1721,26 @@ function render(){
       ctx.shadowBlur = 0;
       ctx.restore();
     }
+  }
+
+  // ── Stress Heatmap ───────────────────────────────────────────────
+  if (phase === 'playing') {
+    ctx.save();
+    for (let gy = 0; gy < GRID; gy++) {
+      for (let gx = 0; gx < GRID; gx++) {
+        const stress = edgeStressGrid[gy * GRID + gx];
+        if (stress > 0.05) {
+          const cx = (CANDY_X + gx * CELL + CELL / 2) * scale;
+          const cy = (CANDY_Y + gy * CELL + CELL / 2) * scale;
+          const sz = stress * CELL * 1.5 * scale;
+          ctx.fillStyle = `rgba(255, 0, 50, ${stress * 0.4})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, sz, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
   }
 
   // ── Fracture cracks ───────────────────────────────────────────────

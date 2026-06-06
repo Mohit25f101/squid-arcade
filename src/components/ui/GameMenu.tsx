@@ -20,7 +20,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useGameStore, type GameId, type Difficulty } from "@/store/gameStore";
-import { SymbolTrio, CircleSymbol, TriangleSymbol, SquareSymbol } from "./SquidSymbols";
+import { SymbolTrio, CircleShape, TriangleShape, SquareShape } from "./SquidShapes";
 import { useMenuAudio } from "@/hooks/useMenuAudio";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -571,10 +571,10 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
       <div className="sq-geo-circle"      aria-hidden style={{ width:"90vmin", height:"90vmin", bottom:"-25vmin", left:"-25vmin", borderColor:"rgba(0,255,178,0.04)", animation:"sq-spin-slow 40s linear reverse infinite" }} />
 
       {/* Decorative symbols */}
-      <CircleSymbol   size={70} color="#FF0066" glow animate style={{ position:"absolute", top:"12%",    left:"6%",   opacity:0.15 }} />
-      <TriangleSymbol size={50} color="#00FFB2" glow animate style={{ position:"absolute", top:"20%",    right:"8%",  opacity:0.15 }} />
-      <SquareSymbol   size={40} color="#FFD700" glow animate style={{ position:"absolute", bottom:"25%", left:"10%",  opacity:0.12 }} />
-      <CircleSymbol   size={30} color="#00FFB2" glow animate style={{ position:"absolute", bottom:"18%", right:"6%",  opacity:0.12 }} />
+      <CircleShape   size={70} color="#FF0066" glow animate style={{ position:"absolute", top:"12%",    left:"6%",   opacity:0.15 }} />
+      <TriangleShape size={50} color="#00FFB2" glow animate style={{ position:"absolute", top:"20%",    right:"8%",  opacity:0.15 }} />
+      <SquareShape   size={40} color="#FFD700" glow animate style={{ position:"absolute", bottom:"25%", left:"10%",  opacity:0.12 }} />
+      <CircleShape   size={30} color="#00FFB2" glow animate style={{ position:"absolute", bottom:"18%", right:"6%",  opacity:0.12 }} />
 
       {/* Curtain */}
       <div className={`sq-curtain${curtainOpen ? " open" : ""}`} aria-hidden />
@@ -590,9 +590,9 @@ export default function GameMenu({ onLaunch }: GameMenuProps = {}) {
           <h1 className="sq-main-title sq-font-bebas">SQUID GAME</h1>
           <div className="sq-title-divider">
             <div className="sq-title-divider-line pink-right" />
-            <CircleSymbol   size={7} color="#FF0066" glow />
-            <TriangleSymbol size={7} color="#00FFB2" glow />
-            <SquareSymbol   size={7} color="#FF0066" glow />
+            <CircleShape   size={7} color="#FF0066" glow />
+            <TriangleShape size={7} color="#00FFB2" glow />
+            <SquareShape   size={7} color="#FF0066" glow />
             <div className="sq-title-divider-line pink-left" />
           </div>
         </div>
