@@ -6,7 +6,7 @@
 <title>Dalgona Candy — Survival Physics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet"/>
 <style>
 /* ── Reset ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,8 +28,9 @@
   --pink-shadow:    #b20047;
   --teal:           #00FFB2;
   --teal-shadow:    #00a87a;
-  --font-display:   'Barlow Condensed', 'Impact', sans-serif;
-  --font-mono:      'DM Mono', 'Courier New', monospace;
+  --font-display:   'Bebas Neue', 'Impact', sans-serif;
+  --font-mono:      'Space Mono', 'Courier New', monospace;
+  --font-korean:    'Noto Sans KR', sans-serif;
   --ease-snap:      cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1305,16 +1306,17 @@ function render(){
   ctx.fillRect(-CANDY_X*2, -CANDY_Y*2, canvas.width*2, canvas.height * 0.4 + CANDY_Y*2);
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  const clouds = [
-    { x: canvas.width * 0.15, y: canvas.height * 0.12, r: 25 * scale },
-    { x: canvas.width * 0.85, y: canvas.height * 0.08, r: 35 * scale },
-    { x: canvas.width * 0.50, y: canvas.height * 0.20, r: 30 * scale }
-  ];
-  clouds.forEach(c => {
-    ctx.beginPath();
-    ctx.arc(c.x - (window.__dalgonaOffsetX||0), c.y - (window.__dalgonaOffsetY||0), c.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  const offX = window.__dalgonaOffsetX || 0;
+  const offY = window.__dalgonaOffsetY || 0;
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.15 - offX, canvas.height * 0.12 - offY, 25 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.85 - offX, canvas.height * 0.08 - offY, 35 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.50 - offX, canvas.height * 0.20 - offY, 30 * scale, 0, Math.PI * 2);
+  ctx.fill();
 
   const dirtGrad = ctx.createLinearGradient(0, canvas.height * 0.4, 0, canvas.height);
   dirtGrad.addColorStop(0, "#e3c798"); 
@@ -1692,7 +1694,10 @@ function render(){
       ctx.shadowBlur = 30 * scale * candySeparation;
       
       ctx.beginPath();
-      shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      for (let i = 0; i < shapePath.length; i++) {
+        if (i === 0) ctx.moveTo(shapePath[i].x, shapePath[i].y);
+        else ctx.lineTo(shapePath[i].x, shapePath[i].y);
+      }
       ctx.closePath();
       
       const victoryGrad = ctx.createRadialGradient(
@@ -1749,7 +1754,10 @@ function render(){
       ctx.shadowColor = 'rgba(245,180,20,0.4)';
       ctx.shadowBlur = 12 * scale;
       ctx.beginPath();
-      shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      for (let i = 0; i < shapePath.length; i++) {
+        if (i === 0) ctx.moveTo(shapePath[i].x, shapePath[i].y);
+        else ctx.lineTo(shapePath[i].x, shapePath[i].y);
+      }
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -1772,13 +1780,15 @@ function render(){
       ctx.shadowBlur = 0;
     }
     
-    // Faint dotted guide for uncarved path
     ctx.setLineDash([6 * scale, 5 * scale]);
     ctx.lineDashOffset = frame * 0.45;
     ctx.strokeStyle = 'rgba(55,25,3,0.48)';
     ctx.lineWidth = 2 * scale;
     ctx.beginPath();
-    shapePath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+    for (let i = 0; i < shapePath.length; i++) {
+      if (i === 0) ctx.moveTo(shapePath[i].x, shapePath[i].y);
+      else ctx.lineTo(shapePath[i].x, shapePath[i].y);
+    }
     ctx.closePath();
     ctx.stroke();
     
@@ -1804,21 +1814,18 @@ function render(){
   // ── Particles ─────────────────────────────────────────────────────
   for (let pi = 0; pi < particles.length; pi++) {
     const p = particles[pi];
-    ctx.save();
-    ctx.globalAlpha = clamp(p.life, 0, 1);
-    ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+    const alpha = p.life < 0 ? 0 : p.life > 1 ? 1 : p.life;
+    ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha.toFixed(2)})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(0.5, p.size * scale * 0.55), 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
   }
 
   // ── Bullets ───────────────────────────────────────────────────────
   for (let bi = 0; bi < bullets.length; bi++) {
     const b = bullets[bi];
-    ctx.save();
-    ctx.globalAlpha = clamp(b.life, 0, 1);
-    ctx.fillStyle = '#ffc040';
+    const alpha = b.life < 0 ? 0 : b.life > 1 ? 1 : b.life;
+    ctx.fillStyle = `rgba(255,192,64,${alpha.toFixed(2)})`;
     ctx.shadowColor = 'rgba(255,200,64,0.9)';
     ctx.shadowBlur = 8 * scale;
     ctx.beginPath();
@@ -1826,16 +1833,15 @@ function render(){
     ctx.fill();
     
     // Bullet trail
-    ctx.strokeStyle = 'rgba(255,200,64,0.6)';
+    ctx.strokeStyle = `rgba(255,200,64,${(alpha * 0.6).toFixed(2)})`;
     ctx.lineWidth = 2 * scale;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(b.x, b.y);
     ctx.lineTo(b.x - b.vx * 0.3, b.y - b.vy * 0.3);
     ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.restore();
   }
+  ctx.shadowBlur = 0;
 
   // ── Needle cursor ─────────────────────────────────────────────────
   if (phase === 'playing') {
