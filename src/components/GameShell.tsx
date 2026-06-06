@@ -63,8 +63,10 @@ import React, {
   useState,
 } from "react";
 import { useGameStore, selectSessionStats } from "@/store/gameStore";
+import { useShallow } from "zustand/react/shallow";
 import { inputManager } from "@/managers/InputManager";
 import { HUD } from "@/components/hud";
+import { ResultScreen } from "@/components/ui/ResultScreen";
 import type { EliminationPayload, ViewportState } from "@/store/gameStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,324 +124,6 @@ const ELIM_FLASH_DURATION_MS = 180;
 
 /** Delay before the "ELIMINATED" card fades in */
 const ELIM_CARD_DELAY_MS = 600;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 3 — OVERLAY COMPONENTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface EliminationOverlayProps {
-  payload: EliminationPayload;
-  onComplete: () => void;
-}
-
-/**
- * Universal death overlay. Renders over ANY game.
- * Sequence: red flash (180ms) → letterbox squeeze (600ms) → card fade-in →
- * hold (1s) → fade to black → onComplete().
- *
- * Games that show their own ELIMINATED screen (like GlassBridge) will have
- * both overlays visible — that's acceptable during Phase 1. In Phase 3 we
- * add a `suppressShellOverlay` prop to individual games.
- */
-const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
-  payload,
-  onComplete,
-}) => {
-  const [phase, setPhase] = useState<
-    "flash" | "letterbox" | "card" | "hold" | "fadeout"
-  >("flash");
-
-  const sessionStats = useGameStore(selectSessionStats);
-  const survivedRounds = sessionStats.survived;
-
-  useEffect(() => {
-    inputManager.reset();
-    const t1 = setTimeout(() => setPhase("letterbox"), ELIM_FLASH_DURATION_MS);
-    const t2 = setTimeout(() => setPhase("card"), ELIM_CARD_DELAY_MS);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 900,
-        pointerEvents: "auto",
-        overflow: "hidden",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {/* Background Gradient */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: phase === "flash" ? "rgba(255, 51, 51, 0.85)" : "radial-gradient(circle at center, rgba(255, 51, 51, 0.15), #050508 80%)",
-          transition: phase === "flash" ? "none" : "background 0.5s ease-out",
-        }}
-      />
-      {/* Dark overlay */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundColor: "#050508",
-          opacity: phase === "flash" ? 0 : 0.8,
-          transition: "opacity 0.4s ease-out",
-        }}
-      />
-
-      {/* Floating Shapes */}
-      {(phase === "card" || phase === "hold" || phase === "fadeout") && (
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <div className="absolute top-[10%] left-[15%] text-[#FF3333] opacity-30 anim-rotate-shape" style={{ fontSize: "5rem" }}>○</div>
-          <div className="absolute bottom-[20%] left-[10%] text-[#FF3333] opacity-20 anim-rotate-shape" style={{ fontSize: "6rem", animationDelay: '1s' }}>△</div>
-          <div className="absolute top-[25%] right-[15%] text-[#FF3333] opacity-25 anim-rotate-shape" style={{ fontSize: "7rem", animationDelay: '2s' }}>□</div>
-          <div className="absolute bottom-[15%] right-[20%] text-[#FF3333] opacity-40 anim-rotate-shape" style={{ fontSize: "4rem", animationDelay: '0.5s' }}>○</div>
-        </div>
-      )}
-
-      {/* Main Card Content */}
-      <div
-        className={phase === "card" || phase === "hold" ? "anim-eliminated" : ""}
-        style={{
-          position: "relative",
-          zIndex: 10,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          opacity: phase === "card" || phase === "hold" ? 1 : 0,
-          transition: phase === "fadeout" ? "opacity 0.4s ease-out" : "none",
-        }}
-      >
-        <div className="font-korean text-sm tracking-[0.5em] text-[#FF3333] mb-4 opacity-80 neon-red">탈락</div>
-        <div
-          className="font-bebas leading-none neon-red"
-          style={{
-            fontSize: "clamp(64px, 12vw, 120px)",
-            color: "#FF3333",
-            letterSpacing: "0.15em",
-          }}
-        >
-          ELIMINATED
-        </div>
-
-        {/* Player Badge */}
-        <div className="mt-8 mb-6 px-6 py-2 border border-glow-red rounded" style={{ background: "rgba(255,51,51,0.1)" }}>
-          <span className="font-mono-sq text-white/80 text-lg tracking-widest">PLAYER 456</span>
-        </div>
-
-        {/* Stats */}
-        <div className="flex gap-8 mb-12">
-          <div className="text-center">
-            <div className="font-mono-sq text-[#FF3333] text-xs tracking-widest mb-1">SURVIVED ROUNDS</div>
-            <div className="font-bebas text-white text-3xl">{survivedRounds}</div>
-          </div>
-          <div className="w-px bg-[#FF3333]/30" />
-          <div className="text-center">
-            <div className="font-mono-sq text-[#FF3333] text-xs tracking-widest mb-1">RANK</div>
-            <div className="font-bebas text-white text-3xl">#456</div>
-          </div>
-        </div>
-
-        {payload.reason && (
-          <div className="font-mono-sq text-xs tracking-widest text-[#FF3333]/70 uppercase mb-8">
-            CAUSE: {payload.reason}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex gap-6 pointer-events-auto">
-          <button 
-            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-white border border-white/20 bg-transparent hover:bg-white/10 hover-scale transition-colors"
-            onClick={() => {
-              setPhase("fadeout");
-              setTimeout(onComplete, 400);
-            }}
-          >
-            MENU
-          </button>
-          <button 
-            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-[#050508] bg-[#FF3333] glow-red hover-scale transition-all"
-            onClick={() => {
-              setPhase("fadeout");
-              setTimeout(onComplete, 400);
-            }}
-          >
-            TRY AGAIN
-          </button>
-        </div>
-      </div>
-
-      {/* Fade-to-black curtain */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "#000",
-          opacity: phase === "fadeout" ? 1 : 0,
-          pointerEvents: "none",
-          transition: "opacity 0.4s ease-in",
-        }}
-      />
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface VictoryOverlayProps {
-  onComplete: () => void;
-}
-
-/**
- * Universal victory overlay.
- * Sequence: gold flash → "WINNER" card fade-in → hold → fade out.
- */
-const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
-  const [phase, setPhase] = useState<"flash" | "card" | "hold" | "fadeout">("flash");
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase("card"), 250);
-    return () => { clearTimeout(t1); };
-  }, []);
-
-  // Generate particles (using a stable ref or memo so they don't regenerate)
-  const [particles] = useState(() => Array.from({ length: 24 }).map((_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    delay: `${Math.random() * 2}s`,
-    duration: `${3 + Math.random() * 2}s`,
-    size: `${8 + Math.random() * 12}px`,
-  })));
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 900,
-        pointerEvents: "auto",
-        overflow: "hidden",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {/* Gold flash & Background */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: phase === "flash" ? "rgba(255, 215, 0, 0.45)" : "radial-gradient(circle at center, rgba(255, 215, 0, 0.12), #050508 80%)",
-          transition: phase === "flash" ? "none" : "background 0.5s ease-out",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundColor: "#050508",
-          opacity: phase === "flash" ? 0 : 0.7,
-          transition: "opacity 0.4s ease-out",
-        }}
-      />
-
-      {/* Gold particles */}
-      {(phase === "card" || phase === "hold" || phase === "fadeout") && (
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          {particles.map(p => (
-            <div
-              key={p.id}
-              className="absolute bottom-[-20px] bg-[#FFD700] rounded-sm anim-particle-rise glow-gold"
-              style={{
-                left: p.left,
-                width: p.size,
-                height: p.size,
-                animationDuration: p.duration,
-                animationDelay: p.delay,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* SURVIVED card */}
-      <div
-        className={phase === "card" || phase === "hold" ? "anim-eliminated" : ""}
-        style={{
-          position: "relative",
-          zIndex: 10,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          opacity: phase === "card" || phase === "hold" ? 1 : 0,
-          transition: phase === "fadeout" ? "opacity 0.5s ease-out" : "none",
-        }}
-      >
-        <div className="font-korean text-sm tracking-[0.5em] text-[#FFD700] mb-4 opacity-80 neon-gold">우승자</div>
-        <div
-          className="font-bebas leading-none neon-gold"
-          style={{
-            fontSize: "clamp(64px, 12vw, 120px)",
-            color: "#FFD700",
-            letterSpacing: "0.15em",
-          }}
-        >
-          WINNER
-        </div>
-
-        {/* Player Badge */}
-        <div className="mt-8 mb-6 px-6 py-2 border border-glow-gold rounded glow-gold" style={{ background: "rgba(255,215,0,0.1)" }}>
-          <span className="font-mono-sq text-[#FFD700] text-lg tracking-widest">PLAYER 456</span>
-        </div>
-
-        {/* Prize */}
-        <div className="mb-12 text-center">
-          <div className="font-mono-sq text-white/50 text-xs tracking-widest mb-2">PRIZE ACCUMULATED</div>
-          <div className="font-bebas text-white text-5xl neon-gold" style={{ color: "#FFD700" }}>₩45,600,000,000</div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-6 pointer-events-auto">
-          <button 
-            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-white border border-white/20 bg-transparent hover:bg-white/10 hover-scale transition-colors"
-            onClick={() => {
-              setPhase("fadeout");
-              setTimeout(onComplete, 500);
-            }}
-          >
-            MENU
-          </button>
-          <button 
-            className="font-bebas text-xl tracking-widest px-8 py-3 rounded text-[#050508] bg-[#FFD700] glow-gold hover-scale transition-all"
-            onClick={() => {
-              setPhase("fadeout");
-              setTimeout(onComplete, 500);
-            }}
-          >
-            TRY AGAIN
-          </button>
-        </div>
-      </div>
-
-      {/* Fade out */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "#000",
-          opacity: phase === "fadeout" ? 1 : 0,
-          pointerEvents: "none",
-          transition: "opacity 0.5s ease-in",
-        }}
-      />
-    </div>
-  );
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 3b — GAME NAV (back button, consolidated)
@@ -605,6 +289,7 @@ export interface GameShellProps {
    * only DalgonaCandy uses this prop.
    */
   onExit?: () => void;
+  onRestart?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -623,6 +308,7 @@ const GameShell: React.FC<GameShellProps> = ({
   background = "#000",
   showGlobalHUD = true,
   onExit,
+  onRestart,
 }) => {
   // ── Store subscriptions ─────────────────────────────────────────────────
   const runtimePhase   = useGameStore((s) => s.runtimePhase);
@@ -630,6 +316,7 @@ const GameShell: React.FC<GameShellProps> = ({
   const clearElimination   = useGameStore((s) => s.clearElimination);
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
   const setViewportState   = useGameStore((s) => s.setViewportState);
+  const sessionStats       = useGameStore(useShallow(selectSessionStats));
 
   // ── Refs ────────────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
@@ -751,15 +438,17 @@ const GameShell: React.FC<GameShellProps> = ({
 
   // ── Elimination overlay completion handler ───────────────────────────────
   const handleEliminationComplete = useCallback(() => {
-    clearElimination();
+    setRuntimePhase("idle");
+    if (onExit) onExit();
     onEliminationComplete?.();
-  }, [clearElimination, onEliminationComplete]);
+  }, [setRuntimePhase, onExit, onEliminationComplete]);
 
   // ── Victory overlay completion handler ──────────────────────────────────
   const handleVictoryComplete = useCallback(() => {
     setRuntimePhase("idle");
+    if (onExit) onExit();
     onVictoryComplete?.();
-  }, [setRuntimePhase, onVictoryComplete]);
+  }, [setRuntimePhase, onExit, onVictoryComplete]);
 
   // ── Context value ────────────────────────────────────────────────────────
   const contextValue: GameShellContextValue = {
@@ -842,14 +531,22 @@ const GameShell: React.FC<GameShellProps> = ({
         )}
 
         {/* Global overlays */}
-        {runtimePhase === "eliminated" && eliminationPayload && (
-          <EliminationOverlay
-            payload={eliminationPayload}
-            onComplete={handleEliminationComplete}
-          />
-        )}
-        {runtimePhase === "victory" && (
-          <VictoryOverlay onComplete={handleVictoryComplete} />
+        {(runtimePhase === "eliminated" || runtimePhase === "victory") && (
+          <div style={{ position: "absolute", zIndex: 900, inset: 0, pointerEvents: "auto" }}>
+            <ResultScreen 
+              outcome={runtimePhase}
+              score={runtimePhase === "victory" ? 45600000000 : 0} 
+              statLine={runtimePhase === "eliminated" ? eliminationPayload?.reason || "ELIMINATED" : "ROUND CLEARED"}
+              survived={sessionStats.survived}
+              played={sessionStats.played}
+              total={456}
+              onMenu={runtimePhase === "victory" ? handleVictoryComplete : handleEliminationComplete}
+              onTryAgain={() => {
+                setRuntimePhase("idle");
+                if (onRestart) onRestart();
+              }}
+            />
+          </div>
         )}
         <TransitionCurtain state={transition} />
       </div>

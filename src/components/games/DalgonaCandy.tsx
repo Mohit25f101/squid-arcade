@@ -13,6 +13,8 @@ interface DalgonaCandyProps {
 export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) {
   const triggerElimination = useGameStore((s) => s.triggerElimination);
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
+  const difficulty         = useGameStore((s) => s.settings.difficulty);
+  const dalgonaLevel       = useGameStore((s) => s.dalgonaLevel);
 
   useEffect(() => {
     return () => {
@@ -55,7 +57,7 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
         }
       `}</style>
       <iframe 
-        src="/dalgona.html" 
+        src={`/dalgona.html?diff=${difficulty}&level=${dalgonaLevel}`} 
         style={{ width: "100%", height: "100%", border: "none" }}
         title="Dalgona Candy"
         sandbox="allow-scripts allow-same-origin"

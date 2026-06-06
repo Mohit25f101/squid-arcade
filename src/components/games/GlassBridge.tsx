@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameShellBridge } from "@/components/GameShell";
 import { useHUDSync } from "@/components/hud/useHUDSync";
 import { SoundManager } from "@/managers/SoundManager";
-import { ResultScreen } from "../ui/ResultScreen";
 import { lerp, clamp } from "@/utils/math";
 import { RLGLDoll, RLGLGuard, RLGLContestant } from "@/components/r3f/models";
 import { useGameStore } from "@/store/gameStore";
@@ -126,6 +125,7 @@ interface GameState {
   seed: number;
   ambientDripTimer: number;
   lateGameZoomActive: boolean;
+  timeOnRow: number;
 }
 
 class ObjectPool<T extends { active: boolean }> {
@@ -190,7 +190,7 @@ function rgb(r: number, g: number, b: number, a = 1): string {
   return `rgba(${r|0},${g|0},${b|0},${a})`;
 }
 
-function generateBridge(rows: number, seed: number): Panel[][] {
+function generateBridge(rows: number, seed: number, difficulty: "easy" | "normal" | "hard" = "normal"): Panel[][] {
   const rng = makeRng(seed);
   const panels: Panel[][] = [];
 
@@ -201,6 +201,22 @@ function generateBridge(rows: number, seed: number): Panel[][] {
     for (let col = 0 as 0 | 1 | 2; col <= 2; col++) {
       const isSafe = col === safeCol;
       const glintBase = rng.next() * Math.PI * 2;
+      
+      let safeReflection = 0.18 + rng.next() * 0.08;
+      let fragReflection = 0.06 + rng.next() * 0.06;
+      let safeWobble = 0.8 + rng.next() * 0.4;
+      let fragWobble = 1.4 + rng.next() * 0.8;
+
+      if (difficulty === "easy") {
+        safeReflection = 0.3 + rng.next() * 0.1;
+        fragReflection = 0.03 + rng.next() * 0.03;
+        safeWobble = 0.4 + rng.next() * 0.2; 
+      } else if (difficulty === "hard") {
+        safeReflection = 0.1 + rng.next() * 0.05;
+        fragReflection = 0.1 + rng.next() * 0.05;
+        safeWobble = 1.0 + rng.next() * 0.5;
+        fragWobble = 1.0 + rng.next() * 0.5;
+      }
 
       rowPanels.push({
         row,
@@ -211,9 +227,9 @@ function generateBridge(rows: number, seed: number): Panel[][] {
         glintTimer: glintBase,
         glintPhase: isSafe ? 0.6 + rng.next() * 0.3 : 0.9 + rng.next() * 0.4,
         glintPhase2: 0.7 + rng.next() * 0.5,
-        wobbleAmp: isSafe ? 0.8 + rng.next() * 0.4 : 1.4 + rng.next() * 0.8,
+        wobbleAmp: isSafe ? safeWobble : fragWobble,
         wobblePhase: rng.next() * Math.PI * 2,
-        reflectionAlpha: isSafe ? 0.18 + rng.next() * 0.08 : 0.06 + rng.next() * 0.06,
+        reflectionAlpha: isSafe ? safeReflection : fragReflection,
         flashAlpha: 0,
       });
     }
@@ -472,6 +488,7 @@ function startJump(gs: GameState, targetCol: 0 | 1 | 2): void {
   gs.player.targetCol = targetCol;
   gs.player.jumpT = 0;
   gs.player.startY = gs.player.worldY;
+  gs.timeOnRow = 0;
   gs.player.facing = targetCol === 0 ? -1 : 1;
   gs.inputConsumed = true;
 }
@@ -637,10 +654,21 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
     gs.timeLeft -= dtSec;
     if (gs.timeLeft <= 0) {
       gs.timeLeft = 0;
-      if (gs.player.status === "alive") triggerElimination(gs);
+      triggerElimination(gs);
     }
     if (gs.timeLeft < 20) {
       gs.vignetteTarget = Math.max(gs.vignetteTarget, 0.3 + (20 - gs.timeLeft) / 20 * 0.4);
+    }
+    
+    if (gs.player.status === "alive" && !gs.player.jumping && gs.player.row > 0 && gs.player.row < gs.totalRows) {
+       gs.timeOnRow += dtSec;
+       if (gs.timeOnRow > 4.5) {
+          if (Math.random() < dtSec * 1.5) {
+             SoundManager.getInstance().play("shatter", 0.15);
+             gs.player.screenShakeX = (Math.random() - 0.5) * 6;
+             gs.player.screenShakeY = (Math.random() - 0.5) * 6;
+          }
+       }
     }
   }
 }
@@ -949,7 +977,7 @@ function renderPlayer(
   const screenY = player.worldY - camY;
 
   ctx.save();
-  ctx.translate(screenX + PANEL_W / 2, screenY + PANEL_H / 2);
+  ctx.translate(screenX + PANEL_W / 2 + player.screenShakeX, screenY + PANEL_H / 2 + player.screenShakeY);
   ctx.scale(player.facing, 1);
 
   const bob = player.jumping ? 0 : Math.sin(player.walkBob * 2) * 1.5;
@@ -1107,11 +1135,11 @@ interface TouchState {
   right: boolean;
 }
 
-function createGameState(seed: number): GameState {
+function createGameState(seed: number, difficulty: number): GameState {
   const startY = rowWorldY(0);
   return {
     phase: "playing", elimPhase: "none", elimTimer: 0,
-    panels: generateBridge(TOTAL_ROWS, seed),
+    panels: generateBridge(TOTAL_ROWS, seed, difficulty),
     currentRow: 0, totalRows: TOTAL_ROWS,
     player: {
       row: 0, col: null, worldY: startY, jumpT: 0, jumping: false, targetRow: 1, targetCol: 1,
@@ -1119,7 +1147,7 @@ function createGameState(seed: number): GameState {
     },
     camera: { y: startY - WORLD_H * 0.5, targetY: startY - WORLD_H * 0.5, shake: 0, shakeTimer: 0, shakeDecay: SHAKE_DECAY_RATE, zoom: 1, targetZoom: 1 },
     timeLeft: COUNTDOWN_TOTAL, elapsed: 0, slowMoMult: 1, particles: [], audioEvents: new Set(),
-    atmosphericT: 0, vignetteIntensity: 0.15, vignetteTarget: 0.15, flashAlpha: 0, fadeAlpha: 0, inputConsumed: false, seed, ambientDripTimer: 1, lateGameZoomActive: false,
+    atmosphericT: 0, vignetteIntensity: 0, vignetteTarget: 0, flashAlpha: 0, fadeAlpha: 0, inputConsumed: false, seed, ambientDripTimer: 0, lateGameZoomActive: false, timeOnRow: 0
   };
 }
 
@@ -1346,7 +1374,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
   const startGame = useCallback(() => {
     const seed = Date.now() ^ (Math.random() * 0xffffffff);
-    gsRef.current = createGameState(seed >>> 0);
+    gsRef.current = createGameState(seed >>> 0, 1);
     if (!assetsRef.current) {
       assetsRef.current = initBakedAssets();
     }
@@ -1476,19 +1504,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
       )}
 
       {uiPhase === "intro" && <IntroScreen onStart={startGame} />}
-
-      {(uiPhase === "gameover" || uiPhase === "victory") && (
-        <ResultScreen 
-          outcome={uiPhase === "victory" ? "victory" : "eliminated"}
-          score={finalScore}
-          statLine={uiPhase === "victory" ? "CROSSED THE BRIDGE" : `FELL AT PANEL ${finalRow}`}
-          survived={uiPhase === "victory" ? 1 : 0}
-          total={TOTAL_ROWS}
-          prize={uiPhase === "victory" ? 45600000000 : undefined}
-          onTryAgain={restartGame} 
-          onMenu={onExit ?? (() => {})} 
-        />
-      )}
 
       {uiPhase === "playing" && (
         <MobileTouchControls visible={isTouchDevice} inputRef={inputRef} />

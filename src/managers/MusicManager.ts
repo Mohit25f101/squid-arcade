@@ -50,12 +50,21 @@ export class MusicManager {
     }
     
     if (this._currentId === id) {
-       const currentHowl = this._howls.get(id);
-       if (currentHowl) {
-           currentHowl.off("end");
-           if (onEnd) currentHowl.on("end", onEnd);
+       const def = MUSIC_DEFS[id as MusicTrackId];
+       // Only early-return (prevent restart) for looping background music.
+       // Stingers (loop: false) MUST bypass this to guarantee Howler's
+       // internal play state and 'end' callbacks are cleanly reset.
+       if (def && def.loop) {
+           const currentHowl = this._howls.get(id);
+           if (currentHowl) {
+               currentHowl.off("end");
+               if (onEnd) currentHowl.on("end", onEnd);
+               if (!currentHowl.playing()) {
+                   currentHowl.play();
+               }
+           }
+           return;
        }
-       return;
     }
 
     this.stop(fadeMs);

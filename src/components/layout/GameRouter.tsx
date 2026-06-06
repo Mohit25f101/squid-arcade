@@ -32,6 +32,11 @@ export default function GameRouter() {
   // Stable ref — prevents duplicate event listener accumulation on shell mounts
   const handleExit = useCallback(() => setActiveGame("menu"), [setActiveGame]);
 
+  const [resetKey, setResetKey] = useState(0);
+  const handleRestart = useCallback(() => {
+    setResetKey(k => k + 1);
+  }, []);
+
   // FIX: handleComplete now records the game in session history and does NOT
   // immediately unmount the game. The game's own result screen stays mounted;
   // the user clicks "MENU" to return. This fixes Issues 1 & 5.
@@ -93,22 +98,19 @@ export default function GameRouter() {
         )}
 
         {activeGame === "glass-bridge" && (
-          <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
-            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+          <SceneWrapper key={`glass-bridge-${resetKey}`} transition={transitionState} showGlobalHUD={false} onExit={handleExit} onRestart={handleRestart}>
             <GlassBridge onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "red-light-green-light" && (
-          <SceneWrapper key="red-light-green-light" transition={transitionState} showGlobalHUD={false}>
-            {/* BUG FIX: handleComplete is now defined above and wired in here */}
+          <SceneWrapper key={`red-light-green-light-${resetKey}`} transition={transitionState} showGlobalHUD={false} onExit={handleExit} onRestart={handleRestart}>
             <RedLightGreenLight onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "dalgona" && (
-          <GameShell key="dalgona" worldW={390} worldH={844} transition={transitionState}>
-            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+          <GameShell key={`dalgona-${resetKey}`} worldW={390} worldH={844} transition={transitionState} onExit={handleExit} onRestart={handleRestart}>
             <DalgonaCandy onExit={handleExit} onComplete={handleComplete} />
           </GameShell>
         )}
@@ -121,13 +123,17 @@ function SceneWrapper({
   children,
   transition = "idle",
   showGlobalHUD = true,
+  onExit,
+  onRestart,
 }: {
   children: React.ReactNode;
   transition?: string;
   showGlobalHUD?: boolean;
+  onExit?: () => void;
+  onRestart?: () => void;
 }) {
   return (
-    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD}>
+    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD} onExit={onExit} onRestart={onRestart}>
       {children}
     </GameShell>
   );

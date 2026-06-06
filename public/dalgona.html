@@ -542,11 +542,11 @@ const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 20;
 
 // ── Physics constants (REBALANCED — HARDER) ──────────
 const BASE_STRESS = 0.00180;
-const INSTABILITY_MULT = 0.045;
+let INSTABILITY_MULT = 0.045;
 const EDGE_TO_INTEGRITY = 0.55;
 const FRACTURE_THRESHOLD = 0.35;
-const CARVE_RADIUS = 6;
-const ON_EDGE_TOL = 8;
+let CARVE_RADIUS = 6;
+let ON_EDGE_TOL = 8;
 const COMPLETION_WIN = 0.96;
 const SCRAPE_AUDIO_MS = 90;
 
@@ -951,6 +951,18 @@ function emitCrackSpark(x,y,severity){
   }
 }
 
+function emitToolSpark(x,y){
+  for(let i=0;i<2;i++){
+    const a=Math.random()*Math.PI*2;
+    const spd=Math.random()*3+1.5;
+    particles.push({
+      x,y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-2,
+      life:1, decay:0.1+Math.random()*0.05,
+      r:255, g:200, b:50, size:Math.random()*1.5+0.5
+    });
+  }
+}
+
 function pickShape(exclude){
   const all=Object.keys(SHAPES);
   const pool=exclude?all.filter(s=>s!==exclude):all;
@@ -1220,7 +1232,10 @@ function processCarve(){
     return;
   }
 
-  if(Math.random()<0.4) emitDust(needleX, needleY, 2);
+  if(Math.random()<0.4) {
+    emitDust(needleX, needleY, 2);
+    if(onEdge && Math.random()<0.5) emitToolSpark(needleX, needleY);
+  }
 
   const now = performance.now();
   if(now - lastScrapeAudio > SCRAPE_AUDIO_MS){
@@ -2122,7 +2137,24 @@ document.getElementById('back-btn').addEventListener('click', () => {
 // ── Boot sequence ─────────────────────────────────────
 window.addEventListener('resize', resize);
 resize();
-initGame(pickShape());
+
+const urlParams = new URLSearchParams(window.location.search);
+const diffParam = urlParams.get('diff') || 'normal';
+const levelParam = parseInt(urlParams.get('level') || '1', 10);
+
+if (diffParam === 'easy') {
+  ON_EDGE_TOL = 12; CARVE_RADIUS = 10; INSTABILITY_MULT = 0.03;
+} else if (diffParam === 'hard') {
+  ON_EDGE_TOL = 6; CARVE_RADIUS = 5; INSTABILITY_MULT = 0.06;
+}
+
+ON_EDGE_TOL = Math.max(2, ON_EDGE_TOL - (levelParam - 1));
+INSTABILITY_MULT = INSTABILITY_MULT * Math.pow(1.15, levelParam - 1);
+
+let shapeOptions = ['circle', 'triangle', 'star', 'umbrella'];
+let chosenShape = shapeOptions[Math.min(levelParam - 1, shapeOptions.length - 1)];
+
+initGame(chosenShape);
 setPhase('intro');
 rafId = requestAnimationFrame(loop);
 </script>

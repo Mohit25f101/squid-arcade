@@ -184,8 +184,13 @@ export interface GameStoreState {
 
   startNewSession: () => void;
   recordGameCompletion: (payload: { gameId: GameId; score: number; outcome: "victory" | "eliminated"; timestamp: number }) => void;
+  resetSessionStats: () => void;
   setView: (view: "menu" | "briefing" | "game" | "result" | "session-end" | "leaderboard") => void;
   markGamePlayed: (gameId: GameId) => void;
+
+  dalgonaLevel: number;
+  incrementDalgonaLevel: () => void;
+  resetDalgonaLevel: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -475,14 +480,17 @@ export const useGameStore = create<GameStoreState>()(
     sessionHistory: [],
     currentView: "menu",
     hasPlayedBefore: {},
+    dalgonaLevel: 1,
 
-    startNewSession: () => set({ sessionId: crypto.randomUUID(), sessionHistory: [], currentView: "menu" }),
+    startNewSession: () => set({ sessionId: crypto.randomUUID(), sessionHistory: [], currentView: "menu", dalgonaLevel: 1 }),
     recordGameCompletion: (payload) => set((state) => ({
-      sessionHistory: [...state.sessionHistory, { gameId: payload.gameId, score: payload.score, outcome: payload.outcome }],
-      currentView: "result"
+      sessionHistory: [...state.sessionHistory, payload]
     })),
+    resetSessionStats: () => set({ sessionHistory: [] }),
     setView: (view) => set({ currentView: view }),
     markGamePlayed: (gameId) => set((state) => ({ hasPlayedBefore: { ...state.hasPlayedBefore, [gameId]: true } })),
+    incrementDalgonaLevel: () => set((state) => ({ dalgonaLevel: state.dalgonaLevel + 1 })),
+    resetDalgonaLevel: () => set({ dalgonaLevel: 1 }),
   }))
 );
 
