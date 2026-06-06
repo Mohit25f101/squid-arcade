@@ -1,1634 +1,1425 @@
+// src/components/games/RedLightGreenLight.tsx
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
-import { audioEventBus } from '../../lib/audio/AudioEventBus';
-import { useHUDSync } from "@/components/hud/useHUDSync";
+
 import React, {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useCallback,
+  Suspense,
 } from "react";
-import { useGameStore } from "../../store/gameStore";
-import { useOptimizedGameLoop } from "@/hooks/useOptimizedGameLoop";
-import { useAdaptiveQuality } from "@/hooks/useAdaptiveQuality";
-import { useCanvasScale } from "@/hooks/useCanvasScale";
-import { useSceneCleanup } from "@/hooks/useSceneCleanup";
-import MobileTouchControls from "@/components/touch/MobileTouchControls";
-import CanvasWrapper, { type CanvasWrapperHandle, type CanvasSize } from "../canvas/CanvasWrapper";
-import { useGameAudio } from "../../hooks/useAmbientAudio";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import {
+  Environment,
+  Float,
+  Html,
+  Sky,
+  Stars,
+  ContactShadows,
+  Line,
+} from "@react-three/drei";
+import * as THREE from "three";
+import { useGameStore } from "@/store/gameStore";
+import { inputManager } from "@/managers/InputManager";
 import { SoundManager } from "@/managers/SoundManager";
-import { drawMinecraftCharacter } from "@/lib/render/drawMinecraftCharacter";
+import { MusicManager } from "@/managers/MusicManager";
+import {
+  RLGLDoll,
+  RLGLGuard,
+  RLGLContestant,
+} from "@/components/r3f/models";
 
-// ─── Design Constants ─────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+ * CONSTANTS — world layout, gameplay tunables
+ * ────────────────────────────────────────────────────────────────────────────*/
 
-const DW = 1280;
-const DH = 720;
+const FIELD_LEN          = 90;          
+const FIELD_WIDTH        = 30;
+const FINISH_Z           = -10;         
+const START_Z            = FIELD_LEN - 10;
+const PLAYER_SPEED       = 8.0;
+const PLAYER_SPRINT_MULT = 1.55;
+const TURN_DURATION      = 0.55;        
+const GRACE_PERIOD       = 0.25;        
+const VELOCITY_DEADZONE  = 0.02;        
+const RED_DURATION_BASE  = 3.2;         
+const RED_DURATION_MIN   = 2.0;
+const MOVE_THRESHOLD     = 0.05;        
+const NPC_COUNT          = 18;
 
-const GROUND_Y       = DH - 110;
-const PLAYER_W       = 36;
-const PLAYER_H       = 56;
-const FINISH_X       = DW * 6.5;
-const START_X        = 160;
-const DOLL_WORLD_X   = FINISH_X + 60;
+// Difficulty-based timer constants
+const TIMER_EASY   = 60;  // Easy = 60 seconds
+const TIMER_MEDIUM = 45;  // Medium = 45 seconds
+const TIMER_HARD   = 30;  // Hard = 30 seconds
 
-const ACCEL          = 980;
-const DECEL          = 1400;
-const MAX_SPEED_BASE = 320;
-const SPRINT_MULT    = 1.55;
-const JUMP_FORCE     = -510;
-const GRAVITY        = 880;
-const MAX_FALL       = 1100;
+/* ─────────────────────────────────────────────────────────────────────────────
+ * STATE MACHINE ENUMS
+ * ────────────────────────────────────────────────────────────────────────────*/
 
-const SAFE_VELOCITY_THRESHOLD = 18;
-const GRACE_PERIOD_MS         = 380;
-const FAKE_OUT_TURN_BACK_MS   = 260;
+export enum LightPhase {
+  GREEN = "green",
+  WARNING = "warning",
+  RED = "red"
+}
 
-const GREEN_BASE     = 4.25;
-const RED_BASE       = 3.0;
-const TURN_DUR       = 0.42;
-const WARNING_DUR    = 0.55;
+export enum GamePhase {
+  COUNTDOWN = "countdown",
+  PLAYING = "playing",
+  ELIMINATED = "eliminated",
+  VICTORY = "victory",
+  TIMEOUT = "timeout"
+}
 
-const NPC_COUNT      = 14;
-const NPC_LANES      = 7;
-
-const CAM_LEAD_X     = 0.32;
-const CAM_LERP       = 6;
-
-const DOLL_SIZE      = 78;
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type LightPhase = "green" | "warning" | "turning" | "red" | "fake_out";
-type EliminationPhase = "none" | "impact" | "slow_mo" | "showing";
-type PlayerStatus = "alive" | "eliminating" | "eliminated" | "finished";
-
-interface Player {
+interface PlayerEntity {
   id: number;
-  wx: number;
-  wy: number;
-  vy: number;
-  vx: number;
-  onGround: boolean;
-  status: PlayerStatus;
-  laneY: number;
-  opacity: number;
-  scaleX: number;
-  scaleY: number;
-  facing: 1 | -1;
-  animPhase: number;
-  lastStepVx: number;
-  stepTimer: number;
-  isNPC: boolean;
-  npcSpeed: number;
-  npcReactDelay: number;
-  npcReactTimer: number;
-  elimTimer: number;
-  hitFlashTimer: number;
-  score: number;
-}
-
-interface DollState {
-  angle: number;
-  targetAngle: number;
-  phase: LightPhase;
-  stateTimer: number;
-  gracePct: number;
-  eyeOpen: boolean;
-  eyeBlinkT: number;
-  fakeOutTimer: number;
-}
-
-interface CameraState {
   x: number;
-  shake: number;
-  shakeTimer: number;
-  shakeDecay: number;
-}
-
-interface ParticleData {
-  x: number;
-  y: number;
+  z: number;
   vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  r: number;
-  color: string;
-  type: "dust" | "spark" | "blood";
+  vz: number;
+  alive: boolean;
+  finished: boolean;
+  isHuman: boolean;
+  number: number;
+  npcStopOffsetMs: number; 
+  npcResumeOffsetMs: number;
+  npcStopTimer: number;
+  npcResumeTimer: number;
+  npcMoving: boolean;
+  fallProgress: number;
+  fallAxis: [number, number, number];
 }
 
-interface GameState {
-  phase: "countdown" | "playing" | "eliminating" | "gameover" | "victory";
-  lightPhase: LightPhase;
-  elimPhase: EliminationPhase;
-  elapsed: number;
-  timeLeft: number;
-  totalTime: number;
-  countdown: number;
-  graceMsLeft: number;
-  slowMoMult: number;
-  players: Player[];
-  doll: DollState;
-  camera: CameraState;
-  particles: ParticleData[];
-  difficulty: number;
-  round: number;
-  fakeOutProb: number;
-  aliveCount: number;
-  playerScore: number;
-  inputLeft: boolean;
-  inputRight: boolean;
-  inputJump: boolean;
-  inputSprint: boolean;
-  audioEvents: Set<string>;
-}
-
-// ─── Colour Palette ───────────────────────────────────────────────────────────
-
-const C = {
-  bg0:        "#050810",
-  bg1:        "#0b1220",
-  ground:     "#111827",
-  groundTop:  "#1e293b",
-  groundGrid: "#1a2440",
-  accent:     "#00f5c4",
-  danger:     "#ff3d5a",
-  warn:       "#f97316",
-  green:      "#22c55e",
-  red:        "#ef4444",
-  muted:      "rgba(255,255,255,0.32)",
-  white:      "#ffffff",
-  dollPink:   "#f472b6",
-  dollDress:  "#be185d",
-  dollHair:   "#1c1917",
-  dollFace:   "#fde68a",
-  finish:     "#fbbf24",
-  blood:      "#dc2626",
-  dust:       "rgba(200,210,230,0.6)",
-  spark:      "#fef08a",
-} as const;
-
-// ─── Pure Utilities ───────────────────────────────────────────────────────────
-
-function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
-function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)); }
-function lerpAngle(a: number, b: number, t: number): number {
-  let d = b - a;
-  while (d > Math.PI)  d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
-}
-
-// ─── Factory Functions ────────────────────────────────────────────────────────
-
-function makePlayer(id: number, isNPC: boolean): Player {
-  const lane  = isNPC ? (id % NPC_LANES) : 0;
-  const laneY = GROUND_Y - lane * 3.5 - PLAYER_H;
-  return {
-    id,
-    wx:            START_X - (isNPC ? Math.random() * 80 : 0),
-    wy:            laneY,
-    vy:            0,
-    vx:            0,
-    onGround:      true,
-    status:        "alive",
-    laneY,
-    opacity:       1,
-    scaleX:        1,
-    scaleY:        1,
-    facing:        1,
-    animPhase:     Math.random() * Math.PI * 2,
-    lastStepVx:    0,
-    stepTimer:     0,
-    isNPC,
-    npcSpeed:      MAX_SPEED_BASE * (0.55 + Math.random() * 0.6),
-    npcReactDelay: 0.1 + Math.random() * 0.25,
-    npcReactTimer: 0,
-    elimTimer:     0,
-    hitFlashTimer: 0,
-    score:         0,
-  };
-}
-
-function makeDoll(): DollState {
-  return {
-    angle: 0, targetAngle: 0,
-    phase: "green", stateTimer: GREEN_BASE,
-    gracePct: 0, eyeOpen: true,
-    eyeBlinkT: 2 + Math.random() * 2, fakeOutTimer: 0,
-  };
-}
-
-function makeCamera(): CameraState {
-  return { x: 0, shake: 0, shakeTimer: 0, shakeDecay: 8 };
-}
-
-function makeGameState(diffNum: number): GameState {
-  const players: Player[] = [makePlayer(0, false)];
-  for (let i = 1; i <= NPC_COUNT; i++) players.push(makePlayer(i, true));
-
-  return {
-    phase: "countdown", lightPhase: "green", elimPhase: "none",
-    elapsed: 0, timeLeft: 90, totalTime: 90, countdown: 3,
-    graceMsLeft: 0, slowMoMult: 1,
-    players, doll: makeDoll(), camera: makeCamera(),
-    particles: [], difficulty: diffNum, round: 1, fakeOutProb: 0.08,
-    aliveCount: NPC_COUNT + 1, playerScore: 0,
-    inputLeft: false, inputRight: false, inputJump: false, inputSprint: false,
-    audioEvents: new Set(),
-  };
-}
-
-// ─── Draw Helpers ─────────────────────────────────────────────────────────────
-
-function drawBackground(ctx: CanvasRenderingContext2D, camX: number, gs: GameState): void {
-  const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  const danger = gs.lightPhase === "red" ? 0.22 : gs.lightPhase === "warning" ? 0.12 : 0;
-  const dangerR = Math.floor(lerp(5,  40, danger));
-  const dangerG = Math.floor(lerp(8,   5, danger));
-  sky.addColorStop(0, `rgb(${dangerR},${dangerG},16)`);
-  sky.addColorStop(1, `rgb(${dangerR + 6},${dangerG + 8},32)`);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, DW, GROUND_Y);
-
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  for (let i = 0; i < 70; i++) {
-    const sx = ((i * 79.3 + camX * 0.04) % DW + DW) % DW;
-    const sy = (i * 43.7) % (GROUND_Y * 0.8);
-    const r  = 0.4 + (i % 4) * 0.4;
-    ctx.globalAlpha = 0.2 + (i % 5) * 0.12;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  ctx.fillStyle = "rgba(15,22,40,0.9)";
-  for (let i = 0; i < 18; i++) {
-    const bx = ((i * 157 - camX * 0.06) % (DW + 120) + DW + 120) % (DW + 120) - 60;
-    const bh = 60 + (i * 37 % 80);
-    const bw = 28 + (i * 13 % 30);
-    ctx.fillRect(bx, GROUND_Y - bh, bw, bh);
-  }
-}
-
-function drawGround(ctx: CanvasRenderingContext2D, camX: number): void {
-  ctx.fillStyle = C.ground;
-  ctx.fillRect(0, GROUND_Y, DW, DH - GROUND_Y);
-  ctx.fillStyle = C.groundTop;
-  ctx.fillRect(0, GROUND_Y, DW, 3);
-
-  ctx.strokeStyle = C.groundGrid;
-  ctx.lineWidth   = 1;
-  const gridSize  = 80;
-  const gOff      = camX % gridSize;
-  ctx.beginPath();
-  for (let x = -gOff; x < DW + gridSize; x += gridSize) {
-    ctx.moveTo(x, GROUND_Y);
-    ctx.lineTo(x, DH);
-  }
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(255,255,255,0.03)";
-  ctx.lineWidth   = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, GROUND_Y + 30);
-  ctx.lineTo(DW, GROUND_Y + 30);
-  ctx.moveTo(0, GROUND_Y + 70);
-  ctx.lineTo(DW, GROUND_Y + 70);
-  ctx.stroke();
-}
-
-function drawFinishLine(ctx: CanvasRenderingContext2D, camX: number): void {
-  const sx = FINISH_X - camX;
-  if (sx < -60 || sx > DW + 60) return;
-
-  const grd = ctx.createLinearGradient(sx - 30, 0, sx + 30, 0);
-  grd.addColorStop(0,   "rgba(251,191,36,0)");
-  grd.addColorStop(0.5, "rgba(251,191,36,0.22)");
-  grd.addColorStop(1,   "rgba(251,191,36,0)");
-  ctx.fillStyle = grd;
-  ctx.fillRect(sx - 30, 0, 60, DH);
-
-  const tW = 16, tH = 20;
-  const rows = Math.ceil(GROUND_Y / tH);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < 2; c++) {
-      ctx.fillStyle = (r + c) % 2 === 0 ? C.finish : "rgba(255,255,255,0.92)";
-      ctx.fillRect(sx - tW + c * tW, r * tH, tW, tH);
-    }
-  }
-
-  ctx.fillStyle   = C.finish;
-  ctx.font        = "bold 13px JetBrains Mono, monospace";
-  ctx.textAlign   = "center";
-  ctx.fillText("FINISH", sx, GROUND_Y - 8);
-}
-
-function drawDoll(ctx: CanvasRenderingContext2D, doll: DollState, camX: number, gs: GameState): void {
-  const sx = DOLL_WORLD_X - camX;
-  if (sx < -DOLL_SIZE * 2 || sx > DW + DOLL_SIZE * 2) return;
-
-  const S  = DOLL_SIZE;
-  const HS = S / 2;
-
-  ctx.save();
-  ctx.translate(sx, GROUND_Y - S * 0.18);
-  ctx.rotate(doll.angle);
-
-  ctx.save();
-  ctx.rotate(-doll.angle);
-  ctx.fillStyle   = "rgba(0,0,0,0.35)";
-  ctx.scale(1, 0.3);
-  ctx.beginPath();
-  ctx.ellipse(0, S * 0.85, S * 0.45, S * 0.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.fillStyle   = C.dollDress;
-  ctx.beginPath();
-  ctx.moveTo(-HS * 0.42, 0);
-  ctx.bezierCurveTo(-HS * 0.42, S * 0.35, -HS * 0.82, S * 0.75, -HS * 0.72, S * 0.82);
-  ctx.lineTo(HS * 0.72, S * 0.82);
-  ctx.bezierCurveTo(HS * 0.82, S * 0.75, HS * 0.42, S * 0.35, HS * 0.42, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.beginPath();
-  ctx.moveTo(-HS * 0.3, 0);
-  ctx.bezierCurveTo(-HS * 0.3, S * 0.3, -HS * 0.55, S * 0.6, -HS * 0.5, S * 0.78);
-  ctx.lineTo(0, S * 0.78);
-  ctx.lineTo(0, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = C.dollPink;
-  ctx.beginPath();
-  ctx.roundRect(-HS * 0.36, -S * 0.06, HS * 0.72, S * 0.46, 4);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.lineWidth   = 1.5;
-  ctx.beginPath();
-  ctx.arc(0, 0, S * 0.14, Math.PI * 0.85, Math.PI * 0.15);
-  ctx.stroke();
-
-  ctx.fillStyle = C.dollFace;
-  ctx.beginPath();
-  ctx.arc(0, -S * 0.26, S * 0.23, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = C.dollHair;
-  ctx.beginPath();
-  ctx.arc(0, -S * 0.34, S * 0.23, Math.PI, 0);
-  ctx.fill();
-  ctx.fillRect(-S * 0.23, -S * 0.41, S * 0.46, S * 0.1);
-
-  const pt = [[-S * 0.28, -S * 0.32], [S * 0.28, -S * 0.32]] as const;
-  for (const [px, py] of pt) {
-    ctx.fillStyle = C.dollHair;
-    ctx.beginPath();
-    ctx.arc(px, py, S * 0.075, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#db2777";
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    ctx.arc(px, py + S * 0.06, S * 0.04, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  if (doll.eyeOpen) {
-    const isDanger  = gs.lightPhase === "red";
-    const isWarning = gs.lightPhase === "warning" || gs.lightPhase === "turning";
-    const eyeCol    = isDanger ? C.red : isWarning ? C.warn : "#1c1917";
-    const eyeR      = isDanger ? S * 0.048 : S * 0.034;
-
-    for (const ex of [-S * 0.096, S * 0.096]) {
-      if (isDanger) {
-        ctx.shadowBlur  = 16;
-        ctx.shadowColor = C.red;
-      }
-      ctx.fillStyle = eyeCol;
-      ctx.beginPath();
-      ctx.arc(ex, -S * 0.28, eyeR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.beginPath();
-      ctx.arc(ex - eyeR * 0.3, -S * 0.28 - eyeR * 0.3, eyeR * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else {
-    ctx.strokeStyle = "#92400e";
-    ctx.lineWidth   = 1.5;
-    for (const ex of [-S * 0.096, S * 0.096]) {
-      ctx.beginPath();
-      ctx.arc(ex, -S * 0.275, S * 0.034, 0, Math.PI);
-      ctx.stroke();
-    }
-  }
-
-  ctx.strokeStyle = "#92400e";
-  ctx.lineWidth   = 1.8;
-  ctx.lineCap     = "round";
-  const isRed     = gs.lightPhase === "red";
-  ctx.beginPath();
-  if (isRed) {
-    ctx.moveTo(-S * 0.1, -S * 0.15);
-    ctx.lineTo( S * 0.1, -S * 0.15);
-  } else {
-    ctx.arc(0, -S * 0.17, S * 0.08, 0.15, Math.PI - 0.15);
-  }
-  ctx.stroke();
-  ctx.lineCap = "butt";
-
-  const orbCol = gs.lightPhase === "red" ? C.red
-    : gs.lightPhase === "warning" ? C.warn
-    : gs.lightPhase === "turning" ? C.warn
-    : C.green;
-  ctx.shadowBlur  = 24;
-  ctx.shadowColor = orbCol;
-  ctx.fillStyle   = orbCol;
-  ctx.beginPath();
-  ctx.arc(0, -S * 0.62, S * 0.1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur  = 0;
-
-  ctx.fillStyle   = "rgba(255,255,255,0.5)";
-  ctx.beginPath();
-  ctx.arc(-S * 0.03, -S * 0.645, S * 0.03, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-// ─── NEW: Minecraft Character Drawer ──────────────────────────────────────────
-
-function drawPlayer(
-  ctx: CanvasRenderingContext2D,
-  p: Player,
-  camX: number,
-  isHuman: boolean,
-  gs: GameState
-): void {
-  const sx = p.wx - camX;
-  if (sx < -PLAYER_W * 3 || sx > DW + PLAYER_W * 3) return;
-  if (p.status === "finished") return;
-
-  const state = p.status === "eliminating"
-    ? "hit"
-    : !p.onGround
-      ? "jumping"
-      : Math.abs(p.vx) > 10
-        ? "running"
-        : "idle";
-
-  drawMinecraftCharacter(ctx, {
-    x:            sx,
-    y:            p.wy,
-    width:        PLAYER_W,
-    height:       PLAYER_H,
-    facing:       p.facing,
-    animPhase:    p.animPhase,
-    opacity:      p.opacity,
-    scaleX:       p.scaleX,
-    scaleY:       p.scaleY,
-    
-    // THE FIX: Forces everyone to be a "player" and assigns unique numbers
-    role:         "player",
-    playerNumber: isHuman ? 456 : (p.id + 6), 
-    
-    state,
-    hitFlash:     p.hitFlashTimer,
-  });
-}
-
-function drawParticles(ctx: CanvasRenderingContext2D, particles: ParticleData[], camX: number): void {
-  for (const p of particles) {
-    const t    = p.life / p.maxLife;
-    const alpha = p.type === "dust"
-      ? (t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7) * 0.7
-      : (1 - t);
-
-    ctx.save();
-    ctx.globalAlpha = clamp(alpha, 0, 1);
-    ctx.fillStyle   = p.color;
-
-    if (p.type === "spark") {
-      ctx.shadowBlur  = 6;
-      ctx.shadowColor = p.color;
-    }
-
-    ctx.beginPath();
-    ctx.arc(p.x - camX, p.y, p.r * (1 - t * 0.5), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function drawEnvironmentLighting(ctx: CanvasRenderingContext2D, gs: GameState): void {
-  const lp = gs.lightPhase;
-
-  if (lp === "red" || lp === "warning" || lp === "turning") {
-    const beamCol = lp === "red" ? "rgba(239,68,68,0.13)" : "rgba(249,115,22,0.08)";
-    const grd = ctx.createLinearGradient(DW, 0, 0, 0);
-    grd.addColorStop(0,   beamCol);
-    grd.addColorStop(0.6, "rgba(0,0,0,0)");
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, DW, DH);
-  }
-
-  if (lp === "green") {
-    const grd = ctx.createLinearGradient(DW, 0, 0, 0);
-    grd.addColorStop(0,   "rgba(34,197,94,0.07)");
-    grd.addColorStop(0.7, "rgba(0,0,0,0)");
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, DW, DH);
-  }
-
-  const vigStr = lp === "red" ? 0.72 : lp === "warning" ? 0.5 : 0.38;
-  const vig    = ctx.createRadialGradient(
-    DW / 2, DH / 2, DH * 0.2,
-    DW / 2, DH / 2, DH * 0.92
-  );
-  vig.addColorStop(0, "rgba(0,0,0,0)");
-  vig.addColorStop(1, `rgba(0,0,0,${vigStr})`);
-  ctx.fillStyle = vig;
-  ctx.fillRect(0, 0, DW, DH);
-
-  if (lp === "red") {
-    // 1. Red pulsing vignette
-    const pulse = 0.5 + Math.sin(Date.now() * 0.004) * 0.5;
-    const redV  = ctx.createRadialGradient(DW, DH / 2, 0, DW, DH / 2, DW * 0.9);
-    redV.addColorStop(0,   `rgba(239,68,68,${0.08 * pulse})`);
-    redV.addColorStop(0.5, `rgba(239,68,68,${0.04 * pulse})`);
-    redV.addColorStop(1,   "rgba(0,0,0,0)");
-    ctx.fillStyle = redV;
-    ctx.fillRect(0, 0, DW, DH);
-
-    // 2. NEW: Terrifying Scanner Laser Sweep
-    const sweepPct = (Date.now() % 1200) / 1200; // Sweeps across every 1.2 seconds
-    const laserX = DW - (DW * sweepPct); // Sweeps right to left toward the player
-    
-    // Core laser line
-    ctx.fillStyle = "rgba(255, 30, 30, 0.9)";
-    ctx.fillRect(laserX, 0, 4, DH);
-    
-    // Laser glow
-    const lg = ctx.createLinearGradient(laserX - 60, 0, laserX + 60, 0);
-    lg.addColorStop(0, "rgba(255,0,0,0)");
-    lg.addColorStop(0.5, "rgba(255,0,0,0.25)");
-    lg.addColorStop(1, "rgba(255,0,0,0)");
-    ctx.fillStyle = lg;
-    ctx.fillRect(laserX - 60, 0, 120, DH);
-  }
-}
-
-function drawHUD(ctx: CanvasRenderingContext2D, gs: GameState): void {
-  const human    = gs.players[0];
-  const progress = clamp((human.wx - START_X) / (FINISH_X - START_X), 0, 1);
-
-  const bX = 40, bY = 18, bW = DW - 80, bH = 9;
-
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.beginPath();
-  ctx.roundRect(bX, bY, bW, bH, 4.5);
-  ctx.fill();
-
-  const bCol = gs.lightPhase === "red" ? C.red : C.green;
-  ctx.fillStyle   = bCol;
-  ctx.shadowBlur  = 10;
-  ctx.shadowColor = bCol;
-  ctx.beginPath();
-  ctx.roundRect(bX, bY, bW * progress, bH, 4.5);
-  ctx.fill();
-  ctx.shadowBlur  = 0;
-
-  const pipX = bX + bW * progress;
-  ctx.fillStyle   = C.warn;
-  ctx.shadowBlur  = 12;
-  ctx.shadowColor = C.warn;
-  ctx.beginPath();
-  ctx.arc(pipX, bY + bH / 2, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.shadowBlur  = 0;
-
-  for (let i = 1; i < gs.players.length; i++) {
-    const np = gs.players[i];
-    if (np.status !== "alive") continue;
-    const npPct = clamp((np.wx - START_X) / (FINISH_X - START_X), 0, 1);
-    ctx.fillStyle = "rgba(232,67,138,0.6)";
-    ctx.beginPath();
-    ctx.arc(bX + bW * npPct, bY + bH / 2, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.fillStyle = C.muted;
-  ctx.font      = "10px JetBrains Mono, monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("START", bX, bY + bH + 14);
-  ctx.textAlign = "right";
-  ctx.fillText("FINISH", bX + bW, bY + bH + 14);
-
-  const tl   = Math.max(0, gs.timeLeft);
-  const tMin = Math.floor(tl / 60);
-  const tSec = Math.floor(tl % 60);
-  const tCol = tl < 10 ? C.danger : tl < 20 ? C.warn : C.white;
-
-  ctx.font        = "bold 30px Rajdhani, sans-serif";
-  ctx.fillStyle   = tCol;
-  ctx.textAlign   = "center";
-  if (tl < 10) { ctx.shadowBlur = 18; ctx.shadowColor = C.danger; }
-  ctx.fillText(
-    `${tMin.toString().padStart(2, "0")}:${tSec.toString().padStart(2, "0")}`,
-    DW / 2, 58
-  );
-  ctx.shadowBlur = 0;
-
-  const liLabel = gs.lightPhase === "green"   ? "● GREEN LIGHT"
-    : gs.lightPhase === "red"     ? "● RED LIGHT"
-    : gs.lightPhase === "warning" ? "◉ WARNING"
-    : gs.lightPhase === "fake_out"? "○ ..."
-    : "◐ TURNING";
-  const liCol = gs.lightPhase === "green"   ? C.green
-    : gs.lightPhase === "red"     ? C.red
-    : gs.lightPhase === "warning" || gs.lightPhase === "turning"
-    ? C.warn : C.muted;
-
-  ctx.font        = "bold 13px Rajdhani, sans-serif";
-  ctx.fillStyle   = liCol;
-  ctx.textAlign   = "center";
-  ctx.shadowBlur  = 14;
-  ctx.shadowColor = liCol;
-  ctx.fillText(liLabel, DW / 2, 78);
-  ctx.shadowBlur  = 0;
-
-  ctx.font        = "bold 12px JetBrains Mono, monospace";
-  ctx.fillStyle   = C.muted;
-  ctx.textAlign   = "left";
-  ctx.fillText(`ALIVE  ${gs.aliveCount}/${NPC_COUNT + 1}`, 44, 62);
-
-  ctx.fillStyle   = C.accent;
-  ctx.textAlign   = "right";
-  ctx.fillText(gs.playerScore.toString().padStart(7, "0"), DW - 44, 62);
-
-  ctx.fillStyle   = "rgba(255,255,255,0.18)";
-  ctx.font        = "10px JetBrains Mono, monospace";
-  ctx.fillText(`ROUND ${gs.round}   LVL ${gs.difficulty.toFixed(1)}`, DW - 44, 79);
-
-  if (gs.graceMsLeft > 0) {
-    const gpct = gs.graceMsLeft / GRACE_PERIOD_MS;
-    ctx.fillStyle = `rgba(249,115,22,${gpct * 0.6})`;
-    ctx.font      = `bold ${Math.round(16 + gpct * 6)}px Rajdhani, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.fillText("STOP!", DW / 2, DH - 60);
-  }
-}
-
-// ─── Light State Machine ──────────────────────────────────────────────────────
-
-function updateLightStateMachine(gs: GameState, dt: number): void {
-  const doll = gs.doll;
-  doll.stateTimer -= dt;
-
-  doll.eyeBlinkT -= dt;
-  if (doll.eyeBlinkT <= 0) {
-    doll.eyeOpen  = !doll.eyeOpen;
-    doll.eyeBlinkT = doll.eyeOpen ? 2 + Math.random() * 3 : 0.1;
-  }
-
-  const angleDist = Math.abs(doll.targetAngle - doll.angle);
-  if (angleDist > 0.005) {
-    doll.angle = lerpAngle(doll.angle, doll.targetAngle, Math.min(1, dt / TURN_DUR * 3.5));
-  } else {
-    doll.angle = doll.targetAngle;
-  }
-
-  if (doll.stateTimer <= 0) {
-switch (doll.phase) {
-      case "green": {
-        // Audio finishes exactly as this timer hits 0. Trigger warning immediately.
-        doll.phase       = "warning";
-        doll.stateTimer  = WARNING_DUR / gs.difficulty;
-        gs.lightPhase    = "warning";
-        gs.audioEvents.add("warning");
-        break;
-      }
-      case "fake_out": {
-        // Unused in perfect-sync mode, but kept for state safety
-        break;
-      }
-      case "warning": {
-        doll.phase       = "turning";
-        doll.targetAngle = Math.PI;
-        doll.stateTimer  = TURN_DUR / gs.difficulty;
-        gs.graceMsLeft   = GRACE_PERIOD_MS;
-        gs.audioEvents.add("doll_turn");
-        break;
-      }
-      case "turning": {
-        doll.phase       = "red";
-        doll.stateTimer  = RED_BASE / gs.difficulty; 
-        gs.lightPhase    = "red";
-        gs.audioEvents.add("red_light");
-        gs.audioEvents.add("heartbeat_start"); // NEW: Start pumping heartbeat
-        break;
-      }
-      case "red": {
-        doll.phase       = "green";
-        doll.targetAngle = 0;
-        doll.stateTimer  = GREEN_BASE / gs.difficulty; 
-        gs.lightPhase    = "green";
-        gs.audioEvents.add("green_light");
-        gs.audioEvents.add("heartbeat_stop"); // NEW: Instant relief silence
-        break;
-      }
-    }
-  }
-
-  if (gs.graceMsLeft > 0) {
-    gs.graceMsLeft -= dt * 1000;
-    if (gs.graceMsLeft < 0) gs.graceMsLeft = 0;
-  }
-}
-
-// ─── Player Update ────────────────────────────────────────────────────────────
-
-function updatePlayer(p: Player, gs: GameState, dt: number, isHuman: boolean): void {
-  if (p.status !== "alive") return;
-
-  const prevVx  = p.vx;
-  const maxSpeed= (isHuman
-    ? MAX_SPEED_BASE * (gs.inputSprint ? SPRINT_MULT : 1)
-    : p.npcSpeed) * (0.7 + gs.difficulty * 0.15);
-
-  if (isHuman) {
-    if (gs.inputRight) {
-      p.vx     = Math.min(p.vx + ACCEL * dt, maxSpeed);
-      p.facing = 1;
-    } else if (gs.inputLeft) {
-      p.vx     = Math.max(p.vx - ACCEL * dt, -maxSpeed * 0.5);
-      p.facing = -1;
-    } else {
-      if (p.vx > 0) p.vx = Math.max(0, p.vx - DECEL * dt);
-      if (p.vx < 0) p.vx = Math.min(0, p.vx + DECEL * dt);
-    }
-
-    if (gs.inputJump && p.onGround) {
-      p.vy       = JUMP_FORCE;
-      p.onGround = false;
-      p.scaleX   = 0.72;
-      p.scaleY   = 1.28;
-      gs.audioEvents.add("jump");
-      spawnDust(gs, p.wx, p.wy, 4);
-    }
-  } else {
-    p.npcReactTimer -= dt;
-
-    const npcShouldMove = gs.lightPhase === "green" ||
-      (gs.lightPhase === "turning" && gs.graceMsLeft > 100);
-
-    if (npcShouldMove && p.npcReactTimer <= 0) {
-      p.vx     = Math.min(p.vx + ACCEL * dt * 0.7, p.npcSpeed);
-      p.facing = 1;
-    } else if (!npcShouldMove) {
-      if (p.npcReactTimer <= -p.npcReactDelay) {
-        if (p.vx > 0) p.vx = Math.max(0, p.vx - DECEL * dt * 0.9);
-      }
-    }
-
-    if (p.onGround && Math.random() < 0.003) {
-      p.vy       = JUMP_FORCE * 0.6;
-      p.onGround = false;
-    }
-  }
-
-  if (!p.onGround) {
-    p.vy += GRAVITY * dt;
-    p.vy  = Math.min(p.vy, MAX_FALL);
-    p.wy += p.vy * dt;
-
-    if (p.wy >= p.laneY) {
-      p.wy       = p.laneY;
-      p.vy       = 0;
-      p.onGround = true;
-
-      if (prevVx !== 0 || Math.abs(p.vy) > 50) {
-        p.scaleX = 1.25;
-        p.scaleY = 0.78;
-        if (isHuman) gs.audioEvents.add("land");
-        spawnDust(gs, p.wx, p.wy + PLAYER_H, 3);
-      }
-    }
-  }
-
-  p.wx = Math.max(START_X, p.wx + p.vx * dt);
-
-  p.scaleX = lerp(p.scaleX, 1, Math.min(1, dt * 12));
-  p.scaleY = lerp(p.scaleY, 1, Math.min(1, dt * 12));
-
-  const isMoving = Math.abs(p.vx) > 10;
-  if (isMoving) {
-    p.animPhase += dt * Math.abs(p.vx) * 0.055;
-
-    if (isHuman && p.onGround) {
-      p.stepTimer -= dt;
-      if (p.stepTimer <= 0) {
-        p.stepTimer = 0.22 - Math.min(0.12, Math.abs(p.vx) * 0.0003);
-        gs.audioEvents.add("step");
-        spawnDust(gs, p.wx, p.wy + PLAYER_H, 1);
-      }
-    }
-  }
-
-  if (p.hitFlashTimer > 0) {
-    p.hitFlashTimer = Math.max(0, p.hitFlashTimer - dt * 3);
-  }
-
-  if (p.wx >= FINISH_X) {
-    p.status = "finished";
-    if (isHuman) {
-      gs.audioEvents.add("victory");
-      gs.phase = "victory";
-    }
-  }
-}
-
-// ─── Movement Detection ───────────────────────────────────────────────────────
-
-function checkEliminationForPlayer(p: Player, gs: GameState, isHuman: boolean): boolean {
-  if (gs.lightPhase !== "red") return false;
-  if (gs.graceMsLeft > 0)      return false;
-  if (p.status !== "alive")    return false;
-
-  const speed = Math.abs(p.vx) + Math.abs(p.vy) * 0.5;
-  const caught = speed > SAFE_VELOCITY_THRESHOLD;
-
-  if (caught) {
-    p.status        = "eliminating";
-    p.hitFlashTimer = 1;
-    spawnBlood(gs, p.wx, p.wy);
-    spawnSpark(gs, p.wx, p.wy, 8);
-
-    if (isHuman) {
-      gs.phase             = "eliminating";
-      gs.elimPhase         = "impact";
-      gs.camera.shake      = 16;
-      gs.camera.shakeTimer = 0.55;
-      gs.slowMoMult        = 1;
-      gs.audioEvents.add("eliminated");
-    } else {
-      // NEW: Proximity Terror
-      const human = gs.players[0];
-      const dist = Math.abs(p.wx - human.wx);
-      
-      // If the NPC dies within 150 pixels of the human player
-      if (human.status === "alive" && dist < 150) {
-        // Flinch camera shake
-        gs.camera.shake      = Math.max(gs.camera.shake, 14);
-        gs.camera.shakeTimer = Math.max(gs.camera.shakeTimer, 0.4);
-        
-        // Extra blood splatter exploding near the human
-        spawnBlood(gs, human.wx + (Math.random() - 0.5) * 80, human.wy - 20); 
-        spawnBlood(gs, human.wx + (Math.random() - 0.5) * 80, human.wy);
-        
-        // Trigger gasp
-        gs.audioEvents.add("crowd_gasp");
-      }
-    }
-  }
-
-  return caught;
-}
-
-// ─── Particle Update ──────────────────────────────────────────────────────────
-
-function updateParticles(gs: GameState, dt: number): void {
-  const arr = gs.particles;
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const p = arr[i];
-    p.life += dt;
-    if (p.life >= p.maxLife) { arr.splice(i, 1); continue; }
-
-    p.x  += p.vx * dt;
-    p.y  += p.vy * dt;
-    p.vy += (p.type === "dust" ? 20 : 280) * dt;
-    p.vx *= p.type === "dust" ? 0.92 : 0.97;
-  }
-}
-
-// ─── Camera Update ────────────────────────────────────────────────────────────
-
-function updateCamera(gs: GameState, dt: number): void {
-  const human = gs.players[0];
-  const cam   = gs.camera;
-
-  const targetX = clamp(
-    human.wx - DW * CAM_LEAD_X,
-    0,
-    DOLL_WORLD_X - DW * 0.5
-  );
-  cam.x = lerp(cam.x, targetX, Math.min(1, dt * CAM_LERP));
-
-  if (cam.shakeTimer > 0) {
-    cam.shakeTimer -= dt;
-    cam.shake = lerp(cam.shake, 0, Math.min(1, dt * cam.shakeDecay));
-  } else {
-    cam.shake = 0;
-  }
-}
-
-// ─── Elimination Sequence ─────────────────────────────────────────────────────
-
-function updateEliminationSequence(gs: GameState, dt: number): void {
-  if (gs.phase !== "eliminating") return;
-
-  const human = gs.players[0];
-  human.elimTimer += dt;
-
-  switch (gs.elimPhase) {
-    case "impact": {
-      if (human.elimTimer > 0.12) {
-        gs.elimPhase  = "slow_mo";
-        gs.slowMoMult = 0.12;
-      }
-      break;
-    }
-    case "slow_mo": {
-      gs.slowMoMult = lerp(gs.slowMoMult, 0.05, dt * 2);
-      human.opacity = lerp(human.opacity, 0.25, dt * 1.8);
-
-      if (human.elimTimer > 0.7) {
-        gs.elimPhase  = "showing";
-        gs.slowMoMult = 1;
-        human.status  = "eliminated";
-      }
-      break;
-    }
-    case "showing": {
-      if (human.elimTimer > 1.1) {
-        gs.phase     = "gameover";
-        gs.elimPhase = "none";
-      }
-      break;
-    }
-  }
-}
-
-function updateDifficulty(gs: GameState): void {
-  gs.difficulty   = clamp(1 + gs.elapsed * 0.009,  1, 3.2);
-  gs.fakeOutProb  = clamp(0.06 + gs.elapsed * 0.002, 0, 0.35);
-  gs.round        = Math.floor(gs.elapsed / 18) + 1;
-}
-
-// ─── Particle Spawn Helpers ───────────────────────────────────────────────────
-
-function spawnDust(gs: GameState, wx: number, wy: number, count = 3): void {
-  for (let i = 0; i < count; i++) {
-    gs.particles.push({
-      x: wx, y: wy + PLAYER_H,
-      vx: (Math.random() - 0.5) * 60, vy: -(10 + Math.random() * 30),
-      life: 0, maxLife: 0.35 + Math.random() * 0.2,
-      r: 2 + Math.random() * 3, color: C.dust, type: "dust",
-    });
-  }
-}
-
-function spawnBlood(gs: GameState, wx: number, wy: number): void {
-  for (let i = 0; i < 18; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const spd   = 40 + Math.random() * 180;
-    gs.particles.push({
-      x: wx, y: wy + PLAYER_H * 0.4,
-      vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd - 60,
-      life: 0, maxLife: 0.6 + Math.random() * 0.5,
-      r: 2 + Math.random() * 4, color: C.blood, type: "blood",
-    });
-  }
-}
-
-function spawnSpark(gs: GameState, wx: number, wy: number, count = 6): void {
-  for (let i = 0; i < count; i++) {
-    gs.particles.push({
-      x: wx, y: wy,
-      vx: (Math.random() - 0.5) * 220, vy: -(80 + Math.random() * 120),
-      life: 0, maxLife: 0.4 + Math.random() * 0.3,
-      r: 1.5 + Math.random() * 2.5, color: C.spark, type: "spark",
-    });
-  }
-}
-
-// ─── Master Tick ──────────────────────────────────────────────────────────────
-
-function gameTick(gs: GameState, rawDt: number): void {
-  if (gs.phase === "gameover" || gs.phase === "victory") return;
-
-  const dt = rawDt * gs.slowMoMult;
-  gs.audioEvents.clear();
-
-  if (gs.phase === "countdown") {
-    gs.countdown -= rawDt;
-    return;
-  }
-
-  gs.elapsed   += rawDt;
-  gs.timeLeft  -= rawDt;
-
-  if (gs.timeLeft <= 0) {
-    gs.phase = "gameover";
-    return;
-  }
-
-  updateDifficulty(gs);
-  updateLightStateMachine(gs, dt);
-  updateEliminationSequence(gs, rawDt);
-  updateParticles(gs, dt);
-  updateCamera(gs, rawDt);
-
-  let alive = 0;
-  for (let i = 0; i < gs.players.length; i++) {
-    const p     = gs.players[i];
-    const isHum = i === 0;
-
-    if (p.status === "alive" || p.status === "eliminating") {
-      updatePlayer(p, gs, dt, isHum);
-    }
-
-    if (p.status === "eliminating") {
-      p.elimTimer += rawDt;
-      p.opacity    = Math.max(0.18, 1 - p.elimTimer * 0.9);
-      if (p.elimTimer > 1.2 && !isHum) p.status = "eliminated";
-    }
-
-    if (p.status === "alive") {
-      checkEliminationForPlayer(p, gs, isHum);
-      alive++;
-    }
-    if (p.status === "finished") alive++;
-  }
-
-  gs.aliveCount   = alive;
-  gs.playerScore += rawDt * gs.difficulty * 7;
-}
-
-// ─── Master Render ────────────────────────────────────────────────────────────
-
-function renderFrame(ctx: CanvasRenderingContext2D, size: CanvasSize, gs: GameState): void {
-  const scaleX = size.width  / DW;
-  const scaleY = size.height / DH;
-
-  ctx.save();
-  ctx.scale(scaleX, scaleY);
-
-  const camX = gs.camera.x +
-    (gs.camera.shake > 0 ? (Math.random() - 0.5) * gs.camera.shake : 0);
-  const camY = gs.camera.shake > 0
-    ? (Math.random() - 0.5) * gs.camera.shake * 0.4
-    : 0;
-
-  ctx.clearRect(-2, -2, DW + 4, DH + 4);
-  if (camY !== 0) ctx.translate(0, camY);
-
-  drawBackground(ctx, camX, gs);
-  drawEnvironmentLighting(ctx, gs);
-  drawFinishLine(ctx, camX);
-  drawGround(ctx, camX);
-  drawParticles(ctx, gs.particles, camX);
-
-  for (let i = gs.players.length - 1; i >= 1; i--) {
-    drawPlayer(ctx, gs.players[i], camX, false, gs);
-  }
-  drawPlayer(ctx, gs.players[0], camX, true, gs);
-  drawDoll(ctx, gs.doll, camX, gs);
-
-  if (gs.phase === "playing" || gs.phase === "eliminating") {
-    drawHUD(ctx, gs);
-  }
-
-  ctx.restore();
-}
-
-// ─── Touch Controls Gate (SSR-safe) ───────────────────────────────────────────
-
-function TouchControlsGate({ inputRef }: { inputRef: React.MutableRefObject<any> }) {
-  const [isTouch, setIsTouch] = useState(false);
-
-  useEffect(() => {
-    const check =
-      window.matchMedia("(pointer: coarse)").matches ||
-      window.innerWidth < 900 ||
-      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    setIsTouch(check);
-  }, []);
-
-  if (!isTouch) return null;
-  return <MobileTouchControls touchStateRef={inputRef} visible={true} />;
-}
-
-// ─── React Component ──────────────────────────────────────────────────────────
-
-interface GameProps {
-  onExit?: () => void;
-}
-
-export default function RedLightGreenLight({ onExit }: GameProps) {
-  const [uiPhase,     setUIPhase]     = useState<GameState["phase"]>("countdown");
-  const [countdownN,  setCountdownN]  = useState(3);
-  const [finalScore,  setFinalScore]  = useState(0);
-  const [showElim,    setShowElim]    = useState(false);
-
-  const settingsDiff    = useGameStore((s) => s.settings.difficulty);
-  const addScore        = useGameStore((s) => s.addScore);
-  const loadFromStorage = useGameStore((s) => s.loadFromStorage);
-
-  const diffNum = settingsDiff === "easy" ? 0.75 : settingsDiff === "hard" ? 1.5 : 1.0;
-
-  const { qualityRef, recordFrame } = useAdaptiveQuality("HIGH");
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const gsRef     = useRef<GameState>(makeGameState(diffNum));
-  const canvasRef = useRef<CanvasWrapperHandle>(null);
-
-  const audio     = useGameAudio();
-
-  const inputRef = useRef({ left: false, right: false, jump: false, sprint: false });
-  const jumpConsumedRef = useRef(false);
-
-  useEffect(() => { loadFromStorage(); audio.preloadGame(); }, []);
-
-  // ── Key listeners ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const dn = (e: KeyboardEvent) => {
-      switch (e.code) {
-        case "ArrowLeft":  case "KeyA":             inputRef.current.left   = true;  break;
-        case "ArrowRight": case "KeyD":             inputRef.current.right  = true;  break;
-        case "ArrowUp": case "KeyW": case "Space":
-          e.preventDefault();
-          if (!jumpConsumedRef.current) {
-            inputRef.current.jump  = true;
-            jumpConsumedRef.current = true;
-          }
-          break;
-        case "ShiftLeft": case "ShiftRight":        inputRef.current.sprint = true;  break;
-      }
-    };
-    const up = (e: KeyboardEvent) => {
-      switch (e.code) {
-        case "ArrowLeft":  case "KeyA":             inputRef.current.left   = false; break;
-        case "ArrowRight": case "KeyD":             inputRef.current.right  = false; break;
-        case "ArrowUp": case "KeyW": case "Space":
-          inputRef.current.jump   = false;
-          jumpConsumedRef.current = false;
-          break;
-        case "ShiftLeft": case "ShiftRight":        inputRef.current.sprint = false; break;
-      }
-    };
-    window.addEventListener("keydown", dn, { passive: false });
-    window.addEventListener("keyup",   up);
-    return () => {
-      window.removeEventListener("keydown", dn);
-      window.removeEventListener("keyup",   up);
-    };
-  }, []);
-
-  // ── Escape → exit to menu ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!onExit) return;
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.code === "Escape") {
-        e.preventDefault();
-        audio.stopHeartbeat();
-        onExit();
-      }
-    };
-    window.addEventListener("keydown", onEsc);
-    return () => window.removeEventListener("keydown", onEsc);
-  }, [onExit, audio]);
-
-  // ── Reset ─────────────────────────────────────────────────────────────────
-  const resetGame = useCallback(() => {
-    gsRef.current = makeGameState(diffNum);
-    setUIPhase("countdown");
-    setCountdownN(3);
-    setFinalScore(0);
-    setShowElim(false);
-    jumpConsumedRef.current = false;
-    audio.stopHeartbeat();
-  }, [diffNum, audio]);
-
-  // ── Game tick ─────────────────────────────────────────────────────────────
-  const prevUIPhase = useRef<GameState["phase"]>("countdown");
-  const prevCountdown = useRef(3);
-  const hudSync = useHUDSync({ flushInterval: 80 });
-
-  const onTick = useCallback(
-    (rawDelta: number) => {
-      const handle = canvasRef.current;
-      if (!handle) return;
-      const ctx  = handle.getContext();
-      const size = handle.getSize();
-      if (!ctx) return;
-
-      const gs = gsRef.current;
-
-      gs.inputLeft   = inputRef.current.left;
-      gs.inputRight  = inputRef.current.right;
-      gs.inputSprint = inputRef.current.sprint;
-      gs.inputJump   = inputRef.current.jump;
-
-      if (gs.inputJump) inputRef.current.jump = false;
-hudSync.write({
-  score:    Math.floor(gs.playerScore),
-  lives:    gs.aliveCount,         // alive player count doubles as "lives remaining"
-  time:     Math.ceil(gs.timeLeft),
-  health:   gs.players[0].status === "alive" ? 100 : 0,
-  maxHealth: 100,
-});
-      gameTick(gs, rawDelta);
-      renderFrame(ctx, size, gs);
-
-      for (const ev of gs.audioEvents) {
-        switch (ev) {
-          case "green_light":
-            // Play the song and speed it up exactly matching the game difficulty
-            SoundManager.getInstance().play("doll_song", 0, gs.difficulty);
-            audioEventBus.emit('greenLightActivated');
-            break;
-          case "warning":     
-            audio.onDollTurn();      
-            break;
-          case "doll_turn":   
-            audio.onDollTurn();      
-            break;
-            // Add these right below case "red_light":
-          case "heartbeat_start": 
-            SoundManager.getInstance().setHeartbeatIntensity(1.0); 
-            break;
-          case "heartbeat_stop":  
-            SoundManager.getInstance().setHeartbeatIntensity(0.0); 
-            break;
-          case "crowd_gasp":      
-            SoundManager.getInstance().play("crowd_gasp", 0, 0, 1); 
-            break;
-          case "red_light":
-            // Stop the song if it happens to trail off, and play the red light stinger
-            SoundManager.getInstance().stopLoop("doll_song", 0);
-            SoundManager.getInstance().play("red_light_stinger", 0, 1);
-            audioEventBus.emit('redLightActivated');
-            break;
-          case "step":        audio.onStep();          break;
-          case "jump":        audio.onJump();          break;
-          case "land":        audio.onLand();          break;
-          case "eliminated":
-            audio.onEliminated();
-            audioEventBus.emit('playerEliminated', 'Player_1');
-            break;
-          case "victory":     audio.onVictory();       break;
-        }
-      }
-
-      setShowElim(gs.players[0].status === "eliminated" || gs.players[0].status === "eliminating");
-
-      if (gs.phase !== prevUIPhase.current) {
-        prevUIPhase.current = gs.phase;
-        setUIPhase(gs.phase);
-
-        if (gs.phase === "gameover") {
-          setFinalScore(Math.floor(gs.playerScore));
-          setShowElim(gs.players[0].status === "eliminated" || gs.players[0].status === "eliminating");
-          addScore(Math.floor(gs.playerScore));
-        }
-        if (gs.phase === "victory") {
-          setFinalScore(Math.floor(gs.playerScore));
-          addScore(Math.floor(gs.playerScore));
-        }
-      }
-
-      if (gs.phase === "countdown") {
-        const cn = Math.ceil(gs.countdown);
-        if (cn !== prevCountdown.current && cn >= 0) {
-          prevCountdown.current = cn;
-          setCountdownN(cn);
-          if (cn > 0) audio.onCountdownBeep();
-          else         audio.onCountdownGo();
-        }
-        if (gs.countdown <= 0 && prevUIPhase.current === "countdown") {
-          gs.phase            = "playing";
-          prevUIPhase.current = "playing";
-          setUIPhase("playing");
-        }
-      }
-    },
-    [audio, addScore,hudSync]
-  );
-
-  const rawCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  useEffect(() => {
-    rawCanvasRef.current = canvasRef.current?.getCanvas() ?? null;
+/* ─────────────────────────────────────────────────────────────────────────────
+ * DOLL / PLAYER / GUARD MODELS
+ * Moved to src/components/r3f/models/{RLGLDoll,RLGLContestant,RLGLGuard}.tsx
+ * Imported above as RLGLDoll, RLGLContestant, RLGLGuard.
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * ENVIRONMENT DYNAMIC FEATURES
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+function GuardLasers() {
+  const group = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!group.current) return;
+    group.current.rotation.y = state.clock.elapsedTime * 0.001;
   });
 
-  useCanvasScale({
-    canvasRef:    rawCanvasRef as React.RefObject<HTMLCanvasElement>,
-    containerRef: containerRef as React.RefObject<HTMLElement>,
-    qualityRef,
-  });
-
-  const { setPaused } = useOptimizedGameLoop(
-    {
-      update: (dt: number) => { onTick(dt); },
-      render: (_alpha: number) => {},
-      onVisibilityChange: (visible: boolean) => {
-        if (!visible) audio.stopHeartbeat();
-      },
-    },
-    { initialTimeScale: 1, pauseOnHidden: true }
-  );
-
-  useSceneCleanup(rawCanvasRef as React.RefObject<HTMLCanvasElement>);
-
-  useEffect(() => {
-    setPaused(false);
-    return () => {
-      setPaused(true);
-      audio.stopHeartbeat();
-    };
-  }, [setPaused, audio]);
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: "relative",
-        width: "100vw",
-        height: "100dvh",
-        background: "#000",
-        overflow: "hidden",
-      }}
-    >
-      <CanvasWrapper
-        ref={canvasRef}
-        designWidth={DW}
-        designHeight={DH}
-        resizeStrategy="contain"
-        enableDPR
-        background="#050810"
-        ariaLabel="Red Light Green Light"
-        canvasId="rlgl-canvas"
-        className="w-full h-full"
+    <group ref={group}>
+      <Line
+        points={[
+          new THREE.Vector3(-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5),
+          new THREE.Vector3(0, 1.5, START_Z / 2),
+        ]}
+        color="#ff0000"
+        lineWidth={0.8}
+        transparent
+        opacity={0.7}
+      />
+      <Line
+        points={[
+          new THREE.Vector3(FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5),
+          new THREE.Vector3(0, 1.5, START_Z / 2),
+        ]}
+        color="#ff0000"
+        lineWidth={0.8}
+        transparent
+        opacity={0.7}
+      />
+    </group>
+  );
+}
+
+function Arena({ 
+  isRed, 
+  eliminationGuardRef, 
+  guardFlashRef 
+}: { 
+  isRed: boolean; 
+  eliminationGuardRef: React.MutableRefObject<{ guardIdx: number; targetPos: [number, number, number] } | null>;
+  guardFlashRef: React.MutableRefObject<number>;
+}) {
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, FIELD_LEN / 2 - 5]} receiveShadow>
+        <planeGeometry args={[FIELD_WIDTH + 6, FIELD_LEN + 20]} />
+        <meshStandardMaterial color="#cda878" roughness={0.95} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, FIELD_LEN / 2 - 5]}>
+        <ringGeometry args={[FIELD_WIDTH / 2 - 3, FIELD_WIDTH / 2 + 10, 64]} />
+        <meshStandardMaterial color="#a8865d" roughness={0.95} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, START_Z]}>
+        <planeGeometry args={[FIELD_WIDTH, 0.6]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.9} emissive="#ffffff" emissiveIntensity={0.05} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, FINISH_Z]}>
+        <planeGeometry args={[FIELD_WIDTH, 0.6]} />
+        <meshStandardMaterial color="#f5c542" roughness={0.85} emissive="#f5c542" emissiveIntensity={0.2} />
+      </mesh>
+      <mesh position={[-FIELD_WIDTH / 2 - 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
+        <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
+        <meshStandardMaterial color="#e34a8a" roughness={0.65} />
+      </mesh>
+      <mesh position={[FIELD_WIDTH / 2 + 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
+        <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
+        <meshStandardMaterial color="#e34a8a" roughness={0.65} />
+      </mesh>
+      <mesh position={[0, 6, -14]} castShadow receiveShadow>
+        <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
+        <meshStandardMaterial color="#75a1d1" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 11, -14.6]}>
+        <planeGeometry args={[FIELD_WIDTH + 2, 4]} />
+        <meshStandardMaterial color="#a7c3df" roughness={0.95} />
+      </mesh>
+      <mesh position={[0, 6, FIELD_LEN]} >
+        <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
+        <meshStandardMaterial color="#3d2c1f" roughness={0.85} />
+      </mesh>
+      {[20, 45, 70].map((z) => (
+        <React.Fragment key={z}>
+          <mesh position={[-FIELD_WIDTH / 2 + 0.1, 3.5, z]} rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[6, 6]} />
+            <meshStandardMaterial color="#7a8a3a" transparent opacity={0.55} roughness={0.85} />
+          </mesh>
+          <mesh position={[FIELD_WIDTH / 2 - 0.1, 3.5, z]} rotation={[0, -Math.PI / 2, 0]}>
+            <planeGeometry args={[6, 6]} />
+            <meshStandardMaterial color="#7a8a3a" transparent opacity={0.55} roughness={0.85} />
+          </mesh>
+        </React.Fragment>
+      ))}
+      <mesh position={[0, 6, -13.5]}>
+        <planeGeometry args={[12, 9]} />
+        <meshStandardMaterial color="#3c5a2a" transparent opacity={0.75} roughness={0.9} />
+      </mesh>
+      <ContactShadows
+        position={[0, 0.02, -10]}
+        opacity={0.5}
+        scale={20}
+        blur={2.2}
+        far={4}
+        resolution={512}
+        color="#000"
+      />
+      
+      <RLGLGuard 
+        position={[-FIELD_WIDTH / 2 + 2, 0, FINISH_Z + 1.5]} 
+        rotationY={Math.PI / 2} 
+        isAiming={isRed} 
+        isFiring={eliminationGuardRef.current?.guardIdx === 0 && performance.now() - guardFlashRef.current < 150}
+        targetPosition={eliminationGuardRef.current?.targetPos}
+      />
+      <RLGLGuard 
+        position={[FIELD_WIDTH / 2 - 2, 0, FINISH_Z + 1.5]} 
+        rotationY={-Math.PI / 2} 
+        isAiming={isRed}
+        isFiring={eliminationGuardRef.current?.guardIdx === 1 && performance.now() - guardFlashRef.current < 150}
+      />
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 4, 0, FINISH_Z - 2]} rotationY={Math.PI / 3} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 4, 0, FINISH_Z - 2]} rotationY={-Math.PI / 3} />
+      
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 1, 0, START_Z - 20]} rotationY={Math.PI / 2} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 1, 0, START_Z - 20]} rotationY={-Math.PI / 2} />
+      <RLGLGuard position={[-FIELD_WIDTH / 2 + 1, 0, 40]} rotationY={Math.PI / 2} />
+      <RLGLGuard position={[FIELD_WIDTH / 2 - 1, 0, 40]} rotationY={-Math.PI / 2} />
+
+      {isRed && <GuardLasers />}
+    </group>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * CAMERA
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+function FollowCamera({
+  targetX,
+  targetZ,
+  phase,
+  shake,
+}: {
+  targetX: number;
+  targetZ: number;
+  phase: GamePhase;
+  shake: number;
+}) {
+  const { camera } = useThree();
+  const lookAt = useRef(new THREE.Vector3());
+
+  useFrame((_, dt) => {
+    const ds = Math.min(dt, 0.05);
+
+    let desiredX: number, desiredY: number, desiredZ: number;
+    let lookX: number, lookY: number, lookZ: number;
+
+    if (phase === GamePhase.COUNTDOWN) {
+      const t = performance.now() * 0.0002;
+      desiredX = Math.sin(t) * 12;
+      desiredY = 5.5;
+      desiredZ = -2 + Math.cos(t) * 8;
+      lookX = 0;
+      lookY = 2.5;
+      lookZ = -8;
+    } else if (phase === GamePhase.VICTORY) {
+      desiredX = targetX + 2.5;
+      desiredY = 3.0;
+      desiredZ = targetZ - 3;
+      lookX = targetX;
+      lookY = 1.5;
+      lookZ = targetZ - 5;
+    } else {
+      desiredX = targetX;
+      desiredY = 4.2;
+      desiredZ = targetZ + 7.5;
+      lookX = targetX * 0.4;
+      lookY = 1.6;
+      lookZ = targetZ - 18;
+    }
+
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, desiredX, ds * 4.5);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, desiredY, ds * 4.5);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, desiredZ, ds * 4.5);
+
+    if (shake > 0) {
+      camera.position.x += (Math.random() - 0.5) * shake;
+      camera.position.y += (Math.random() - 0.5) * shake;
+    }
+
+    lookAt.current.set(lookX, lookY, lookZ);
+    camera.lookAt(lookAt.current);
+  });
+
+  return null;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * SCENE LOGIC
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+interface SceneProps {
+  onGameOver: (phase: GamePhase, score: number) => void;
+  onHudUpdate: (data: {
+    timeLeft: number;
+    aliveCount: number;
+    lightPhase: LightPhase;
+    score: number;
+    playerProgressPct: number;
+  }) => void;
+  pausedRef: React.MutableRefObject<boolean>;
+  inputRef: React.MutableRefObject<{ forward: boolean; sprint: boolean }>;
+  resetSignal: number;
+  roundTimer: number;
+}
+
+function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roundTimer }: SceneProps) {
+  const playersRef    = useRef<PlayerEntity[]>([]);
+  const lightPhaseRef = useRef<LightPhase>(LightPhase.GREEN);
+  const turnTRef      = useRef(0);     
+  const redTimerRef   = useRef(0);
+  const graceTimerRef = useRef(0);     
+  const gamePhaseRef  = useRef<GamePhase>(GamePhase.COUNTDOWN); 
+  const countdownRef  = useRef(3);
+  const timeLeftRef   = useRef(roundTimer);
+  const scoreRef      = useRef(0);
+  const shakeRef      = useRef(0);
+  const lastStepRef   = useRef(0);
+  const fakeOutChanceRef = useRef(0);
+  const aliveCountRef    = useRef(NPC_COUNT + 1);
+  const hudThrottleRef   = useRef(0);
+  const guardFlashRef = useRef(0);
+  const dollRotationRef = useRef(0);
+  const elimStateRef  = useRef<"idle" | "locking" | "audio" | "shake" | "fall" | "summary">("idle");
+  const elimTimerRef  = useRef(0);
+  const eliminationGuardRef = useRef<{ guardIdx: number; targetPos: [number, number, number] } | null>(null);
+
+  const shotLineRef = useRef<THREE.Line>(null);
+  const shotTimerRef = useRef<number>(0);
+
+  const handleDollSongEnd = useCallback(() => {
+    if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
+      lightPhaseRef.current = LightPhase.WARNING;
+      turnTRef.current = 0;
+      SoundManager.getInstance().play("countdown_beep" as any);
+    }
+  }, []);
+
+  const startDollSong = useCallback(() => {
+    MusicManager.getInstance().play("rlgl_green", 0, handleDollSongEnd);
+  }, [handleDollSongEnd]);
+
+  const stopDollSong = useCallback(() => {
+    MusicManager.getInstance().stop(220);
+  }, []);
+
+  useEffect(() => {
+    const arr: PlayerEntity[] = [];
+    arr.push({
+      id: 0,
+      x: 0,
+      z: START_Z - 1.0,
+      vx: 0,
+      vz: 0,
+      alive: true,
+      finished: false,
+      isHuman: true,
+      number: 456,
+      npcStopOffsetMs: 0,
+      npcResumeOffsetMs: 0,
+      npcStopTimer: 0,
+      npcResumeTimer: 0,
+      npcMoving: false,
+      fallProgress: 0,
+      fallAxis: [1, 0, 0],
+    });
+    for (let i = 1; i <= NPC_COUNT; i++) {
+      const lane = ((i - 1) % 7) - 3; 
+      const row  = Math.floor((i - 1) / 7);
+      arr.push({
+        id: i,
+        x: lane * 2.6 + (Math.random() - 0.5) * 0.4,
+        z: START_Z - 1.0 - row * 1.4,
+        vx: 0,
+        vz: 0,
+        alive: true,
+        finished: false,
+        isHuman: false,
+        number: 100 + i * 7,
+        npcStopOffsetMs: 80 + Math.random() * 320,
+        npcResumeOffsetMs: 120 + Math.random() * 280,
+        npcStopTimer: 0,
+        npcResumeTimer: 0,
+        npcMoving: false,
+        fallProgress: 0,
+        fallAxis: [
+          Math.random() > 0.5 ? 1 : -1,
+          0,
+          Math.random() > 0.5 ? 1 : -1,
+        ],
+      });
+    }
+    playersRef.current    = arr;
+    lightPhaseRef.current = LightPhase.GREEN;
+    turnTRef.current      = 0;
+    redTimerRef.current   = 0;
+    graceTimerRef.current = 0;
+    dollRotationRef.current = 0;
+    elimStateRef.current  = "idle";
+    elimTimerRef.current  = 0;
+    
+    gamePhaseRef.current  = GamePhase.COUNTDOWN;
+    countdownRef.current  = 3;
+    timeLeftRef.current   = roundTimer;
+    scoreRef.current      = 0;
+    shakeRef.current      = 0;
+    fakeOutChanceRef.current = 0;
+    aliveCountRef.current = NPC_COUNT + 1;
+    shotTimerRef.current  = 0;
+    guardFlashRef.current = 0;
+    eliminationGuardRef.current = null;
+
+    if (shotLineRef.current) {
+      shotLineRef.current.visible = false;
+    }
+
+    stopDollSong();
+    SoundManager.getInstance().stopLoop("heartbeat" as any, 0);
+
+  }, [resetSignal, stopDollSong, roundTimer]);
+
+  const countdownLastIntRef = useRef(3);
+
+  useFrame((_, rawDt) => {
+    if (pausedRef.current) return;
+    const dt = Math.min(rawDt, 0.05);
+    const snap = inputManager.snapshot();
+    const sm = SoundManager.getInstance();
+
+    const players = playersRef.current;
+    const human   = players[0];
+    if (!human) {
+      inputManager.endFrame();
+      return;
+    }
+
+    if (shotTimerRef.current > 0 && shotLineRef.current) {
+      shotTimerRef.current -= dt;
+      const mat = shotLineRef.current.material as THREE.LineBasicMaterial;
+      if (mat) mat.opacity = Math.max(0, shotTimerRef.current / 0.25);
+      if (shotTimerRef.current <= 0) {
+        shotLineRef.current.visible = false;
+      }
+    }
+
+    if (gamePhaseRef.current === GamePhase.COUNTDOWN) {
+      countdownRef.current -= dt;
+      const intNow = Math.ceil(countdownRef.current);
+      if (intNow !== countdownLastIntRef.current) {
+        countdownLastIntRef.current = intNow;
+        if (intNow > 0) sm.play("countdown_beep" as any);
+      }
+      if (countdownRef.current <= 0) {
+        gamePhaseRef.current = GamePhase.PLAYING;
+        useGameStore.getState().setRuntimePhase("playing");
+        sm.play("countdown_go" as any);
+        startDollSong();
+        lightPhaseRef.current = LightPhase.GREEN;
+      }
+      inputManager.endFrame();
+      return;
+    }
+
+    if (gamePhaseRef.current !== GamePhase.PLAYING) {
+      for (const p of players) {
+        if (!p.alive && p.fallProgress < 1) p.fallProgress = Math.min(1, p.fallProgress + dt * 2);
+      }
+      inputManager.endFrame();
+      return;
+    }
+
+    timeLeftRef.current -= dt;
+    if (timeLeftRef.current <= 0) {
+      gamePhaseRef.current = GamePhase.TIMEOUT;
+      stopDollSong();
+      sm.stopLoop("heartbeat" as any, 300);
+      sm.stopLoop("scan_tone" as any, 300);
+      onGameOver(GamePhase.TIMEOUT, Math.floor(scoreRef.current));
+      inputManager.endFrame();
+      return;
+    }
+
+    const lp = lightPhaseRef.current;
+
+    if (lp === LightPhase.WARNING) {
+      turnTRef.current += dt / TURN_DURATION;
+      dollRotationRef.current = THREE.MathUtils.lerp(0, Math.PI, turnTRef.current);
+      if (turnTRef.current >= 1) {
+        turnTRef.current = 1;
+        lightPhaseRef.current = LightPhase.RED;
+        redTimerRef.current = 0;
+        graceTimerRef.current = 0;
+        dollRotationRef.current = Math.PI;
+        sm.loop("scan_tone" as any);
+        sm.loop("heartbeat" as any);
+      }
+    } else if (lp === LightPhase.RED) {
+      redTimerRef.current += dt;
+      graceTimerRef.current += dt;
+      const redDur = Math.max(RED_DURATION_MIN, RED_DURATION_BASE - timeLeftRef.current / roundTimer * 0.5);
+      if (redTimerRef.current >= redDur) {
+        lightPhaseRef.current = LightPhase.GREEN;
+        redTimerRef.current   = 0;
+        graceTimerRef.current = 0;
+        dollRotationRef.current = 0;
+        sm.stopLoop("heartbeat" as any, 400);
+        sm.stopLoop("scan_tone" as any, 300);
+        startDollSong();
+      }
+    } else if (lp === LightPhase.GREEN) {
+      dollRotationRef.current = 0;
+    }
+
+    if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
+      const input = inputRef.current;
+      const keyHeld = snap.heldKeys.has("ArrowUp") || snap.heldKeys.has("KeyW");
+      
+      // ADD the elimination check back so you can't run while being shot!
+      const wantMove = (keyHeld || input.forward) && elimStateRef.current === "idle";
+      
+      const speed = PLAYER_SPEED * (input.sprint ? PLAYER_SPRINT_MULT : 1);
+
+      // RLGL Movement: Instant stop/start
+      human.vz = wantMove ? -speed : 0;
+      human.vx = 0;
+      human.z += human.vz * dt;
+
+      if (wantMove) {
+        lastStepRef.current += dt;
+        if (lastStepRef.current > 0.32) {
+          lastStepRef.current = 0;
+          sm.play("player_step" as any, 50, 0.1);
+        }
+      }
+
+      if (human.z <= FINISH_Z) {
+        human.finished = true;
+        human.z = FINISH_Z;
+        human.vz = 0;
+        
+        gamePhaseRef.current = GamePhase.VICTORY; 
+        
+        stopDollSong();
+        sm.stopLoop("heartbeat" as any, 300);
+        sm.stopLoop("scan_tone" as any, 300);
+        sm.play("player_victory" as any);
+        sm.play("crowd_cheer" as any);
+        
+        const timeBonus = Math.floor(timeLeftRef.current * 50);
+        const speedBonus = timeLeftRef.current > 60 ? 2000 : timeLeftRef.current > 45 ? 1000 : 0;
+        scoreRef.current += 5000 + timeBonus + speedBonus;
+        
+        shakeRef.current = 0.15;
+        onGameOver(GamePhase.VICTORY, Math.floor(scoreRef.current));
+      }
+    }
+
+    const isGreenForNPC = lp === LightPhase.GREEN || lp === LightPhase.WARNING;
+    for (let i = 1; i < players.length; i++) {
+      const p = players[i];
+      if (!p.alive || p.finished) {
+        if (!p.alive && p.fallProgress < 1) p.fallProgress = Math.min(1, p.fallProgress + dt * 2);
+        continue;
+      }
+
+      if (isGreenForNPC) {
+        p.npcResumeTimer += dt * 1000;
+        if (!p.npcMoving && p.npcResumeTimer >= p.npcResumeOffsetMs) {
+          p.npcMoving = true;
+          p.npcStopTimer = 0;
+        }
+      } else {
+        p.npcStopTimer += dt * 1000;
+        if (p.npcMoving && p.npcStopTimer >= p.npcStopOffsetMs) {
+          p.npcMoving = false;
+          p.npcResumeTimer = 0;
+        }
+      }
+
+      const baseSpeed = 5 + (p.id % 5) * 0.5;
+      const speedVariation = Math.sin(performance.now() * 0.001 + p.id) * 0.3;
+      const npcSpeed = baseSpeed + speedVariation;
+
+      // RLGL NPC Movement: Instant stop/start
+      p.vz = p.npcMoving ? -npcSpeed : 0;
+
+      if (p.npcMoving) {
+        const drift = Math.sin(performance.now() * 0.003 + p.id * 0.7) * 0.015;
+        p.x += drift;
+        p.x = Math.max(-FIELD_WIDTH / 2 + 1, Math.min(FIELD_WIDTH / 2 - 1, p.x));
+      }
+
+      p.z += p.vz * dt;
+
+      if (p.z <= FINISH_Z) {
+        p.finished = true;
+        p.z = FINISH_Z;
+        p.vz = 0;
+      }
+    }
+
+    if (lp === LightPhase.RED) {
+      if (human.alive && !human.finished && Math.abs(human.vz) > 0.01) {
+        const dangerLevel = Math.min(1, Math.abs(human.vz) / MOVE_THRESHOLD);
+        sm.setHeartbeatIntensity?.(0.55 + dangerLevel * 0.35);
+      } else {
+        sm.setHeartbeatIntensity?.(0.55);
+      }
+
+      if (human.alive && !human.finished && gamePhaseRef.current === GamePhase.PLAYING) {
+        const inGracePeriod = graceTimerRef.current < GRACE_PERIOD;
+        const hasMovement = Math.abs(human.vz) > VELOCITY_DEADZONE;
+        
+        if (hasMovement && !inGracePeriod) {
+          elimStateRef.current = "locking";
+          elimTimerRef.current = 0;
+        }
+      }
+      
+      if (elimStateRef.current !== "idle") {
+        elimTimerRef.current += dt;
+        
+        switch (elimStateRef.current) {
+          case "locking":
+            inputRef.current.forward = false;
+            inputRef.current.sprint = false;
+            human.vz = 0;
+            if (elimTimerRef.current >= 0.1) {
+              elimStateRef.current = "audio";
+              elimTimerRef.current = 0;
+              sm.play("player_eliminated" as any);
+            }
+            break;
+            
+          case "audio":
+            if (elimTimerRef.current >= 0.3) {
+              elimStateRef.current = "shake";
+              elimTimerRef.current = 0;
+              shakeRef.current = 0.45;
+              guardFlashRef.current = performance.now();
+              if (shotLineRef.current) {
+                const guardX = -FIELD_WIDTH / 2 + 2;
+                const guardY = 1.92;
+                const guardZ = FINISH_Z + 1.5;
+                const points = [
+                  new THREE.Vector3(guardX, guardY, guardZ),
+                  new THREE.Vector3(human.x, 0.95, human.z)
+                ];
+                shotLineRef.current.geometry.setFromPoints(points);
+                shotLineRef.current.visible = true;
+                shotTimerRef.current = 0.25;
+              }
+            }
+            break;
+            
+          case "shake":
+            if (elimTimerRef.current >= 0.2) {
+              elimStateRef.current = "fall";
+              elimTimerRef.current = 0;
+              human.alive = false;
+              human.fallProgress = 0;
+              sm.play("shatter" as any);
+              sm.play("crowd_gasp" as any);
+              stopDollSong();
+              sm.stopLoop("heartbeat" as any, 300);
+            }
+            break;
+            
+          case "fall":
+            if (elimTimerRef.current >= 1.5) {
+              elimStateRef.current = "summary";
+              elimTimerRef.current = 0;
+              gamePhaseRef.current = GamePhase.ELIMINATED;
+              onGameOver(GamePhase.ELIMINATED, Math.floor(scoreRef.current));
+            }
+            break;
+        }
+      }
+      
+      const inGracePeriod = graceTimerRef.current < GRACE_PERIOD;
+      if (!inGracePeriod) {
+        for (let i = 1; i < players.length; i++) {
+          const p = players[i];
+          if (!p.alive || p.finished) continue;
+          if (Math.abs(p.vz) > VELOCITY_DEADZONE) {
+            p.alive = false;
+            p.fallProgress = 0;
+            sm.play("shatter" as any);
+          }
+        }
+      }
+    }
+
+    shakeRef.current = Math.max(0, shakeRef.current - dt * 1.5);
+    if (human.alive) scoreRef.current += dt * 25;
+
+    let alive = 0;
+    for (const p of players) if (p.alive) alive++;
+    aliveCountRef.current = alive;
+
+    hudThrottleRef.current += dt;
+    if (hudThrottleRef.current > 0.08) {
+      hudThrottleRef.current = 0;
+      const dist = START_Z - human.z;
+      const progress = Math.max(0, Math.min(1, dist / (START_Z - FINISH_Z)));
+      onHudUpdate({
+        timeLeft: Math.max(0, timeLeftRef.current),
+        aliveCount: alive,
+        lightPhase: lightPhaseRef.current,
+        score: Math.floor(scoreRef.current),
+        playerProgressPct: progress,
+      });
+    }
+
+    inputManager.endFrame();
+  });
+
+  const isRed = lightPhaseRef.current === LightPhase.RED;
+
+  const lineGeometry = useMemo(() => new THREE.BufferGeometry(), []);
+  const R3FLine = 'line' as any;
+  return (
+    <>
+      <FollowCamera
+        targetX={playersRef.current[0]?.x ?? 0}
+        targetZ={playersRef.current[0]?.z ?? START_Z}
+        phase={gamePhaseRef.current}
+        shake={shakeRef.current}
+      />
+      
+      <ambientLight 
+        intensity={isRed ? 0.25 : 0.65} 
+        color={isRed ? "#4a0808" : "#ffe8c4"} 
+      />
+      <directionalLight
+        position={[15, 20, 20]}
+        intensity={isRed ? 0.5 : 1.2}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+        shadow-camera-near={1}
+        shadow-camera-far={80}
+        shadow-bias={-0.0001}
+        color={isRed ? "#ff4444" : "#fff4d6"}
+      />
+      <hemisphereLight 
+        args={[
+          isRed ? "#330000" : "#b8d4ff", 
+          isRed ? "#0a0000" : "#4a3a2d", 
+          isRed ? 0.15 : 0.5
+        ]} 
       />
 
-      {/* ── Persistent BACK TO MENU button ───────────────────────────────── */}
-      {onExit && (
-        <button
-          onClick={() => { audio.stopHeartbeat(); onExit(); }}
-          style={{
-            position: "absolute", top: 16, left: 16, zIndex: 250,
-            padding: "10px 18px",
-            background: "rgba(0,0,0,0.65)",
-            border: "1px solid rgba(255,255,255,0.3)",
-            borderRadius: 4,
-            color: "#fff",
-            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-            fontSize: 12,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            backdropFilter: "blur(6px)",
-          }}
-          aria-label="Back to menu"
-        >
-          ← MENU (ESC)
-        </button>
+      {isRed && (
+        <>
+          <directionalLight
+            position={[0, 25, -15]}
+            intensity={1.5}
+            color="#ff2020"
+            target-position={[0, 0, 40]}
+          />
+          <pointLight
+            position={[0, 8, -12]}
+            intensity={3}
+            distance={80}
+            decay={1.5}
+            color="#ff3333"
+          />
+        </>
       )}
 
-      {/* ── Countdown ─────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {uiPhase === "countdown" && (
-          <motion.div
-            key={`cd-${countdownN}`}
-            initial={{ scale: 2.4, opacity: 0 }}
-            animate={{ scale: 1,   opacity: 1 }}
-            exit={{   scale: 0.4,  opacity: 0 }}
-            transition={{ duration: 0.38, ease: [0.34, 1.56, 0.64, 1] }}
-            style={{
-              position: "absolute", inset: 0,
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
-              pointerEvents: "none", zIndex: 80,
-            }}
-          >
-            <div style={{
-              fontFamily:  "var(--font-display)",
-              fontSize:    "clamp(88px, 18vw, 172px)",
-              fontWeight:  700,
-              lineHeight:  1,
-              color:       countdownN > 0 ? "#fff" : C.green,
-              textShadow:  `0 0 60px ${countdownN > 0 ? C.warn : C.green}`,
-            }}>
-              {countdownN > 0 ? countdownN : "GO!"}
-            </div>
-            {countdownN > 0 && (
-              <div style={{
-                fontFamily: "var(--font-mono)", fontSize: 13,
-                color: "rgba(255,255,255,0.5)", letterSpacing: "0.2em",
-                marginTop: 16, textTransform: "uppercase",
-              }}>
-                Get ready…
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Elimination vignette ──────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showElim && uiPhase === "eliminating" && (
-          <motion.div
-            key="elim-vignette"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.85, 0.6, 0] }}
-            transition={{ duration: 0.7, times: [0, 0.1, 0.4, 1] }}
-            style={{
-              position: "absolute", inset: 0,
-              pointerEvents: "none", zIndex: 70,
-              background: "radial-gradient(ellipse at center, transparent 30%, rgba(220,38,38,0.75) 100%)",
-            }}
+      {performance.now() - guardFlashRef.current < 100 && (
+        <>
+          <pointLight
+            position={[-FIELD_WIDTH / 2 + 2, 2.2, FINISH_Z + 1.5]}
+            intensity={15}
+            distance={35}
+            color="#ffaa44"
+            decay={2}
+            castShadow
           />
-        )}
-      </AnimatePresence>
+          <pointLight
+            position={[FIELD_WIDTH / 2 - 2, 2.2, FINISH_Z + 1.5]}
+            intensity={15}
+            distance={35}
+            color="#ffaa44"
+            decay={2}
+            castShadow
+          />
+        </>
+      )}
 
-      {/* ── Game Over ─────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {uiPhase === "gameover" && (
-          <motion.div
-            key="gameover"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{   opacity: 0 }}
-            transition={{ duration: 0.55, delay: 0.2 }}
-            style={{
-              position: "absolute", inset: 0,
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 28,
-              background: "rgba(0,0,0,0.8)",
-              backdropFilter: "blur(16px)",
-              zIndex: 100,
-            }}
-          >
-            <motion.div
-              initial={{ y: -28, opacity: 0 }}
-              animate={{ y: 0,   opacity: 1 }}
-              transition={{ delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              style={{ textAlign: "center" }}
-            >
-              <div style={{
-                fontFamily: "var(--font-display)",
-                fontSize:   "clamp(44px, 9vw, 88px)",
-                fontWeight: 700, letterSpacing: "0.07em",
-                color:      showElim ? C.danger : C.warn,
-                textShadow: `0 0 48px ${showElim ? C.danger : C.warn}`,
-                textTransform: "uppercase",
-              }}>
-                {showElim ? "ELIMINATED" : "TIME'S UP"}
-              </div>
+      <color attach="background" args={[isRed ? "#1a0505" : "#a7c3df"]} />
 
-              <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1   }}
-                transition={{ delay: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
-                style={{
-                  fontFamily: "var(--font-mono)", fontSize: 32,
-                  color: "#fff", marginTop: 14, letterSpacing: "0.06em",
-                }}
-              >
-                {finalScore.toLocaleString("en-US")}
-              </motion.div>
+      <fog 
+        attach="fog" 
+        args={[
+          isRed ? "#2a0808" : "#98b8d8", 
+          isRed ? 18 : 40, 
+          isRed ? 95 : 150
+        ]} 
+      />
 
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.7 }}
-                style={{
-                  fontFamily: "var(--font-mono)", fontSize: 11,
-                  color: C.muted, marginTop: 6, letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {showElim ? "You moved during red light" : "Finish line not reached"}
-              </motion.div>
-            </motion.div>
+      <Arena 
+        isRed={isRed} 
+        eliminationGuardRef={eliminationGuardRef} 
+        guardFlashRef={guardFlashRef} 
+      />
+      <RLGLDoll
+        position={[0, 0, -12.5]}
+        targetRotation={dollRotationRef.current}
+        isRed={isRed}
+        scanIntensity={Math.min(1, redTimerRef.current * 1.2)}
+      />
+      {playersRef.current.map((p) => (
+        <RLGLContestant 
+          key={p.id} 
+          player={p} 
+          isMoving={Math.abs(p.vz) > 0.2} 
+          isRedLight={isRed} 
+        />
+      ))}
 
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0  }}
-              transition={{ delay: 0.75 }}
-              style={{ display: "flex", gap: 16 }}
-            >
-              <OverlayBtn label="TRY AGAIN" accent onClick={resetGame} />
-              {onExit && <OverlayBtn label="← MENU" onClick={onExit} />}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <R3FLine ref={shotLineRef} geometry={lineGeometry}>
+        <lineBasicMaterial color="#ff1133" linewidth={3} transparent opacity={1} depthWrite={false} />
+      </R3FLine>
+    </>
+  );
+}
 
-      {/* ── Victory ───────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {uiPhase === "victory" && (
-          <motion.div
-            key="victory"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{   opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            style={{
-              position: "absolute", inset: 0,
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 28,
-              background: "rgba(0,0,0,0.75)",
-              backdropFilter: "blur(14px)",
-              zIndex: 100,
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.65, opacity: 0 }}
-              animate={{ scale: 1,    opacity: 1 }}
-              transition={{ delay: 0.1, ease: [0.34, 1.56, 0.64, 1], duration: 0.6 }}
-              style={{ textAlign: "center" }}
-            >
-              <div style={{
-                fontFamily: "var(--font-display)",
-                fontSize:   "clamp(44px, 9vw, 88px)",
-                fontWeight: 700, letterSpacing: "0.07em",
-                color:      C.green,
-                textShadow: `0 0 48px ${C.green}`,
-                textTransform: "uppercase",
-              }}>
-                YOU SURVIVED
-              </div>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                style={{
-                  fontFamily: "var(--font-mono)", fontSize: 32,
-                  color: C.warn, marginTop: 14, letterSpacing: "0.06em",
-                  textShadow: `0 0 20px ${C.warn}`,
-                }}
-              >
-                {finalScore.toLocaleString("en-US")}
-              </motion.div>
-            </motion.div>
+/* ─────────────────────────────────────────────────────────────────────────────
+ * MAIN COMPONENT
+ * ────────────────────────────────────────────────────────────────────────────*/
 
-            <motion.div
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0  }}
-              transition={{ delay: 0.65 }}
-              style={{ display: "flex", gap: 16 }}
-            >
-              <OverlayBtn label="PLAY AGAIN" accent onClick={resetGame} />
-              {onExit && <OverlayBtn label="← MENU" onClick={onExit} />}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+interface RLGLProps {
+  onExit?: () => void;
+  onComplete?: (score: number, outcome: "victory" | "eliminated") => void;
+}
 
-      {/* ── Mobile Touch Controls (SSR-safe) ──────────────────────────────── */}
-      <TouchControlsGate inputRef={inputRef} />
+export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) {
+  const settings = useGameStore((s) => s.settings);
+  const setRuntimePhase = useGameStore((s) => s.setRuntimePhase);
+
+  // Compute round timer based on current difficulty
+  const difficultyTimer = useMemo(() => {
+    switch (settings.difficulty) {
+      case "easy": return TIMER_EASY;
+      case "hard": return TIMER_HARD;
+      default: return TIMER_MEDIUM;
+    }
+  }, [settings.difficulty]);
+
+  useEffect(() => {
+    setRuntimePhase("countdown");
+  }, [setRuntimePhase]);
+
+  useEffect(() => {
+    const sm = SoundManager.getInstance();
+    const mm = MusicManager.getInstance();
+    sm.preload([
+      "player_step", "player_jump", "player_land",
+      "player_eliminated", "player_victory",
+      "heartbeat", "shatter", "crowd_gasp", "crowd_cheer", "countdown_beep", "countdown_go", "scan_tone"
+    ] as any[]);
+    
+    return () => {
+      sm.stopAll(0);
+      sm.stopAllLoops(0);
+      mm.stopAll();
+    };
+  }, []);
+
+  useEffect(() => {
+    const sm = SoundManager.getInstance();
+    const mm = MusicManager.getInstance();
+    // Use the SoundManager to store the volume state universally 
+    sm.setMasterVolume(settings.masterVolume);
+    sm.setSFXVolume(settings.sfxVolume);
+    sm.setMusicVolume(settings.musicVolume); 
+    
+    // Command the MusicManager to pull the updated multipliers from the SoundManager
+    mm.updateVolume();
+  }, [settings.masterVolume, settings.sfxVolume, settings.musicVolume]);
+
+  const inputRef = useRef({ forward: false, sprint: false });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Escape") {
+        SoundManager.getInstance().stopAll(0);
+        SoundManager.getInstance().stopAllLoops(0);
+        MusicManager.getInstance().stopAll();
+        onExit?.();
+        return;
+      }
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+        inputRef.current.sprint = true;
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+        inputRef.current.sprint = false;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    const onBlur = () => { inputRef.current.forward = false; inputRef.current.sprint = false; };
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [onExit]);
+
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+  
+  const togglePause = useCallback(() => {
+    setPaused((p) => {
+      pausedRef.current = !p;
+      const sm = SoundManager.getInstance();
+      const mm = MusicManager.getInstance();
+      if (!p) {
+        sm.stopLoop("heartbeat" as any, 0);
+        mm.pause();
+      } else {
+        sm.loop("heartbeat" as any);
+        mm.resume();
+      }
+      return !p;
+    });
+  }, []);
+
+  const [hud, setHud] = useState({
+    timeLeft: difficultyTimer,
+    aliveCount: NPC_COUNT + 1,
+    lightPhase: LightPhase.GREEN,
+    score: 0,
+    playerProgressPct: 0,
+  });
+  const handleHudUpdate = useCallback((d: typeof hud) => setHud(d), []);
+
+  const [endState, setEndState] = useState<{ phase: GamePhase; score: number } | null>(null);
+  
+  const handleGameOver = useCallback((phase: GamePhase, score: number) => {
+    setEndState({ phase, score });
+    
+    const state = useGameStore.getState();
+    state.addScore(score);
+    state.updateBestScore("red-light-green-light", score);
+    
+    if (phase === GamePhase.VICTORY) {
+      state.setRuntimePhase("victory");
+      onComplete?.(score, "victory");
+    } else if (phase === GamePhase.ELIMINATED || phase === GamePhase.TIMEOUT) {
+      state.setRuntimePhase("eliminated");
+      onComplete?.(score, "eliminated");
+    }
+  }, [onComplete]);
+
+  const [resetSignal, setResetSignal] = useState(0);
+  const handleRestart = useCallback(() => {
+    // Clean stop all audio before restart
+    SoundManager.getInstance().stopAll(0);
+    SoundManager.getInstance().stopAllLoops(0);
+    MusicManager.getInstance().stopAll();
+    
+    // Reset UI state
+    setEndState(null);
+    setRuntimePhase("countdown");
+    setHud({ 
+      timeLeft: difficultyTimer, 
+      aliveCount: NPC_COUNT + 1, 
+      lightPhase: LightPhase.GREEN, 
+      score: 0, 
+      playerProgressPct: 0 
+    });
+    
+    // Trigger scene reset via signal
+    setResetSignal((n) => n + 1);
+  }, [setRuntimePhase, difficultyTimer]);
+
+  const moveHoldHandlers = useMemo(() => ({
+    onPointerDown: (e: React.PointerEvent) => { 
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId); 
+      inputRef.current.forward = true; 
+    },
+    onPointerUp:   () => { inputRef.current.forward = false; },
+    onPointerLeave:() => { inputRef.current.forward = false; },
+    onPointerCancel:() => { inputRef.current.forward = false; },
+  }), []);
+
+  return (
+    <div
+      data-testid="rlgl3d-root"
+      style={{
+        position: "fixed", inset: 0, width: "100vw", height: "100dvh",
+        background: "#000", overflow: "hidden",
+        fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+        userSelect: "none",
+      }}
+    >
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
+        camera={{ fov: 55, near: 0.1, far: 250, position: [0, 6, 95] }}
+        onPointerMissed={() => { /* noop */ }}
+      >
+        <Suspense fallback={null}>
+          <Scene
+            onGameOver={handleGameOver}
+            onHudUpdate={handleHudUpdate}
+            pausedRef={pausedRef}
+            inputRef={inputRef}
+            resetSignal={resetSignal}
+            roundTimer={difficultyTimer}
+          />
+        </Suspense>
+      </Canvas>
+
+      <HUDOverlay
+        hud={hud}
+        onExit={onExit}
+        onPause={togglePause}
+        paused={paused}
+      />
+
+      {hud.lightPhase === LightPhase.RED && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5,
+            boxShadow: "inset 0 0 220px 60px rgba(220,20,20,0.55)",
+            animation: "rlgl3d-pulse 1.4s ease-in-out infinite alternate",
+          }}
+        />
+      )}
+
+      {paused && (
+        <div
+          style={{
+            position: "absolute", inset: 0, zIndex: 30,
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24,
+          }}
+        >
+          <div style={{ fontFamily: "var(--font-bebas)", fontSize: 64, letterSpacing: "0.2em", color: "#ff0066" }}>
+            PAUSED
+          </div>
+          <button onClick={togglePause} data-testid="rlgl3d-resume" style={btnStyle("#00ffb2")}>
+            RESUME
+          </button>
+          {onExit && (
+            <button onClick={() => {
+              SoundManager.getInstance().stopAll(0);
+              SoundManager.getInstance().stopAllLoops(0);
+              MusicManager.getInstance().stopAll();
+              onExit();
+            }} data-testid="rlgl3d-pause-exit" style={btnStyle("#ff0066")}>
+              EXIT TO MENU
+            </button>
+          )}
+        </div>
+      )}
+
+      {endState && (
+        <EndScreen
+          phase={endState.phase}
+          score={endState.score}
+          aliveCount={hud.aliveCount}
+          onRestart={handleRestart}
+          onExit={onExit}
+        />
+      )}
+
+      <div
+        data-testid="rlgl3d-mobile-controls"
+        style={{
+          position: "absolute", bottom: 28, left: 0, right: 0, zIndex: 25,
+          display: "flex", justifyContent: "center", gap: 24, pointerEvents: "none",
+        }}
+        className="rlgl3d-touch-only"
+      >
+        <button
+          {...moveHoldHandlers}
+          data-testid="rlgl3d-move-btn"
+          style={{
+            pointerEvents: "auto",
+            width: 110, height: 110, borderRadius: 60,
+            background: "rgba(15,160,125,0.75)",
+            border: "3px solid rgba(255,255,255,0.6)",
+            color: "#fff", fontSize: 14, fontWeight: 800, letterSpacing: "0.18em",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 0 32px rgba(15,160,125,0.5)",
+            touchAction: "none",
+          }}
+        >
+          HOLD<br/>TO RUN
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes rlgl3d-pulse {
+          from { box-shadow: inset 0 0 180px 50px rgba(220,20,20,0.45); }
+          to   { box-shadow: inset 0 0 260px 80px rgba(255,40,40,0.7);  }
+        }
+        @media (pointer: fine) {
+          .rlgl3d-touch-only { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
 
-// ─── Overlay Button ───────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+ * HUD OVERLAY
+ * ────────────────────────────────────────────────────────────────────────────*/
 
-function OverlayBtn({
-  label, accent = false, onClick,
+function HUDOverlay({
+  hud, onExit, onPause, paused,
 }: {
-  label: string; accent?: boolean; onClick: () => void;
+  hud: { timeLeft: number; aliveCount: number; lightPhase: LightPhase; score: number; playerProgressPct: number };
+  onExit?: () => void;
+  onPause: () => void;
+  paused: boolean;
 }) {
-  const [hov, setHov] = useState(false);
-  const col = accent ? "var(--color-accent)" : "rgba(255,255,255,0.48)";
+  const isRed = hud.lightPhase === LightPhase.RED;
+  const isWarning = hud.lightPhase === LightPhase.WARNING;
+  const lightCol = isRed ? "#ff2640" : isWarning ? "#ffae2a" : "#00ffb2";
+  
+  const lightLabel = hud.lightPhase === LightPhase.GREEN ? "GREEN LIGHT"
+    : hud.lightPhase === LightPhase.RED ? "RED LIGHT"
+    : "WARNING";
+
+  const tMin = Math.floor(hud.timeLeft / 60);
+  const tSec = Math.floor(hud.timeLeft % 60);
+  const lowTime = hud.timeLeft < 15;
+
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <>
+      <div
+        data-testid="rlgl3d-hud-top"
+        style={{
+          position: "absolute", top: 0, left: 0, right: 0, zIndex: 10,
+          padding: "16px 22px",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, pointerEvents: "auto" }}>
+          {onExit && (
+            <button
+              onClick={() => {
+                SoundManager.getInstance().stopAll(0);
+                SoundManager.getInstance().stopAllLoops(0);
+                MusicManager.getInstance().stopAll();
+                onExit();
+              }}
+              data-testid="rlgl3d-exit-btn"
+              style={{
+                padding: "8px 14px",
+                background: "rgba(8,8,14,0.78)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                borderRadius: 4,
+                color: "rgba(245,245,245,0.85)",
+                fontSize: 11, letterSpacing: "0.18em", fontWeight: 700,
+                textTransform: "uppercase", cursor: "pointer",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              ← MENU
+            </button>
+          )}
+          <div style={panelStyle()}>
+            <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 9, letterSpacing: "0.2em" }}>ALIVE</span>
+            <span style={{ color: "#fff", fontWeight: 800, marginLeft: 8, fontSize: 16 }}>
+              {hud.aliveCount.toString().padStart(2, "0")}<span style={{ color: "rgba(255,255,255,0.3)" }}>/{NPC_COUNT + 1}</span>
+            </span>
+          </div>
+        </div>
+
+        <div
+          data-testid="rlgl3d-hud-light"
+          style={{
+            position: "absolute", left: "50%", transform: "translateX(-50%)",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+            pointerEvents: "none",
+          }}
+        >
+          <div style={{
+            padding: "10px 26px",
+            border: `1.5px solid ${lightCol}`,
+            background: `${lightCol}18`,
+            borderRadius: 4,
+            display: "flex", alignItems: "center", gap: 10,
+            fontFamily: "var(--font-bebas)",
+            fontSize: 24, letterSpacing: "0.32em", color: lightCol,
+            backdropFilter: "blur(10px)",
+            boxShadow: `0 0 38px ${lightCol}50`,
+            textShadow: `0 0 16px ${lightCol}`,
+          }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: 10, background: lightCol,
+              boxShadow: `0 0 12px ${lightCol}`,
+              animation: isRed ? "rlgl3d-blink 0.7s linear infinite" : "none",
+            }} />
+            {lightLabel}
+          </div>
+          <div style={{
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: 28, fontWeight: 700, color: lowTime ? "#ff2640" : "#fff",
+            textShadow: lowTime ? "0 0 18px rgba(255,38,64,0.7)" : "none",
+            letterSpacing: "0.06em",
+          }}>
+            {tMin.toString().padStart(2, "0")}:{tSec.toString().padStart(2, "0")}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, pointerEvents: "auto" }}>
+          <div style={panelStyle()}>
+            <span style={{ color: "rgba(255,255,255,0.45)", fontSize: 9, letterSpacing: "0.2em" }}>SCORE</span>
+            <span style={{ color: "#00ffb2", fontWeight: 800, marginLeft: 8, fontSize: 16, textShadow: "0 0 10px rgba(0,255,178,0.55)" }}>
+              {hud.score.toLocaleString("en-US").padStart(6, "0")}
+            </span>
+          </div>
+          <button
+            onClick={onPause}
+            data-testid="rlgl3d-pause-btn"
+            aria-label={paused ? "Resume" : "Pause"}
+            style={{
+              padding: "8px 14px",
+              background: "rgba(8,8,14,0.78)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 4,
+              color: "rgba(245,245,245,0.85)",
+              fontSize: 11, letterSpacing: "0.18em", fontWeight: 700,
+              textTransform: "uppercase", cursor: "pointer",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {paused ? "▶ PLAY" : "❚❚ PAUSE"}
+          </button>
+        </div>
+      </div>
+
+      <div
+        data-testid="rlgl3d-progress"
+        style={{
+          position: "absolute", left: "50%", transform: "translateX(-50%)",
+          bottom: 18, width: "min(640px, 80%)", zIndex: 10,
+          padding: "8px 14px",
+          background: "rgba(8,8,14,0.6)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 4,
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.45)" }}>
+          <span>START</span>
+          <span>{Math.round(hud.playerProgressPct * 100)}%</span>
+          <span>FINISH</span>
+        </div>
+        <div style={{ height: 6, background: "rgba(255,255,255,0.12)", borderRadius: 4, overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${hud.playerProgressPct * 100}%`,
+              background: "linear-gradient(90deg, #00ffb2 0%, #ffd83d 60%, #ff0066 100%)",
+              transition: "width 0.18s linear",
+              boxShadow: "0 0 12px rgba(0,255,178,0.6)",
+            }}
+          />
+        </div>
+      </div>
+
+      <div style={{
+        position: "absolute", left: 22, bottom: 76, zIndex: 10,
+        padding: "8px 12px",
+        background: "rgba(8,8,14,0.6)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 4,
+        fontSize: 10, letterSpacing: "0.16em", color: "rgba(255,255,255,0.6)",
+        backdropFilter: "blur(6px)",
+        pointerEvents: "none",
+      }}
+        className="rlgl3d-desktop-only"
+      >
+        HOLD <b style={{ color: "#00ffb2" }}>W</b> / <b style={{ color: "#00ffb2" }}>↑</b> / <b style={{ color: "#00ffb2" }}>SPACE</b> TO RUN · <b>SHIFT</b> SPRINT · <b>ESC</b> EXIT
+      </div>
+      <style>{`
+        @keyframes rlgl3d-blink {
+          50% { opacity: 0.25; }
+        }
+        @media (pointer: coarse) {
+          .rlgl3d-desktop-only { display: none !important; }
+        }
+      `}</style>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * END SCREEN
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+function EndScreen({
+  phase, score, aliveCount, onRestart, onExit,
+}: {
+  phase: GamePhase; score: number; aliveCount: number;
+  onRestart: () => void; onExit?: () => void;
+}) {
+  const isWin = phase === GamePhase.VICTORY;
+  const title = isWin ? "YOU SURVIVED" : phase === GamePhase.TIMEOUT ? "TIME'S UP" : "ELIMINATED";
+  const sub   = isWin ? "ROUND CLEARED" : phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH" : "MOVED DURING RED LIGHT";
+  const color = isWin ? "#00ffb2" : "#ff2640";
+
+  return (
+    <div
+      data-testid="rlgl3d-endscreen"
       style={{
-        padding:    "13px 40px",
-        background: hov ? (accent ? "var(--color-accent)" : "rgba(255,255,255,0.09)") : "transparent",
-        border:     `1.5px solid ${col}`,
-        borderRadius: 5, cursor: "pointer",
-        fontFamily: "var(--font-display)", fontSize: 17,
-        fontWeight: 700, letterSpacing: "0.14em",
-        color:      hov && accent ? "#000" : col,
-        textTransform: "uppercase",
-        transition: "all 0.17s",
-        boxShadow:  hov && accent ? `0 0 28px var(--color-accent-dim)` : "none",
+        position: "absolute", inset: 0, zIndex: 40,
+        background: "rgba(0,0,0,0.82)",
+        backdropFilter: "blur(14px)",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22,
+        animation: "rlgl3d-fadein 0.5s ease",
       }}
     >
-      {label}
-    </button>
+      <div style={{
+        fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
+        fontSize: "clamp(48px, 11vw, 110px)", letterSpacing: "0.15em",
+        color, textShadow: `0 0 50px ${color}`,
+      }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 12, letterSpacing: "0.32em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>
+        {sub}
+      </div>
+      <div style={{ display: "flex", gap: 32, marginTop: 10 }}>
+        <Stat label="SCORE" value={score.toLocaleString("en-US")} accent="#ffd83d" />
+        <Stat label="SURVIVORS" value={`${aliveCount}/${NPC_COUNT + 1}`} accent="#00ffb2" />
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 16 }}>
+        <button data-testid="rlgl3d-restart" onClick={onRestart} style={btnStyle("#00ffb2")}>
+          PLAY AGAIN
+        </button>
+        {onExit && (
+          <button data-testid="rlgl3d-end-exit" onClick={() => {
+            SoundManager.getInstance().stopAll(0);
+            SoundManager.getInstance().stopAllLoops(0);
+            MusicManager.getInstance().stopAll();
+            onExit();
+          }} style={btnStyle("#ff0066")}>
+            ← MENU
+          </button>
+        )}
+      </div>
+      <style>{`
+        @keyframes rlgl3d-fadein {
+          from { opacity: 0; transform: scale(0.96); }
+          to   { opacity: 1; transform: scale(1);   }
+        }
+      `}</style>
+    </div>
   );
+}
+
+function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <span style={{ fontSize: 10, letterSpacing: "0.3em", color: "rgba(255,255,255,0.4)" }}>{label}</span>
+      <span style={{ fontSize: 28, fontWeight: 800, color: accent, textShadow: `0 0 16px ${accent}88`, fontFamily: "var(--font-mono)" }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * STYLE HELPERS
+ * ────────────────────────────────────────────────────────────────────────────*/
+
+function panelStyle(): React.CSSProperties {
+  return {
+    padding: "8px 14px",
+    background: "rgba(8,8,14,0.78)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    borderRadius: 4,
+    backdropFilter: "blur(8px)",
+    display: "flex", alignItems: "center",
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+  };
+}
+
+function btnStyle(accent: string): React.CSSProperties {
+  return {
+    padding: "12px 30px",
+    background: "transparent",
+    border: `1.5px solid ${accent}`,
+    borderRadius: 4,
+    color: accent,
+    fontSize: 13, letterSpacing: "0.22em", fontWeight: 800,
+    fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
+    cursor: "pointer",
+    textTransform: "uppercase",
+    transition: "all 140ms",
+  };
 }

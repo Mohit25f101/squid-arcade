@@ -1,27 +1,30 @@
+// src/components/games/GlassBridge.tsx
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useGameShellBridge } from "@/components/GameShell";
 import { useHUDSync } from "@/components/hud/useHUDSync";
+import { SoundManager } from "@/managers/SoundManager";
+import { ResultScreen } from "../ui/ResultScreen";
+import { lerp, clamp } from "@/utils/math";
+import { RLGLDoll, RLGLGuard, RLGLContestant } from "@/components/r3f/models";
+import { useGameStore } from "@/store/gameStore";
 
 interface GameProps {
   onExit?: () => void;
+  onComplete?: (score: number, outcome: "victory" | "eliminated") => void;
 }
-
-// ============================================================
-// 1. CONSTANTS & PALETTE
-// ============================================================
 
 const WORLD_W = 1280;
 const WORLD_H = 720;
-
 const TOTAL_ROWS = 18;
-const PANEL_W = 180;
+
+const PLAYER_W = 68; 
+const PLAYER_H = 100;
+const PANEL_W = 140; 
 const PANEL_H = 80;
-const PANEL_GAP_X = 24;
+const PANEL_GAP_X = 30;
 const PANEL_GAP_Y = 36;
-const BRIDGE_X_LEFT = WORLD_W / 2 - PANEL_W - PANEL_GAP_X / 2;
-const BRIDGE_X_RIGHT = WORLD_W / 2 + PANEL_GAP_X / 2;
 const ROW_0_Y = WORLD_H * 0.85; 
 
 const JUMP_DURATION = 0.38; 
@@ -33,25 +36,15 @@ const SLOW_MO_RESTORE_DELAY = 0.9;
 const SHAKE_SHATTER = 14;
 const SHAKE_DECAY_RATE = 0.88;
 
-const PLAYER_W = 52;
-const PLAYER_H = 76;
-
-const SAFE_BLUE: [number, number, number] = [130, 200, 255];
-const FRAGILE_BLUE: [number, number, number] = [148, 190, 168];
-const VOID_COLOR = "#050810";
+const SAFE_BLUE: [number, number, number] = [3, 135, 121]; 
+const FRAGILE_BLUE: [number, number, number] = [180, 210, 220]; 
 
 const CAMERA_LERP = 5;
-const CAMERA_ROW_OFFSET = 2.5; 
-
 const COUNTDOWN_TOTAL = 120; 
-
-// ============================================================
-// 2. TYPES
-// ============================================================
 
 interface Panel {
   row: number;
-  col: 0 | 1;
+  col: 0 | 1 | 2; 
   safe: boolean;
   state: "intact" | "cracking" | "shattered" | "gone";
   crackTimer: number; 
@@ -66,12 +59,12 @@ interface Panel {
 
 interface PlayerState {
   row: number; 
-  col: 0 | 1 | null; 
+  col: 0 | 1 | 2 | null; 
   worldY: number; 
   jumpT: number; 
   jumping: boolean;
   targetRow: number;
-  targetCol: 0 | 1;
+  targetCol: 0 | 1 | 2; 
   startY: number;
   facing: -1 | 1;
   status: "alive" | "falling" | "finished";
@@ -135,10 +128,6 @@ interface GameState {
   lateGameZoomActive: boolean;
 }
 
-// ============================================================
-// 3. OBJECT POOL
-// ============================================================
-
 class ObjectPool<T extends { active: boolean }> {
   private pool: T[];
   private factory: () => T;
@@ -171,10 +160,6 @@ class ObjectPool<T extends { active: boolean }> {
   }
 }
 
-// ============================================================
-// 4. SEEDED RANDOM (xorshift32)
-// ============================================================
-
 function makeRng(seed: number) {
   let s = seed >>> 0 || 1;
   return {
@@ -187,18 +172,6 @@ function makeRng(seed: number) {
   };
 }
 
-// ============================================================
-// 5. PURE UTILITIES
-// ============================================================
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
-}
-
 function jumpArc(startY: number, targetY: number, t: number): number {
   return lerp(startY, targetY, t) - Math.sin(t * Math.PI) * JUMP_HEIGHT;
 }
@@ -207,27 +180,25 @@ function rowWorldY(row: number): number {
   return ROW_0_Y - row * (PANEL_H + PANEL_GAP_Y);
 }
 
-function colWorldX(col: 0 | 1): number {
-  return col === 0 ? BRIDGE_X_LEFT : BRIDGE_X_RIGHT;
+function colWorldX(col: 0 | 1 | 2): number {
+  if (col === 0) return WORLD_W / 2 - PANEL_W * 1.5 - PANEL_GAP_X; 
+  if (col === 1) return WORLD_W / 2 - PANEL_W * 0.5;                
+  return WORLD_W / 2 + PANEL_W * 0.5 + PANEL_GAP_X;                 
 }
 
 function rgb(r: number, g: number, b: number, a = 1): string {
   return `rgba(${r|0},${g|0},${b|0},${a})`;
 }
 
-// ============================================================
-// 6. BRIDGE GENERATOR
-// ============================================================
-
 function generateBridge(rows: number, seed: number): Panel[][] {
   const rng = makeRng(seed);
   const panels: Panel[][] = [];
 
   for (let row = 1; row <= rows; row++) {
-    const safeCol = rng.next() < 0.5 ? 0 : 1;
+    const safeCol = Math.floor(rng.next() * 3) as 0 | 1 | 2;
     const rowPanels: Panel[] = [];
 
-    for (let col = 0 as 0 | 1; col <= 1; col++) {
+    for (let col = 0 as 0 | 1 | 2; col <= 2; col++) {
       const isSafe = col === safeCol;
       const glintBase = rng.next() * Math.PI * 2;
 
@@ -252,10 +223,6 @@ function generateBridge(rows: number, seed: number): Panel[][] {
 
   return panels;
 }
-
-// ============================================================
-// 7. BAKED ASSET INITIALIZER
-// ============================================================
 
 interface BakedAssets {
   background: HTMLCanvasElement | OffscreenCanvas;
@@ -284,30 +251,45 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const ctx = getCtx2d(c);
 
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#010408");
-  grad.addColorStop(0.3, "#020912");
-  grad.addColorStop(0.7, "#030d1a");
-  grad.addColorStop(1, "#050f20");
+  grad.addColorStop(0, "#1a0810");
+  grad.addColorStop(0.3, "#0d0406");
+  grad.addColorStop(0.7, "#080204");
+  grad.addColorStop(1, "#000000");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  for (let i = 0; i < 3; i++) {
-    const yPos = h * (0.2 + i * 0.3);
-    const bandGrad = ctx.createRadialGradient(w / 2, yPos, 0, w / 2, yPos, w * 0.6);
-    bandGrad.addColorStop(0, "rgba(30,80,160,0.04)");
-    bandGrad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = bandGrad;
-    ctx.fillRect(0, 0, w, h);
-  }
-
-  ctx.strokeStyle = "rgba(40,100,200,0.04)";
-  ctx.lineWidth = 1;
-  for (let x = 0; x < w; x += 80) {
+  ctx.fillStyle = "#0f0a0d";
+  ctx.strokeStyle = "#1a0e14";
+  ctx.lineWidth = 2;
+  
+  for (let i = 0; i < 6; i++) {
+    const x = (w / 6) * i + 50;
+    ctx.fillRect(x, 0, 40, h);
+    ctx.strokeRect(x, 0, 40, h);
+    
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
+    for (let y = 0; y < h; y += 150) {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 40, y + 150);
+      ctx.moveTo(x + 40, y);
+      ctx.lineTo(x, y + 150);
+    }
     ctx.stroke();
   }
+
+  const spotlight = ctx.createRadialGradient(w / 2, h * 0.2, 0, w / 2, h * 0.4, w * 0.9);
+  spotlight.addColorStop(0, "rgba(200, 60, 120, 0.10)");
+  spotlight.addColorStop(0.5, "rgba(140, 40, 80, 0.06)");
+  spotlight.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = spotlight;
+  ctx.fillRect(0, 0, w, h);
+  
+  const fogGrad = ctx.createLinearGradient(0, h * 0.5, 0, h);
+  fogGrad.addColorStop(0, "rgba(0,0,0,0)");
+  fogGrad.addColorStop(0.6, "rgba(10,4,8,0.5)");
+  fogGrad.addColorStop(1, "rgba(5,2,4,0.8)");
+  ctx.fillStyle = fogGrad;
+  ctx.fillRect(0, 0, w, h);
 
   return c;
 }
@@ -370,7 +352,7 @@ function bakeVignette(w: number, h: number): HTMLCanvasElement | OffscreenCanvas
   const grad = ctx.createRadialGradient(w / 2, h / 2, h * 0.15, w / 2, h / 2, w * 0.8);
   grad.addColorStop(0, "rgba(0,0,0,0)");
   grad.addColorStop(0.6, "rgba(0,0,0,0.3)");
-  grad.addColorStop(1, "rgba(0,4,12,0.92)");
+  grad.addColorStop(1, "rgba(8,2,4,0.92)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
   return c;
@@ -385,10 +367,6 @@ function initBakedAssets(): BakedAssets {
     vignetteCanvas: bakeVignette(WORLD_W, WORLD_H),
   };
 }
-
-// ============================================================
-// 8. PARTICLE EMITTER
-// ============================================================
 
 let particlePool: ObjectPool<Particle> | null = null;
 
@@ -454,7 +432,8 @@ function updateParticles(gs: GameState, dtSec: number): void {
 function updateCamera(gs: GameState, dtSec: number): void {
   const cam = gs.camera;
   const playerWorldY = gs.player.worldY;
-  cam.targetY = playerWorldY - WORLD_H * 0.55 + CAMERA_ROW_OFFSET * (PANEL_H + PANEL_GAP_Y);
+  
+  cam.targetY = playerWorldY - WORLD_H * 0.65;
 
   if (gs.player.status === "falling") {
     cam.y = cam.targetY;
@@ -481,7 +460,7 @@ function applyShake(ctx: CanvasRenderingContext2D, cam: CameraState): void {
   }
 }
 
-function startJump(gs: GameState, targetCol: 0 | 1): void {
+function startJump(gs: GameState, targetCol: 0 | 1 | 2): void {
   if (gs.player.jumping || gs.player.status !== "alive") return;
   if (gs.phase !== "playing") return;
 
@@ -547,14 +526,25 @@ function updatePlayer(gs: GameState, dtSec: number): void {
     gs.currentRow = p.row;
     gs.inputConsumed = false;
 
+    if (p.col !== null && !p.jumping) {
+      const currentPanel = gs.panels[p.row - 1]?.[p.col];
+      if (currentPanel?.safe && !gs.audioEvents.has(`land-${p.row}-${p.col}`)) {
+        gs.audioEvents.add(`land-${p.row}-${p.col}`);
+        SoundManager.getInstance().play("jump");
+      } else if (currentPanel && !currentPanel.safe && !gs.audioEvents.has(`tension-${p.row}`)) {
+        gs.audioEvents.add(`tension-${p.row}`);
+      }
+    }
+
     if (p.row > gs.totalRows) {
       triggerVictory(gs);
       return;
     }
 
-    const panel = gs.panels[p.row - 1]?.[p.col];
+    const safeColIndex = p.col !== null ? p.col : 0;
+    const panel = gs.panels[p.row - 1]?.[safeColIndex];
     if (!panel) {
-      triggerVictory(gs);
+      triggerElimination(gs);
       return;
     }
 
@@ -585,7 +575,7 @@ function updatePanels(gs: GameState, dtSec: number): void {
   for (let r = rowMin; r <= rowMax; r++) {
     const row = gs.panels[r];
     if (!row) continue;
-    for (let c = 0; c < 2; c++) {
+    for (let c = 0; c <= 2; c++) {
       const panel = row[c];
       panel.glintTimer += dtSec * panel.glintPhase;
       panel.flashAlpha = Math.max(0, panel.flashAlpha - dtSec * 3);
@@ -634,10 +624,12 @@ function updateAtmosphere(gs: GameState, dtSec: number): void {
   if (gs.phase === "playing" && getPool().availableCount > 10) {
     gs.ambientDripTimer -= dtSec;
     if (gs.ambientDripTimer <= 0) {
-      gs.ambientDripTimer = 0.8 + Math.random() * 0.6;
-      const rx = BRIDGE_X_LEFT + Math.random() * (BRIDGE_X_RIGHT + PANEL_W - BRIDGE_X_LEFT);
+      gs.ambientDripTimer = 1.2 + Math.random() * 0.8;
+      const leftEdge = colWorldX(0);
+      const rightEdge = colWorldX(2) + PANEL_W;
+      const rx = leftEdge + Math.random() * (rightEdge - leftEdge);
       const ry = rowWorldY(gs.currentRow) - (Math.random() * 200 + 50);
-      emitBurst(gs, { x: rx, y: ry, count: 2, r: 60, g: 90, b: 140, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
+      emitBurst(gs, { x: rx, y: ry, count: 2, r: 100, g: 40, b: 80, speed: 40, decay: 1.2, sizeMin: 1, sizeMax: 2.5, upwardBias: -0.5 });
     }
   }
 
@@ -660,10 +652,12 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
 
   if (!gs.inputConsumed && !gs.player.jumping && gs.player.status === "alive") {
     if (inputRef.current.left) startJump(gs, 0);
-    else if (inputRef.current.right) startJump(gs, 1);
+    else if (inputRef.current.center) startJump(gs, 1);
+    else if (inputRef.current.right) startJump(gs, 2);
   }
 
   inputRef.current.left = false;
+  inputRef.current.center = false;
   inputRef.current.right = false;
 
   updatePanels(gs, scaled);
@@ -674,6 +668,141 @@ function gameTick(gs: GameState, dtSec: number, inputRef: React.MutableRefObject
 
   if (gs.phase === "falling") updateElimination(gs, dtSec);
   gs.elapsed += dtSec;
+}
+
+function drawDoll(
+  ctx: CanvasRenderingContext2D,
+  dollX: number,
+  dollY: number,
+  scale: number,
+  gs: GameState
+): void {
+  const S = 130 * scale;
+  const t = gs.atmosphericT ?? performance.now() * 0.001;
+
+  const targetCol = gs.player.col ?? gs.player.targetCol ?? 1;
+  const colOffsets = [-0.32, 0, 0.32];
+  const targetTilt = colOffsets[targetCol];
+  
+  // @ts-expect-error: WebKit prefix
+  gs.__dollHeadTilt = gs.__dollHeadTilt ?? 0;
+  // @ts-expect-error: WebKit prefix
+  gs.__dollHeadTilt += (targetTilt - gs.__dollHeadTilt) * 0.18;
+  // @ts-expect-error: WebKit prefix
+  const headTilt: number = gs.__dollHeadTilt;
+
+  const isFalling  = gs.phase === "falling";
+  const isHostile  = isFalling || gs.timeLeft < 12;
+
+  const tremor = isHostile ? (Math.sin(t * 36) * 0.4 + Math.sin(t * 17) * 0.6) : 0;
+
+  ctx.save();
+  ctx.translate(dollX + tremor, dollY);
+
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath();
+  ctx.ellipse(0, S * 0.85, S * 0.55, S * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const dressGrad = ctx.createLinearGradient(0, -S * 0.2, 0, S * 0.8);
+  dressGrad.addColorStop(0, "#f9a03f");
+  dressGrad.addColorStop(0.55, "#e0651a");
+  dressGrad.addColorStop(1, "#8a1a1f");
+  ctx.fillStyle = dressGrad;
+  ctx.beginPath();
+  ctx.moveTo(-S * 0.42, -S * 0.10);
+  ctx.lineTo(-S * 0.55,  S * 0.82);
+  ctx.lineTo( S * 0.55,  S * 0.82);
+  ctx.lineTo( S * 0.42, -S * 0.10);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#fde74c";
+  ctx.fillRect(-S * 0.25, -S * 0.22, S * 0.5, S * 0.32);
+
+  ctx.save();
+  ctx.translate(0, -S * 0.38);
+  ctx.rotate(headTilt);
+
+  ctx.fillStyle = "#0a0a0a";
+  ctx.beginPath();
+  ctx.arc(0, 0, S * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+
+  const faceGrad = ctx.createRadialGradient(-S * 0.05, -S * 0.05, S * 0.04, 0, 0, S * 0.30);
+  faceGrad.addColorStop(0, "#ffe1d4");
+  faceGrad.addColorStop(1, "#d49a82");
+  ctx.fillStyle = faceGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, S * 0.30, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#c8521a";
+  ctx.beginPath(); ctx.arc(-S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( S * 0.38, -S * 0.05, S * 0.13, 0, Math.PI * 2); ctx.fill();
+
+  const eyeY = -S * 0.04;
+  const eyeOffX = S * 0.12;
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.055, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.055, 0, Math.PI * 2); ctx.fill();
+
+  if (isHostile) {
+    const pulse = 0.7 + Math.sin(t * 8) * 0.3;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 28 * pulse;
+    ctx.fillStyle   = "#ff3030";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.028, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.restore(); 
+
+  if (isFalling) {
+    const playerColIdx = gs.player.col ?? gs.player.targetCol ?? 1;
+    const colDelta = (playerColIdx - 1) * 180 * scale;
+    const abyssY   = 3000; 
+
+    ctx.strokeStyle = "rgba(255,0,30,0.85)";
+    ctx.lineWidth   = 5 * scale;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 22 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = "rgba(255,220,220,0.95)";
+    ctx.lineWidth   = 1.5 * scale;
+    ctx.beginPath();
+    ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
+    ctx.lineTo(colDelta, abyssY);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,40,40,0.9)";
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 24 * scale;
+    ctx.beginPath();
+    ctx.arc(colDelta, 600, 9 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
 }
 
 function renderPanel(
@@ -691,9 +820,13 @@ function renderPanel(
   if (wy < -PANEL_H - 20 || wy > WORLD_H + 20) return;
 
   const wobble = Math.sin(atmosphericT * 1.2 + panel.wobblePhase) * panel.wobbleAmp * 0.3;
+  
+  const safeHoverOffset = (panel.safe && isPlayerOn) 
+    ? Math.sin(atmosphericT * 2.5) * 3 
+    : 0;
 
   ctx.save();
-  ctx.translate(wx, wy + wobble);
+  ctx.translate(wx, wy + wobble + safeHoverOffset);
 
   switch (panel.state) {
     case "gone": ctx.restore(); return;
@@ -708,40 +841,78 @@ function renderPanel(
   }
 
   const [br, bg, bb] = panel.safe ? SAFE_BLUE : FRAGILE_BLUE;
-  const baseAlpha = 0.18 + Math.sin(atmosphericT * 0.7 + panel.wobblePhase) * 0.04;
+  const baseAlpha = 0.20 + Math.sin(atmosphericT * 0.7 + panel.wobblePhase) * 0.06;
 
   ctx.fillStyle = rgb(br, bg, bb, baseAlpha);
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
   const refCanvas = panel.safe ? assets.safeReflection : assets.fragileReflection;
-  ctx.globalAlpha = panel.reflectionAlpha + Math.sin(panel.glintTimer) * 0.04;
+  ctx.globalAlpha = panel.reflectionAlpha + Math.sin(panel.glintTimer) * 0.06;
   ctx.drawImage(refCanvas as CanvasImageSource, 0, 0, PANEL_W, PANEL_H);
   ctx.globalAlpha = 1;
 
   const glint1 = (Math.sin(panel.glintTimer * panel.glintPhase) + 1) * 0.5;
   let glintVal: number;
   if (panel.safe) {
-    glintVal = glint1 * 0.25;
+    glintVal = glint1 * 0.32;
   } else {
     const glint2 = (Math.sin(panel.glintTimer * panel.glintPhase2 + 1.7) + 1) * 0.5;
-    glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.18;
+    glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.22;
     if (glint2 > 0.8) {
-      ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.15})`;
+      ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.18})`;
       const shimX = PANEL_W * 0.3 + glint2 * PANEL_W * 0.4;
       ctx.fillRect(shimX, 0, 3, PANEL_H);
     }
   }
   ctx.fillStyle = `rgba(220,240,255,${glintVal})`;
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
+  
+  if (isPlayerOn) {
+    const glowPulse = 0.7 + Math.sin(atmosphericT * 3) * 0.3;
+    ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
+    ctx.shadowBlur = 40;
+    ctx.fillStyle = `rgba(${br + 100}, ${bg + 140}, ${bb + 120}, ${glowPulse * 0.5})`;
+    ctx.fillRect(0, 0, PANEL_W, PANEL_H);
+    ctx.shadowBlur = 0;
+  }
 
-  const borderAlpha = isPlayerOn ? 0.7 : 0.25 + glintVal * 0.3;
-  ctx.strokeStyle = rgb(br, bg + 20, bb + 20, borderAlpha);
-  ctx.lineWidth = isPlayerOn ? 2.5 : 1.5;
+  const borderAlpha = isPlayerOn ? 0.85 : 0.30 + glintVal * 0.4;
+  ctx.strokeStyle = rgb(br, bg + 30, bb + 30, borderAlpha);
+  ctx.lineWidth = isPlayerOn ? 3 : 1.8;
   ctx.strokeRect(0.75, 0.75, PANEL_W - 1.5, PANEL_H - 1.5);
 
-  ctx.strokeStyle = rgb(255, 255, 255, 0.08 + glintVal * 0.15);
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = rgb(255, 255, 255, 0.10 + glintVal * 0.18);
+  ctx.lineWidth = 1.2;
   ctx.strokeRect(3, 3, PANEL_W - 6, PANEL_H - 6);
+
+  if (quality === "high") {
+    const figureSize = 16;
+    const figureX = PANEL_W / 2;
+    const figureY = PANEL_H / 2;
+    const figureGlow = isPlayerOn ? 0.6 : 0.15;
+    
+    ctx.save();
+    ctx.translate(figureX, figureY);
+    ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
+    ctx.shadowBlur = isPlayerOn ? 15 : 5;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${figureGlow * 1.5})`;
+    ctx.lineWidth = 2.5;
+    
+    ctx.beginPath();
+    if (panel.col === 0) {
+      ctx.rect(-figureSize, -figureSize, figureSize * 2, figureSize * 2);
+    } else if (panel.col === 1) {
+      ctx.moveTo(0, -figureSize - 2);
+      ctx.lineTo(-figureSize * 1.1, figureSize * 0.8);
+      ctx.lineTo(figureSize * 1.1, figureSize * 0.8);
+      ctx.closePath();
+    } else {
+      ctx.arc(0, 0, figureSize * 1.1, 0, Math.PI * 2);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
 
   if (isPlayerOn && quality === "high") {
     ctx.shadowColor = rgb(br, bg, bb, 0.8);
@@ -832,47 +1003,13 @@ function renderParticles(ctx: CanvasRenderingContext2D, particles: Particle[], c
   ctx.restore();
 }
 
-function renderHUD(ctx: CanvasRenderingContext2D, gs: GameState): void {
-  const progress = gs.currentRow / gs.totalRows;
-  const timeLeft = gs.timeLeft;
-  const isLow = timeLeft < 20;
-
-  ctx.fillStyle = "rgba(0,4,12,0.7)";
-  ctx.fillRect(0, 0, WORLD_W, 52);
-
-  ctx.fillStyle = "rgba(140,200,255,0.9)";
-  ctx.font = "bold 16px 'Courier New', monospace";
-  ctx.textAlign = "left";
-  ctx.fillText(`PANEL  ${gs.currentRow} / ${gs.totalRows}`, 28, 30);
-
-  const mins = Math.floor(timeLeft / 60);
-  const secs = Math.floor(timeLeft % 60).toString().padStart(2, "0");
-  ctx.fillStyle = isLow ? `rgba(255,${60 + Math.sin(gs.atmosphericT * 8) * 60},60,0.95)` : "rgba(200,230,255,0.8)";
-  ctx.font = `bold ${isLow ? 22 : 18}px 'Courier New', monospace`;
-  ctx.textAlign = "center";
-  ctx.fillText(`${mins}:${secs}`, WORLD_W / 2, 32);
-
-  const barW = 240;
-  const barX = WORLD_W - barW - 28;
-  ctx.fillStyle = "rgba(20,40,80,0.6)";
-  ctx.fillRect(barX, 14, barW, 10);
-  ctx.fillStyle = `rgba(80,180,255,${0.7 + progress * 0.3})`;
-  ctx.fillRect(barX, 14, barW * progress, 10);
-  ctx.strokeStyle = "rgba(80,140,220,0.4)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(barX, 14, barW, 10);
-
-  ctx.fillStyle = "rgba(140,190,240,0.7)";
-  ctx.font = "11px 'Courier New', monospace";
-  ctx.textAlign = "right";
-  ctx.fillText("PROGRESS", WORLD_W - 28, 11);
-
+function renderTutorialHint(ctx: CanvasRenderingContext2D, gs: GameState): void {
   if (gs.currentRow === 0 && gs.elapsed < 5) {
     const alpha = clamp(1 - (gs.elapsed - 3) / 2, 0, 1);
     ctx.fillStyle = `rgba(180,220,255,${alpha * 0.8})`;
     ctx.font = "14px 'Courier New', monospace";
     ctx.textAlign = "center";
-    ctx.fillText("← LEFT / RIGHT → TO CHOOSE", WORLD_W / 2, WORLD_H - 80);
+    ctx.fillText("← LEFT / ↑ CENTER / RIGHT →", WORLD_W / 2, WORLD_H - 80);
   }
 }
 
@@ -913,27 +1050,34 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
   const startPlatformY = rowWorldY(0) - camY;
   const endPlatformY = rowWorldY(gs.totalRows + 1) - camY;
 
+  drawDoll(ctx, WORLD_W / 2, endPlatformY - 20, 1.3, gs);
+
+  const platformW = 560;
   ctx.fillStyle = "rgba(20,50,100,0.6)";
-  ctx.fillRect(WORLD_W / 2 - 160, startPlatformY, 320, 30);
+  ctx.fillRect(WORLD_W / 2 - platformW / 2, startPlatformY, platformW, 30);
   ctx.strokeStyle = "rgba(80,140,220,0.4)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(WORLD_W / 2 - 160, startPlatformY, 320, 30);
+  ctx.strokeRect(WORLD_W / 2 - platformW / 2, startPlatformY, platformW, 30);
 
   ctx.fillStyle = "rgba(20,80,60,0.6)";
-  ctx.fillRect(WORLD_W / 2 - 160, endPlatformY, 320, 30);
+  ctx.fillRect(WORLD_W / 2 - platformW / 2, endPlatformY, platformW, 30);
   ctx.strokeStyle = "rgba(80,200,140,0.4)";
-  ctx.strokeRect(WORLD_W / 2 - 160, endPlatformY, 320, 30);
+  ctx.strokeRect(WORLD_W / 2 - platformW / 2, endPlatformY, platformW, 30);
 
   ctx.strokeStyle = "rgba(60,90,140,0.25)";
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 16]);
   ctx.beginPath();
-  ctx.moveTo(WORLD_W / 2 - PANEL_W - PANEL_GAP_X * 0.5, endPlatformY);
-  ctx.lineTo(WORLD_W / 2 - PANEL_W - PANEL_GAP_X * 0.5, startPlatformY + 30);
+  ctx.moveTo(colWorldX(0) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(0) + PANEL_W / 2, startPlatformY + 30);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(WORLD_W / 2 + PANEL_W + PANEL_GAP_X * 0.5, endPlatformY);
-  ctx.lineTo(WORLD_W / 2 + PANEL_W + PANEL_GAP_X * 0.5, startPlatformY + 30);
+  ctx.moveTo(colWorldX(1) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(1) + PANEL_W / 2, startPlatformY + 30);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(colWorldX(2) + PANEL_W / 2, endPlatformY);
+  ctx.lineTo(colWorldX(2) + PANEL_W / 2, startPlatformY + 30);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -953,16 +1097,13 @@ function renderFrame(ctx: CanvasRenderingContext2D, gs: GameState, assets: Baked
   renderParticles(ctx, gs.particles, camY);
   ctx.restore(); 
 
-  if (gs.phase === "playing" || gs.phase === "falling") renderHUD(ctx, gs);
+  if (gs.phase === "playing" || gs.phase === "falling") renderTutorialHint(ctx, gs);
   renderOverlays(ctx, gs, assets);
 }
 
-// ============================================================
-// 21. TOUCH STATE
-// ============================================================
-
 interface TouchState {
   left: boolean;
+  center: boolean;
   right: boolean;
 }
 
@@ -973,7 +1114,7 @@ function createGameState(seed: number): GameState {
     panels: generateBridge(TOTAL_ROWS, seed),
     currentRow: 0, totalRows: TOTAL_ROWS,
     player: {
-      row: 0, col: null, worldY: startY, jumpT: 0, jumping: false, targetRow: 1, targetCol: 0,
+      row: 0, col: null, worldY: startY, jumpT: 0, jumping: false, targetRow: 1, targetCol: 1,
       startY, facing: 1, status: "alive", fallY: 0, fallVy: 0, screenShakeX: 0, screenShakeY: 0, walkBob: 0, walkBobDir: 1,
     },
     camera: { y: startY - WORLD_H * 0.5, targetY: startY - WORLD_H * 0.5, shake: 0, shakeTimer: 0, shakeDecay: SHAKE_DECAY_RATE, zoom: 1, targetZoom: 1 },
@@ -982,35 +1123,33 @@ function createGameState(seed: number): GameState {
   };
 }
 
-// ============================================================
-// 23. GAME LOOP HOOK
-// ============================================================
-
 function useGameLoop(callback: (dt: number) => void, active: boolean): React.MutableRefObject<((scale: number) => void) | null> {
   const rafRef = useRef<number>(0);
   const lastRef = useRef<number>(0);
-  const scaleRef = useRef<((s: number) => void) | null>(null);
   const scaleValRef = useRef(1);
 
-  // Architecture Loop Fix: Decouples rendering engine ticks from reference closures
-  const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+  const scaleRef = useRef<((s: number) => void)>((s: number) => { scaleValRef.current = s; });
 
-  scaleRef.current = (s: number) => { scaleValRef.current = s; };
+  const callbackRef = useRef(callback);
+  
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (!active) return;
     function frame(now: number) {
       const raw = Math.min((now - lastRef.current) / 1000, 0.05);
       lastRef.current = now;
-      callbackRef.current(raw);
+      if (callbackRef.current) callbackRef.current(raw * scaleValRef.current);
       rafRef.current = requestAnimationFrame(frame);
     }
     lastRef.current = performance.now();
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
   }, [active]);
-  return scaleRef;
+  
+  return scaleRef as unknown as React.MutableRefObject<((scale: number) => void) | null>;
 }
 
 interface MobileTouchControlsProps {
@@ -1020,35 +1159,61 @@ interface MobileTouchControlsProps {
 
 const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inputRef }) => {
   const leftRef = useRef<HTMLButtonElement>(null);
+  const centerRef = useRef<HTMLButtonElement>(null);
   const rightRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const left = leftRef.current;
+    const center = centerRef.current;
     const right = rightRef.current;
-    if (!left || !right) return;
+    if (!left || !center || !right) return;
+    
     const onLeftDown = (e: Event) => { e.preventDefault(); inputRef.current.left = true; };
+    const onCenterDown = (e: Event) => { e.preventDefault(); inputRef.current.center = true; };
     const onRightDown = (e: Event) => { e.preventDefault(); inputRef.current.right = true; };
+    
+    const onLeftUp = (e: Event) => { e.preventDefault(); inputRef.current.left = false; };
+    const onCenterUp = (e: Event) => { e.preventDefault(); inputRef.current.center = false; };
+    const onRightUp = (e: Event) => { e.preventDefault(); inputRef.current.right = false; };
+    
     left.addEventListener("touchstart", onLeftDown, { passive: false });
+    center.addEventListener("touchstart", onCenterDown, { passive: false });
     right.addEventListener("touchstart", onRightDown, { passive: false });
+    
+    left.addEventListener("touchend", onLeftUp, { passive: false });
+    left.addEventListener("touchcancel", onLeftUp, { passive: false });
+    center.addEventListener("touchend", onCenterUp, { passive: false });
+    center.addEventListener("touchcancel", onCenterUp, { passive: false });
+    right.addEventListener("touchend", onRightUp, { passive: false });
+    right.addEventListener("touchcancel", onRightUp, { passive: false });
+    
     return () => {
       left.removeEventListener("touchstart", onLeftDown);
+      center.removeEventListener("touchstart", onCenterDown);
       right.removeEventListener("touchstart", onRightDown);
+      left.removeEventListener("touchend", onLeftUp);
+      left.removeEventListener("touchcancel", onLeftUp);
+      center.removeEventListener("touchend", onCenterUp);
+      center.removeEventListener("touchcancel", onCenterUp);
+      right.removeEventListener("touchend", onRightUp);
+      right.removeEventListener("touchcancel", onRightUp);
     };
   }, [inputRef]);
 
   if (!visible) return null;
   const btnBase: React.CSSProperties = {
-    position: "absolute", bottom: 32, width: 100, height: 80, borderRadius: 12,
+    position: "absolute", bottom: 32, width: 80, height: 80, borderRadius: 12,
     background: "rgba(20,60,120,0.55)", border: "1.5px solid rgba(80,160,255,0.4)",
-    color: "rgba(160,210,255,0.9)", fontSize: 28, fontFamily: "monospace", display: "flex",
+    color: "rgba(160,210,255,0.9)", fontSize: 24, fontFamily: "monospace", display: "flex",
     alignItems: "center", justifyContent: "center", cursor: "pointer",
     userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(4px)", zIndex: 100
   };
 
   return (
     <>
-      <button ref={leftRef} style={{ ...btnBase, left: 24 }} aria-label="Left panel">←</button>
-      <button ref={rightRef} style={{ ...btnBase, right: 24 }} aria-label="Right panel">→</button>
+      <button ref={leftRef} style={{ ...btnBase, left: 16 }} aria-label="Left panel">←</button>
+      <button ref={centerRef} style={{ ...btnBase, left: "50%", transform: "translateX(-50%)" }} aria-label="Center panel">↑</button>
+      <button ref={rightRef} style={{ ...btnBase, right: 16 }} aria-label="Right panel">→</button>
     </>
   );
 };
@@ -1062,7 +1227,7 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
       ONE WRONG STEP. ONE CHANCE.
     </div>
     <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(120,180,240,0.6)", fontSize: 13, marginBottom: 40, textAlign: "center", lineHeight: 2, maxWidth: 320 }}>
-      {`← / → ARROW KEYS  or  TOUCH BUTTONS\n\nChoose left or right panel.\nOne is tempered glass. One is not.`}
+      {`← / ↑ / → ARROW KEYS or TOUCH BUTTONS\n\nChoose your path across the 3 lanes.\nOnly one is tempered glass.`}
     </div>
     <button onClick={onStart} style={{ fontFamily: "'Courier New', monospace", fontSize: 16, letterSpacing: "0.25em", color: "#0a1628", background: "rgba(80,180,255,0.9)", border: "none", padding: "16px 48px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
       Begin
@@ -1070,77 +1235,44 @@ const IntroScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-const GameOverScreen: React.FC<{ row: number; total: number; onRestart: () => void; onExit?: () => void }> = ({
-  row, total, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,2,8,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(255,80,80,0.95)", fontSize: "clamp(32px, 6vw, 56px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 16, textShadow: "0 0 60px rgba(255,60,60,0.5)" }}>
-      ELIMINATED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(140,180,220,0.7)", fontSize: 14, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`PANEL ${row} of ${total}`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1628", background: "rgba(80,160,255,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Try Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,160,255,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-const VictoryScreen: React.FC<{ elapsed: number; onRestart: () => void; onExit?: () => void }> = ({
-  elapsed, onRestart, onExit
-}) => (
-  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(0,4,10,0.88)", zIndex: 10 }}>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(80,220,160,0.98)", fontSize: "clamp(28px, 5vw, 48px)", fontWeight: "bold", letterSpacing: "0.3em", marginBottom: 12, textShadow: "0 0 60px rgba(60,200,140,0.5)" }}>
-      SURVIVED
-    </div>
-    <div style={{ fontFamily: "'Courier New', monospace", color: "rgba(120,200,160,0.65)", fontSize: 13, letterSpacing: "0.2em", marginBottom: 48 }}>
-      {`TIME: ${Math.floor(elapsed)}s`}
-    </div>
-    <div style={{ display: "flex", gap: "16px" }}>
-      <button onClick={onRestart} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "#0a1a0f", background: "rgba(80,200,140,0.85)", border: "none", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-        Play Again
-      </button>
-      {onExit && (
-        <button onClick={onExit} style={{ fontFamily: "'Courier New', monospace", fontSize: 15, letterSpacing: "0.2em", color: "white", background: "transparent", border: "1px solid rgba(80,200,140,0.85)", padding: "14px 40px", borderRadius: 4, cursor: "pointer", fontWeight: "bold", textTransform: "uppercase" }}>
-          ← Menu
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-// ============================================================
-// 26. MAIN REACT COMPONENT
-// ============================================================
-
-const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
+const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gsRef = useRef<GameState | null>(null);
   const assetsRef = useRef<BakedAssets | null>(null);
-  const inputRef = useRef<TouchState>({ left: false, right: false });
+  const inputRef = useRef<TouchState>({ left: false, center: false, right: false });
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [uiPhase, setUiPhase] = useState<"intro" | "playing" | "gameover" | "victory">("intro");
   const [finalRow, setFinalRow] = useState(0);
-  const [finalElapsed, setFinalElapsed] = useState(0);
+  
+  const [finalScore, setFinalScore] = useState(0);
+  const addScore = useGameStore((s) => s.addScore);
+  const scoreRecorded = useRef(false);
 
-  // Sync reference guard configuration prevents closures from leaking stale metadata states
   const uiPhaseRef = useRef(uiPhase);
   useEffect(() => {
     uiPhaseRef.current = uiPhase;
   }, [uiPhase]);
 
-  // Memory Hygiene: Explicit particle system teardown prevent memory leaks across sessions
   useEffect(() => {
     return () => {
-      particlePool = null;
+      if (particlePool) {
+        const pool = particlePool as any;
+        if (pool.pool) {
+          for (let i = 0; i < pool.pool.length; i++) {
+            const p = pool.pool[i];
+            if (p && p.active) pool.release(p);
+          }
+        }
+        particlePool = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      SoundManager.getInstance().stopAll(0);
+      SoundManager.getInstance().stopAllLoops(0);
     };
   }, []);
 
@@ -1149,6 +1281,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     sourceGame: "glass-bridge",
     progressMarker: finalRow,
     progressTotal: TOTAL_ROWS,
+    outcome: uiPhase === "victory" ? "victory" : "eliminated"
   });
 
   const hudSync = useHUDSync({ flushInterval: 100 });
@@ -1162,30 +1295,43 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
+    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
+
     const resize = () => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      const scale = Math.min(cw / WORLD_W, ch / WORLD_H);
-      canvas.style.width = `${WORLD_W * scale}px`;
-      canvas.style.height = `${WORLD_H * scale}px`;
-    };
 
-    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
-    canvas.width = WORLD_W * dpr;
-    canvas.height = WORLD_H * dpr;
-    const ctx = canvas.getContext("2d");
-    if (ctx) ctx.scale(dpr, dpr);
+      canvas.width  = Math.round(cw * dpr);
+      canvas.height = Math.round(ch * dpr);
+      canvas.style.width  = cw + "px";
+      canvas.style.height = ch + "px";
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const sx = (cw * dpr) / WORLD_W;
+      const sy = (ch * dpr) / WORLD_H;
+      const s  = Math.max(sx, sy);
+      ctx.setTransform(s, 0, 0, s, ((cw * dpr) - WORLD_W * s) / 2, ((ch * dpr) - WORLD_H * s) / 2);
+    };
 
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
-    return () => ro.disconnect();
+    window.addEventListener("resize", resize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
         if (!e.repeat) inputRef.current.left = true;
+      }
+      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
+        if (!e.repeat) inputRef.current.center = true;
       }
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
         if (!e.repeat) inputRef.current.right = true;
@@ -1204,6 +1350,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
     if (!assetsRef.current) {
       assetsRef.current = initBakedAssets();
     }
+    scoreRecorded.current = false;
     setUiPhase("playing");
   }, []);
 
@@ -1222,33 +1369,66 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
 
     gameTick(gs, dt, inputRef);
 
+    if (gs.audioEvents.size > 0) {
+      const sm = SoundManager.getInstance();
+      for (const ev of gs.audioEvents) {
+        if (ev.startsWith("land-")) {
+        } else if (ev.startsWith("tension-")) {
+        } else {
+          switch (ev) {
+            case "shatter":
+              sm.play("shatter", 0);
+              break;
+            case "victory":
+              sm.play("victory", 0);
+              break;
+          }
+        }
+      }
+      gs.audioEvents.clear();
+    }
+
     const playerAlive = gs.player.status === "alive";
     hudSync.write({
-      score:    gs.currentRow,
-      lives:    playerAlive ? 1 : 0,
-      time:     Math.ceil(Math.max(0, gs.timeLeft)),
-      health:   playerAlive ? 100 : 0,
+      score:     gs.currentRow * 100,
+      lives:     playerAlive ? 1 : 0,
+      time:      Math.ceil(Math.max(0, gs.timeLeft)),
+      health:    playerAlive ? 100 : 0,
       maxHealth: 100,
-      level:    gs.currentRow,
+      level:     gs.currentRow + 1,
     });
     
-    // Explicit frame cycle sync tick flush instruction prevents telemetry interface lag
     hudSync.tick(performance.now());   
 
     if (gs.phase === "gameover" && uiPhaseRef.current === "playing") {
       hudSync.write({ health: 0, lives: 0 });
       hudSync.forceFlush();
       setFinalRow(gs.currentRow);
+      const score = gs.currentRow * 100;
+      if (!scoreRecorded.current) {
+          addScore(score);
+          setFinalScore(score);
+          scoreRecorded.current = true;
+          if (onComplete) onComplete(score, "eliminated");
+      }
       setUiPhase("gameover");
     }
+
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
-      setFinalElapsed(gs.elapsed);
+      const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
+      const score = (TOTAL_ROWS * 100) + timeBonus;
+      if (!scoreRecorded.current) {
+          addScore(score);
+          setFinalScore(score);
+          scoreRecorded.current = true;
+          if (onComplete) onComplete(score, "victory");
+      }
       setUiPhase("victory");
     }
 
     const quality: "high" | "low" = "high";
     renderFrame(ctx, gs, assets, quality);
-  }, [hudSync]);
+  }, [hudSync, addScore, onComplete]);
 
   useGameLoop(tick, uiPhase === "playing");
 
@@ -1260,7 +1440,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
         width: "100%",
         height: "100%",
         minHeight: 400,
-        background: VOID_COLOR,
+        background: "radial-gradient(ellipse at bottom, #040308 0%, #000000 100%)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1272,10 +1452,11 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
         ref={canvasRef}
         style={{
           display: "block",
-          imageRendering: "pixelated",
-          width: "100%", 
-          height: "100%", 
-          objectFit: "contain" 
+          position: "absolute",
+          inset: 0,
+          width:  "100%",
+          height: "100%",
+          background: "#000",
         }}
       />
 
@@ -1295,16 +1476,15 @@ const GlassBridge: React.FC<GameProps> = ({ onExit }) => {
       )}
 
       {uiPhase === "intro" && <IntroScreen onStart={startGame} />}
-      {uiPhase === "gameover" && (
-        <GameOverScreen
-          row={finalRow}
-          total={TOTAL_ROWS}
-          onRestart={restartGame}
-          onExit={onExit} 
+
+      {(uiPhase === "gameover" || uiPhase === "victory") && (
+        <ResultScreen 
+          outcome={uiPhase === "victory" ? "victory" : "eliminated"} 
+          statLine={uiPhase === "victory" ? `SCORE: ${finalScore.toLocaleString()}` : `SCORE: ${finalScore.toLocaleString()} (PANEL ${finalRow})`} 
+          prize={uiPhase === "victory" ? 45600000000 : undefined}
+          onTryAgain={restartGame} 
+          onMenu={onExit ?? (() => {})} 
         />
-      )}
-      {uiPhase === "victory" && (
-        <VictoryScreen elapsed={finalElapsed} onRestart={restartGame} onExit={onExit} />
       )}
 
       {uiPhase === "playing" && (

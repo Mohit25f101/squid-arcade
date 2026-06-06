@@ -2,15 +2,20 @@
 
 "use client";
 
-import { lazy, Suspense, useState, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useGameStore, type GameId } from "@/store/gameStore";
 import { usePlatformDetection } from "@/hooks/usePlatformDetection";
+import { useBackgroundMusic } from "@/hooks/useBackgroundMusic";
 import GameShell from "@/components/GameShell";
 import GameMenu from "@/components/ui/GameMenu";
+import { SoundManager } from "@/managers/SoundManager";
+import { musicManager } from "@/managers/MusicManager";
 
-const DalgonaCandy = lazy(() => import("@/components/games/DalgonaCandy"));
-const GlassBridge = lazy(() => import("@/components/games/GlassBridge"));
-const RedLightGreenLight = lazy(() => import("@/components/games/RedLightGreenLight"));
+// FIX: Use Next.js dynamic imports and strictly disable SSR to prevent the WebGL/React 19 crash
+const DalgonaCandy = dynamic(() => import("@/components/games/DalgonaCandy"), { ssr: false });
+const GlassBridge = dynamic(() => import("@/components/games/GlassBridge"), { ssr: false });
+const RedLightGreenLight = dynamic(() => import("@/components/games/RedLightGreenLight"), { ssr: false });
 
 export default function GameRouter() {
   const activeGame = useGameStore((s) => s.activeGame);
@@ -19,14 +24,34 @@ export default function GameRouter() {
 
   usePlatformDetection();
 
+  // WIRING IN THE MUSIC MANAGER (This smart hook handles play/pause/fade automatically)
+  useBackgroundMusic();
+
   // Stable ref — prevents duplicate event listener accumulation on shell mounts
   const handleExit = useCallback(() => setActiveGame("menu"), [setActiveGame]);
+
+  // BUG FIX: handleComplete was referenced in JSX but never defined, causing a runtime
+  // crash on every game victory. Now defined as a stable callback that returns the player
+  // to the menu after a win — extend this with leaderboard / session-history calls as needed.
+  const handleComplete = useCallback(() => setActiveGame("menu"), [setActiveGame]);
 
   const [transitionState, setTransitionState] = useState("idle");
   const prevGameRef = useRef(activeGame);
 
   useEffect(() => {
     if (prevGameRef.current === activeGame) return;
+    
+    // Cleanup audio when switching games
+    if (typeof window !== 'undefined') {
+      try {
+        SoundManager.getInstance().stopAll(0);
+        SoundManager.getInstance().stopAllLoops(0);
+        musicManager.stopAll();
+      } catch (e) {
+        console.warn('GameRouter: audio cleanup failed', e);
+      }
+    }
+    
     prevGameRef.current = activeGame;
 
     setTransitionState("entering");
@@ -53,19 +78,22 @@ export default function GameRouter() {
 
         {activeGame === "glass-bridge" && (
           <SceneWrapper key="glass-bridge" transition={transitionState} showGlobalHUD={false}>
-            <GlassBridge onExit={handleExit} />
+            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+            <GlassBridge onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "red-light-green-light" && (
           <SceneWrapper key="red-light-green-light" transition={transitionState} showGlobalHUD={false}>
-            <RedLightGreenLight onExit={handleExit} />
+            {/* BUG FIX: handleComplete is now defined above and wired in here */}
+            <RedLightGreenLight onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
 
         {activeGame === "dalgona" && (
           <GameShell key="dalgona" worldW={390} worldH={844} transition={transitionState}>
-            <DalgonaCandy onExit={handleExit} />
+            {/* BUG FIX: onComplete was missing — victories were silently dropped */}
+            <DalgonaCandy onExit={handleExit} onComplete={handleComplete} />
           </GameShell>
         )}
       </Suspense>

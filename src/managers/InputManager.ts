@@ -8,51 +8,51 @@
  *
  * KEY DESIGN DECISIONS:
  *
- *  1. Framework-agnostic — zero React imports. Instantiate once, attach to
- *     window/canvas, read from anywhere (game loops, Zustand subscribers,
- *     audio engine callbacks).
+ * 1. Framework-agnostic — zero React imports. Instantiate once, attach to
+ * window/canvas, read from anywhere (game loops, Zustand subscribers,
+ * audio engine callbacks).
  *
- *  2. Stability metric — a rolling variance of pointer-delta magnitudes over
- *     a configurable time window (default 300 ms). Outputs a 0–1 scalar:
- *       1.0 = perfectly still / rock-steady
- *       0.0 = maximum detected jitter / tremor
- *     DalgonaCandy uses this to scale fracture risk. RLGL uses it to detect
- *     illegal movement during Red Light. GlassBridge ignores it (discrete
- *     input only).
+ * 2. Stability metric — a rolling variance of pointer-delta magnitudes over
+ * a configurable time window (default 300 ms). Outputs a 0–1 scalar:
+ * 1.0 = perfectly still / rock-steady
+ * 0.0 = maximum detected jitter / tremor
+ * DalgonaCandy uses this to scale fracture risk. RLGL uses it to detect
+ * illegal movement during Red Light. GlassBridge ignores it (discrete
+ * input only).
  *
- *  3. Zero-allocation hot path — the rolling sample buffer is pre-allocated
- *     as a fixed-length Float32Array. No GC pressure during gameplay.
+ * 3. Zero-allocation hot path — the rolling sample buffer is pre-allocated
+ * as a fixed-length Float32Array. No GC pressure during gameplay.
  *
- *  4. Pointer Events API first — falls back to legacy mouse/touch events only
- *     when Pointer Events are unavailable (very old iOS Safari).
+ * 4. Pointer Events API first — falls back to legacy mouse/touch events only
+ * when Pointer Events are unavailable (very old iOS Safari).
  *
- *  5. Multi-touch aware — tracks up to MAX_TOUCHES simultaneous contacts.
- *     The primary pointer (first finger / mouse) drives `UnifiedInput`.
- *     Secondary touches are available via `getTouches()` for games that
- *     need raw multi-touch (pinch-zoom, two-button layouts, etc.).
+ * 5. Multi-touch aware — tracks up to MAX_TOUCHES simultaneous contacts.
+ * The primary pointer (first finger / mouse) drives `UnifiedInput`.
+ * Secondary touches are available via `getTouches()` for games that
+ * need raw multi-touch (pinch-zoom, two-button layouts, etc.).
  *
- *  6. Discrete left/right intents — latched on press, consumed by calling
- *     `consumeIntent()`. This prevents the same keypress from triggering
- *     two jumps if the game loop runs twice before the key-up fires.
+ * 6. Discrete left/right intents — latched on press, consumed by calling
+ * `consumeIntent()`. This prevents the same keypress from triggering
+ * two jumps if the game loop runs twice before the key-up fires.
  *
  * USAGE:
  *
- *   // Instantiate once (e.g. in GameShell.tsx)
- *   const input = new InputManager({ stabilityWindowMs: 300 });
- *   input.attach(canvasElement);
+ * // Instantiate once (e.g. in GameShell.tsx)
+ * const input = new InputManager({ stabilityWindowMs: 300 });
+ * input.attach(canvasElement);
  *
- *   // In game loop:
- *   const snap = input.snapshot();
- *   if (snap.left) { ... }
- *   input.consumeIntent("left");
+ * // In game loop:
+ * const snap = input.snapshot();
+ * if (snap.left) { ... }
+ * input.consumeIntent("left");
  *
- *   // Cleanup on unmount:
- *   input.detach();
+ * // Cleanup on unmount:
+ * input.detach();
  *
  * SINGLETON EXPORT:
- *   For convenience a singleton `inputManager` is exported. GameShell calls
- *   attach() on mount and detach() on unmount. Games import the singleton
- *   and call snapshot() — no prop drilling needed.
+ * For convenience a singleton `inputManager` is exported. GameShell calls
+ * attach() on mount and detach() on unmount. Games import the singleton
+ * and call snapshot() — no prop drilling needed.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,20 +121,20 @@ export interface UnifiedInput {
    * Rolling stability score over the configured time window.
    *
    * Derivation:
-   *   1. Every pointermove event appends |Δ| (delta magnitude) to a circular
-   *      sample buffer together with the event timestamp.
-   *   2. Samples older than `stabilityWindowMs` are expired.
-   *   3. Variance of the remaining magnitudes is computed.
-   *   4. Variance is mapped through a sigmoid-like curve and inverted:
-   *        stability = 1 / (1 + variance / VARIANCE_SCALE)
-   *      so high variance → low stability, steady hand → stability ≈ 1.
+   * 1. Every pointermove event appends |Δ| (delta magnitude) to a circular
+   * sample buffer together with the event timestamp.
+   * 2. Samples older than `stabilityWindowMs` are expired.
+   * 3. Variance of the remaining magnitudes is computed.
+   * 4. Variance is mapped through a sigmoid-like curve and inverted:
+   * stability = 1 / (1 + variance / VARIANCE_SCALE)
+   * so high variance → low stability, steady hand → stability ≈ 1.
    *
    * Range: [0, 1]
-   *   1.0 — no movement detected in the window (or perfectly uniform motion)
-   *   0.0 — extreme jitter / rapid chaotic movement
+   * 1.0 — no movement detected in the window (or perfectly uniform motion)
+   * 0.0 — extreme jitter / rapid chaotic movement
    *
    * DalgonaCandy usage:
-   *   fractureRisk += (1 - stability) * JITTER_FRACTURE_COEFFICIENT * dt
+   * fractureRisk += (1 - stability) * JITTER_FRACTURE_COEFFICIENT * dt
    */
   stability: number;
 
@@ -526,7 +526,7 @@ export class InputManager {
    * Call immediately after acting on an intent in your game tick.
    *
    * Example:
-   *   if (snap.left) { startJump("left"); input.consumeIntent("left"); }
+   * if (snap.left) { startJump("left"); input.consumeIntent("left"); }
    */
   consumeIntent(...keys: IntentKey[]): void {
     for (const key of keys) {
@@ -930,7 +930,7 @@ export class InputManager {
  * to ensure pointer coordinates are correctly mapped.
  *
  * Override options at construction time if you need a custom world size:
- *   const inputManager = new InputManager({ worldW: 1920, worldH: 1080 });
+ * const inputManager = new InputManager({ worldW: 1920, worldH: 1080 });
  */
 export const inputManager = new InputManager({
   stabilityWindowMs: 300,

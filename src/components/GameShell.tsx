@@ -172,7 +172,7 @@ const EliminationOverlay: React.FC<EliminationOverlayProps> = ({
         position: "absolute",
         inset: 0,
         zIndex: 900,
-        pointerEvents: "none",
+        pointerEvents: "auto",   // blocks game input during death sequence
         overflow: "hidden",
       }}
     >
@@ -321,7 +321,7 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ onComplete }) => {
         position: "absolute",
         inset: 0,
         zIndex: 900,
-        pointerEvents: "none",
+        pointerEvents: "auto",   // blocks game input during victory sequence
         overflow: "hidden",
       }}
     >
@@ -481,7 +481,7 @@ const TransitionCurtain: React.FC<{ state: string }> = ({ state }) => {
         inset: 0,
         zIndex: 800,
         background: "#000",
-        pointerEvents: isVisible ? "all" : "none",
+        pointerEvents: isVisible ? "auto" : "none",
         opacity:
           state === "active"
             ? 1
@@ -763,8 +763,8 @@ const GameShell: React.FC<GameShellProps> = ({
           <div
             style={{
               position: "absolute",
-              top: 0,
-              left: 0,
+              top:  "env(safe-area-inset-top,  0px)",
+              left: "env(safe-area-inset-left, 0px)",
               zIndex: 300,
               pointerEvents: "auto",
             }}
@@ -774,17 +774,13 @@ const GameShell: React.FC<GameShellProps> = ({
         )}
 
         {/* ── HUD overlay — z:100, pointer-events:none wrapper ──
-            Child elements with pointer-events:auto still receive clicks.
-            Wrapper must be none so canvas clicks pass through. */}
+            hud-overlay class (globals.css) provides position:absolute, inset:0,
+            pointer-events:none, safe-area calc() padding, and the 3×3 grid layout
+            consumed by .hud-top-left / .hud-top-right / etc. child classes.
+            zIndex:100 inline overrides the class's z-index:10 so HUD stays
+            above the shell canvas but below overlays (z:800+). */}
         {showGlobalHUD && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              zIndex: 100,
-              pointerEvents: "none",
-            }}
-          >
+          <div className="hud-overlay" style={{ zIndex: 100 }}>
             <HUD />
           </div>
         )}
@@ -841,47 +837,27 @@ export function useGameShellBridge(opts: {
   progressMarker?: number;
   progressTotal?: number;
   reason?: string;
+  outcome?: "victory" | "eliminated"; // 1. Add definitive explicit outcome
 }): void {
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
   const triggerElimination = useGameStore((s) => s.triggerElimination);
 
-  const { uiPhase, sourceGame, progressMarker, progressTotal, reason } = opts;
+  const { uiPhase, sourceGame, progressMarker, progressTotal, reason, outcome } = opts;
 
   useEffect(() => {
-    
     switch (uiPhase) {
-      case "intro":
-        setRuntimePhase("intro");
-        break;
-      case "playing":
-        setRuntimePhase("playing");
-        break;
-      case "paused":
-        setRuntimePhase("paused");
-        break;
+      case "intro": setRuntimePhase("intro"); break;
+      case "playing": setRuntimePhase("playing"); break;
       case "gameover":
-        triggerElimination({
-          sourceGame,
-          reason,
-          progressMarker,
-          progressTotal,
-        });
-        break;
       case "victory":
-        setRuntimePhase("victory");
+        // 2. Derive purely from the explicit outcome prop
+        if (outcome === "victory") {
+          setRuntimePhase("victory");
+        } else if (outcome === "eliminated") {
+          triggerElimination({ sourceGame, reason, progressMarker, progressTotal });
+        }
         break;
-      // "transitioning" and any other local phases map to nothing —
-      // the store doesn't need to know about mid-animation states
-      default:
-        break;
+      default: break;
     }
-  }, [
-    uiPhase,
-    sourceGame,
-    reason,
-    progressMarker,
-    progressTotal,
-    setRuntimePhase,
-    triggerElimination,
-  ]);
+  }, [ uiPhase, sourceGame, reason, progressMarker, progressTotal, setRuntimePhase, triggerElimination, outcome ]);
 }

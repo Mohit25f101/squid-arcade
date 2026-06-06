@@ -369,6 +369,31 @@
   margin-top:     0.1rem;
 }
 
+/* FIX 1.5 / Menu Polish — game description under icon label */
+.sq-icon-desc {
+  font-family:    var(--font-mono-sq, 'JetBrains Mono', monospace);
+  font-size:      clamp(8px, 1.4vw, 10px);
+  letter-spacing: 0.07em;
+  color:          rgba(255,255,255,0.38);
+  line-height:    1.55;
+  text-align:     center;
+  max-width:      150px;
+  margin-top:     2px;
+  opacity:        0;
+  transform:      translateY(4px);
+  transition:     opacity 240ms, transform 240ms;
+}
+
+.sq-icon-card:hover .sq-icon-desc {
+  opacity:        1;
+  transform:      translateY(0);
+}
+
+/* Expand card min-width to accommodate description */
+.sq-icon-card {
+  min-width: clamp(110px, 18vw, 165px);
+}
+
 /* ── Main Menu Navigation ─────────────────────────────────────────────── */
 .sq-nav-list {
   display:         flex;
