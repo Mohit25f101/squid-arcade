@@ -14,17 +14,17 @@ interface HUDProps {
 // ─── Design Tokens — Broadcast identity ──────────────────────────────────────
 
 const TOKEN = {
-  fontMono:    "'JetBrains Mono', 'Fira Mono', monospace",
-  fontDisplay: "'Rajdhani', 'Oswald', sans-serif",
-  colorAccent: "#ff2d2d",                      // blood red — health/danger
-  colorSafe:   "#f5f5f5",                      // cold white — full health / scores
-  colorDanger: "#ff2d2d",                      // same red for critical states
-  colorWarn:   "#ffd60a",                      // yellow — timer/warning (unchanged)
-  colorMuted:  "rgba(245,245,245,0.35)",
-  colorPanel:  "rgba(4,4,8,0.75)",             // deeper, less transparent
-  colorBorder: "rgba(255,255,255,0.10)",       // broadcast chrome
-  blur:        "blur(10px)",
-  radius:      "2px",                          // sharp corners — mechanical feel
+  fontMono:    "var(--font-mono-sq, 'Space Mono', monospace)",
+  fontDisplay: "var(--font-bebas, 'Bebas Neue', sans-serif)",
+  colorAccent: "#FF0066",                      // sq-pink
+  colorSafe:   "#00FFB2",                      // sq-teal
+  colorDanger: "#FF0066",                      // sq-pink
+  colorWarn:   "#FFD700",                      // sq-gold
+  colorMuted:  "rgba(245,245,245,0.4)",
+  colorPanel:  "transparent",
+  colorBorder: "transparent",
+  blur:        "none",
+  radius:      "8px",
 } as const;
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -51,11 +51,8 @@ function BroadcastPanel({
 }) {
   return (
     <div
+      className="glass"
       style={{
-        background:           TOKEN.colorPanel,
-        backdropFilter:       TOKEN.blur,
-        WebkitBackdropFilter: TOKEN.blur,
-        border:               `1px solid ${TOKEN.colorBorder}`,
         borderRadius:         TOKEN.radius,
         padding:              "8px 14px",
         ...style,

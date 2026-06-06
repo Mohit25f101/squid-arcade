@@ -1479,8 +1479,11 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
       {(uiPhase === "gameover" || uiPhase === "victory") && (
         <ResultScreen 
-          outcome={uiPhase === "victory" ? "victory" : "eliminated"} 
-          statLine={uiPhase === "victory" ? `SCORE: ${finalScore.toLocaleString()}` : `SCORE: ${finalScore.toLocaleString()} (PANEL ${finalRow})`} 
+          outcome={uiPhase === "victory" ? "victory" : "eliminated"}
+          score={finalScore}
+          statLine={uiPhase === "victory" ? "CROSSED THE BRIDGE" : `FELL AT PANEL ${finalRow}`}
+          survived={uiPhase === "victory" ? 1 : 0}
+          total={TOTAL_ROWS}
           prize={uiPhase === "victory" ? 45600000000 : undefined}
           onTryAgain={restartGame} 
           onMenu={onExit ?? (() => {})} 

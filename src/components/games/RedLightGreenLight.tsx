@@ -24,6 +24,7 @@ import { useGameStore } from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
 import { SoundManager } from "@/managers/SoundManager";
 import { MusicManager } from "@/managers/MusicManager";
+import { ResultScreen } from "@/components/ui/ResultScreen";
 import {
   RLGLDoll,
   RLGLGuard,
@@ -611,7 +612,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, resetSignal, roun
       }
     }
 
-    if (lp === LightPhase.RED) {
+    if (lightPhaseRef.current === LightPhase.RED) {
       if (human.alive && !human.finished && Math.abs(human.vz) > 0.01) {
         const dangerLevel = Math.min(1, Math.abs(human.vz) / MOVE_THRESHOLD);
         sm.setHeartbeatIntensity?.(0.55 + dangerLevel * 0.35);
@@ -1082,12 +1083,23 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       )}
 
       {endState && (
-        <EndScreen
-          phase={endState.phase}
+        <ResultScreen
+          outcome={endState.phase === GamePhase.VICTORY ? "victory" : "eliminated"}
           score={endState.score}
-          aliveCount={hud.aliveCount}
-          onRestart={handleRestart}
-          onExit={onExit}
+          statLine={
+            endState.phase === GamePhase.VICTORY ? "ROUND CLEARED"
+            : endState.phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH LINE"
+            : "MOVED DURING RED LIGHT"
+          }
+          survived={hud.aliveCount}
+          total={NPC_COUNT + 1}
+          onTryAgain={handleRestart}
+          onMenu={onExit ? () => {
+            SoundManager.getInstance().stopAll(0);
+            SoundManager.getInstance().stopAllLoops(0);
+            MusicManager.getInstance().stopAll();
+            onExit();
+          } : undefined}
         />
       )}
 
@@ -1205,13 +1217,15 @@ function HUDOverlay({
             pointerEvents: "none",
           }}
         >
-          <div style={{
+          <div
+            className={isWarning ? "anim-pulse-pink" : ""}
+            style={{
             padding: "10px 26px",
             border: `1.5px solid ${lightCol}`,
             background: `${lightCol}18`,
             borderRadius: 4,
             display: "flex", alignItems: "center", gap: 10,
-            fontFamily: "var(--font-bebas)",
+            fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
             fontSize: 24, letterSpacing: "0.32em", color: lightCol,
             backdropFilter: "blur(10px)",
             boxShadow: `0 0 38px ${lightCol}50`,
@@ -1317,86 +1331,6 @@ function HUDOverlay({
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
- * END SCREEN
- * ────────────────────────────────────────────────────────────────────────────*/
-
-function EndScreen({
-  phase, score, aliveCount, onRestart, onExit,
-}: {
-  phase: GamePhase; score: number; aliveCount: number;
-  onRestart: () => void; onExit?: () => void;
-}) {
-  const isWin = phase === GamePhase.VICTORY;
-  const title = isWin ? "YOU SURVIVED" : phase === GamePhase.TIMEOUT ? "TIME'S UP" : "ELIMINATED";
-  const sub   = isWin ? "ROUND CLEARED" : phase === GamePhase.TIMEOUT ? "FAILED TO REACH FINISH" : "MOVED DURING RED LIGHT";
-  const color = isWin ? "#00ffb2" : "#ff2640";
-
-  return (
-    <div
-      data-testid="rlgl3d-endscreen"
-      style={{
-        position: "absolute", inset: 0, zIndex: 40,
-        background: "rgba(0,0,0,0.82)",
-        backdropFilter: "blur(14px)",
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22,
-        animation: "rlgl3d-fadein 0.5s ease",
-      }}
-    >
-      <div style={{
-        fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
-        fontSize: "clamp(48px, 11vw, 110px)", letterSpacing: "0.15em",
-        color, textShadow: `0 0 50px ${color}`,
-      }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 12, letterSpacing: "0.32em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>
-        {sub}
-      </div>
-      <div style={{ display: "flex", gap: 32, marginTop: 10 }}>
-        <Stat label="SCORE" value={score.toLocaleString("en-US")} accent="#ffd83d" />
-        <Stat label="SURVIVORS" value={`${aliveCount}/${NPC_COUNT + 1}`} accent="#00ffb2" />
-      </div>
-      <div style={{ display: "flex", gap: 14, marginTop: 16 }}>
-        <button data-testid="rlgl3d-restart" onClick={onRestart} style={btnStyle("#00ffb2")}>
-          PLAY AGAIN
-        </button>
-        {onExit && (
-          <button data-testid="rlgl3d-end-exit" onClick={() => {
-            SoundManager.getInstance().stopAll(0);
-            SoundManager.getInstance().stopAllLoops(0);
-            MusicManager.getInstance().stopAll();
-            onExit();
-          }} style={btnStyle("#ff0066")}>
-            ← MENU
-          </button>
-        )}
-      </div>
-      <style>{`
-        @keyframes rlgl3d-fadein {
-          from { opacity: 0; transform: scale(0.96); }
-          to   { opacity: 1; transform: scale(1);   }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <span style={{ fontSize: 10, letterSpacing: "0.3em", color: "rgba(255,255,255,0.4)" }}>{label}</span>
-      <span style={{ fontSize: 28, fontWeight: 800, color: accent, textShadow: `0 0 16px ${accent}88`, fontFamily: "var(--font-mono)" }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
- * STYLE HELPERS
- * ────────────────────────────────────────────────────────────────────────────*/
-
 function panelStyle(): React.CSSProperties {
   return {
     padding: "8px 14px",
@@ -1406,20 +1340,5 @@ function panelStyle(): React.CSSProperties {
     backdropFilter: "blur(8px)",
     display: "flex", alignItems: "center",
     fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-  };
-}
-
-function btnStyle(accent: string): React.CSSProperties {
-  return {
-    padding: "12px 30px",
-    background: "transparent",
-    border: `1.5px solid ${accent}`,
-    borderRadius: 4,
-    color: accent,
-    fontSize: 13, letterSpacing: "0.22em", fontWeight: 800,
-    fontFamily: "var(--font-bebas, 'Bebas Neue', sans-serif)",
-    cursor: "pointer",
-    textTransform: "uppercase",
-    transition: "all 140ms",
   };
 }
