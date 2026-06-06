@@ -908,7 +908,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     sm.preload([
       "player_step", "player_jump", "player_land",
       "player_eliminated", "player_victory",
-      "heartbeat", "shatter", "crowd_gasp", "crowd_cheer", "countdown_beep", "countdown_go", "scan_tone"
+      "heartbeat", "shatter", "crowd_gasp", "crowd_cheer", "countdown_beep", "countdown_go", "scan_tone", "red_light_call"
     ] as any[]);
     
     return () => {
