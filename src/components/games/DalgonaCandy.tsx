@@ -21,14 +21,14 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
   const eliminatedFiredRef = React.useRef(false);
 
   useEffect(() => {
-    useGameStore.setState({ hud: { ...useGameStore.getState().hud, timeLeft: timeLimit } });
+    useGameStore.setState({ hud: { ...useGameStore.getState().hud, time: timeLimit } });
     
     const interval = setInterval(() => {
       const state = useGameStore.getState();
       if (state.runtimePhase !== "playing" || eliminatedFiredRef.current) return;
       
       timerRef.current -= 1;
-      useGameStore.setState({ hud: { ...state.hud, timeLeft: Math.max(0, timerRef.current) } });
+      useGameStore.setState({ hud: { ...state.hud, time: Math.max(0, timerRef.current) } });
       
       if (timerRef.current <= 0) {
         eliminatedFiredRef.current = true;

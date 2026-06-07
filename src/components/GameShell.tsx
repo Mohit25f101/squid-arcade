@@ -277,12 +277,9 @@ export interface GameShellProps {
   showGlobalHUD?: boolean;
   /**
    * When provided, GameShell renders a GameNav back button at z:300.
-   * Games that pass onExit to GameShell should REMOVE their own inline
-   * back buttons to avoid duplicates. GlassBridge and RLGL keep their
-   * own buttons because they are not wrapped in GameShell by default;
-   * only DalgonaCandy uses this prop.
    */
   onExit?: () => void;
+  showGameNav?: boolean;
   onRestart?: () => void;
 }
 
@@ -301,6 +298,7 @@ const GameShell: React.FC<GameShellProps> = ({
   onVictoryComplete,
   background = "#000",
   showGlobalHUD = true,
+  showGameNav = true,
   onExit,
   onRestart,
 }) => {
@@ -513,7 +511,7 @@ const GameShell: React.FC<GameShellProps> = ({
         children (buttons etc.) need to opt back in with pointer-events: auto.
         */}
         {/* ── GameNav — back button, always wins over HUD ── */}
-        {onExit && (
+        {showGameNav && onExit && (
           <div
             style={{
               position: "absolute",

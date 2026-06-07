@@ -92,7 +92,7 @@ export default function GameRouter() {
         )}
 
         {activeGame === "glass-bridge" && (
-          <SceneWrapper key={`glass-bridge-${resetKey}`} transition={transitionState} showGlobalHUD={false} onExit={handleExit} onRestart={handleRestart}>
+          <SceneWrapper key={`glass-bridge-${resetKey}`} transition={transitionState} showGlobalHUD={true} onExit={handleExit} onRestart={handleRestart}>
             <GlassBridge onExit={handleExit} onComplete={handleComplete} />
           </SceneWrapper>
         )}
@@ -104,7 +104,7 @@ export default function GameRouter() {
         )}
 
         {activeGame === "dalgona" && (
-          <GameShell key={`dalgona-${resetKey}`} worldW={390} worldH={844} transition={transitionState} onExit={handleExit} onRestart={handleRestart}>
+          <GameShell key={`dalgona-${resetKey}`} worldW={390} worldH={844} transition={transitionState} showGameNav={false} onExit={handleExit} onRestart={handleRestart}>
             <DalgonaCandy onExit={handleExit} onComplete={handleComplete} />
           </GameShell>
         )}
@@ -117,17 +117,19 @@ function SceneWrapper({
   children,
   transition = "idle",
   showGlobalHUD = true,
+  showGameNav = true,
   onExit,
   onRestart,
 }: {
   children: React.ReactNode;
   transition?: string;
   showGlobalHUD?: boolean;
+  showGameNav?: boolean;
   onExit?: () => void;
   onRestart?: () => void;
 }) {
   return (
-    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD} onExit={onExit} onRestart={onRestart}>
+    <GameShell worldW={1280} worldH={720} transition={transition} showGlobalHUD={showGlobalHUD} showGameNav={showGameNav} onExit={onExit} onRestart={onRestart}>
       {children}
     </GameShell>
   );

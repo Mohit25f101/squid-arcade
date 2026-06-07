@@ -358,6 +358,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
   const shotTimerRef = useRef<number>(0);
   const greenTimerRef = useRef(0); // how long we've been in green light
   const redLightCallFiredRef = useRef(false); // prevents double-play per cycle
+  const hasMovedRef = useRef(false);
+  const hasWonRef = useRef(false);
 
   const handleDollSongEnd = useCallback(() => {
     console.log("[RLGL] handleDollSongEnd called. Phase:", lightPhaseRef.current, "GamePhase:", gamePhaseRef.current);
@@ -433,6 +435,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
     dollRotationRef.current = 0;
     elimStateRef.current  = "idle";
     elimTimerRef.current  = 0;
+    hasMovedRef.current   = false;
+    hasWonRef.current     = false;
     
     gamePhaseRef.current  = GamePhase.COUNTDOWN;
     countdownRef.current  = 3;
