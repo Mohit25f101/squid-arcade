@@ -204,21 +204,11 @@ function generateBridge(rows: number, seed: number, difficulty: "easy" | "normal
       const isSafe = col === safeCol;
       const glintBase = rng.next() * Math.PI * 2;
       
-      let safeReflection = 0.18 + rng.next() * 0.08;
-      let fragReflection = 0.06 + rng.next() * 0.06;
-      let safeWobble = 0.8 + rng.next() * 0.4;
-      let fragWobble = 1.4 + rng.next() * 0.8;
-
-      if (difficulty === "easy") {
-        safeReflection = 0.3 + rng.next() * 0.1;
-        fragReflection = 0.03 + rng.next() * 0.03;
-        safeWobble = 0.4 + rng.next() * 0.2; 
-      } else if (difficulty === "hard") {
-        safeReflection = 0.1 + rng.next() * 0.05;
-        fragReflection = 0.1 + rng.next() * 0.05;
-        safeWobble = 1.0 + rng.next() * 0.5;
-        fragWobble = 1.0 + rng.next() * 0.5;
-      }
+      // Make safe and fragile glasses visually identical so it's purely luck
+      let safeReflection = 0.1 + rng.next() * 0.05;
+      let fragReflection = safeReflection;
+      let safeWobble = 1.0 + rng.next() * 0.5;
+      let fragWobble = safeWobble;
 
       rowPanels.push({
         row,
@@ -227,8 +217,8 @@ function generateBridge(rows: number, seed: number, difficulty: "easy" | "normal
         state: "intact",
         crackTimer: 0,
         glintTimer: glintBase,
-        glintPhase: isSafe ? 0.6 + rng.next() * 0.3 : 0.9 + rng.next() * 0.4,
-        glintPhase2: 0.7 + rng.next() * 0.5,
+        glintPhase: 0.8 + rng.next() * 0.4,
+        glintPhase2: 0.8 + rng.next() * 0.4,
         wobbleAmp: isSafe ? safeWobble : fragWobble,
         wobblePhase: rng.next() * Math.PI * 2,
         reflectionAlpha: isSafe ? safeReflection : fragReflection,
@@ -879,29 +869,27 @@ function renderPanel(
       return;
   }
 
-  const [br, bg, bb] = panel.safe ? SAFE_BLUE : FRAGILE_BLUE;
+  const [br, bg, bb] = SAFE_BLUE; // Make them all use SAFE_BLUE to remove color cue
   const baseAlpha = 0.20 + Math.sin(atmosphericT * 0.7 + panel.wobblePhase) * 0.06;
 
   ctx.fillStyle = rgb(br, bg, bb, baseAlpha);
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
-  const refCanvas = panel.safe ? assets.safeReflection : assets.fragileReflection;
+  const refCanvas = assets.safeReflection; // Remove reflection differences
   ctx.globalAlpha = panel.reflectionAlpha + Math.sin(panel.glintTimer) * 0.06;
   ctx.drawImage(refCanvas as CanvasImageSource, 0, 0, PANEL_W, PANEL_H);
   ctx.globalAlpha = 1;
 
   const glint1 = (Math.sin(panel.glintTimer * panel.glintPhase) + 1) * 0.5;
-  let glintVal: number;
-  if (panel.safe) {
-    glintVal = glint1 * 0.32;
-  } else {
-    const glint2 = (Math.sin(panel.glintTimer * panel.glintPhase2 + 1.7) + 1) * 0.5;
-    glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.22;
-    if (glint2 > 0.8) {
-      ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.18})`;
-      const shimX = PANEL_W * 0.3 + glint2 * PANEL_W * 0.4;
-      ctx.fillRect(shimX, 0, 3, PANEL_H);
-    }
+  const glint2 = (Math.sin(panel.glintTimer * panel.glintPhase2 + 1.7) + 1) * 0.5;
+  const glintVal = (glint1 * 0.6 + glint2 * 0.4) * 0.22;
+  
+  if (glint2 > 0.8) {
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = `rgba(180,220,180,${(glint2 - 0.8) * 0.18})`;
+    const shimX = PANEL_W * 0.3 + glint2 * PANEL_W * 0.4;
+    ctx.fillRect(shimX, 0, 3, PANEL_H);
+    ctx.globalCompositeOperation = "source-over";
   }
   ctx.fillStyle = `rgba(220,240,255,${glintVal})`;
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
