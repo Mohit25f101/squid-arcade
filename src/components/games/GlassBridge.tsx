@@ -17,6 +17,8 @@ interface GameProps {
 const WORLD_W = 1280;
 const WORLD_H = 720;
 const TOTAL_ROWS = 18;
+const ROW_SPACING = 3.5;
+const getTimeLimit = (difficulty: string) => difficulty === "easy" ? 60 : difficulty === "hard" ? 30 : 45; 
 
 const PLAYER_W = 68; 
 const PLAYER_H = 100;
@@ -266,10 +268,12 @@ function bakeBackground(w: number, h: number): HTMLCanvasElement | OffscreenCanv
   const c = createOffscreen(w, h);
   const ctx = getCtx2d(c);
 
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "#1a0810");
-  grad.addColorStop(0.3, "#0d0406");
-  grad.addColorStop(0.7, "#080204");
+  const cx = w / 2;
+  const cy = h * 0.15;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, h * 0.9);
+  grad.addColorStop(0, "#1c2230");
+  grad.addColorStop(0.4, "#0d111a");
+  grad.addColorStop(0.8, "#04060a");
   grad.addColorStop(1, "#000000");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
@@ -569,6 +573,7 @@ function updatePlayer(gs: GameState, dtSec: number): void {
     }
 
     if (!panel.safe) {
+      SoundManager.getInstance().play("glass_break");
       triggerElimination(gs);
       const px = colWorldX(p.col) + PANEL_W / 2;
       const py = rowWorldY(p.row) + PANEL_H / 2;
@@ -783,12 +788,12 @@ function drawDoll(
 
   if (isHostile) {
     const pulse = 0.7 + Math.sin(t * 8) * 0.3;
-    // ctx.shadowColor = "#ff0000";
-    // ctx.shadowBlur  = 28 * pulse;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 28 * pulse;
     ctx.fillStyle   = "#ff3030";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc( eyeOffX, eyeY, S * 0.035 * pulse, 0, Math.PI * 2); ctx.fill();
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
 
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath(); ctx.arc(-eyeOffX, eyeY, S * 0.012, 0, Math.PI * 2); ctx.fill();
@@ -808,15 +813,15 @@ function drawDoll(
 
     ctx.strokeStyle = "rgba(255,0,30,0.85)";
     ctx.lineWidth   = 5 * scale;
-    // ctx.shadowColor = "#ff0000";
-    // ctx.shadowBlur  = 22 * scale;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 22 * scale;
     ctx.beginPath();
     ctx.moveTo(-eyeOffX, -S * 0.38 + headTilt * eyeOffX);
     ctx.lineTo(colDelta, abyssY);
     ctx.moveTo( eyeOffX, -S * 0.38 + headTilt * eyeOffX);
     ctx.lineTo(colDelta, abyssY);
     ctx.stroke();
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
 
     ctx.strokeStyle = "rgba(255,220,220,0.95)";
     ctx.lineWidth   = 1.5 * scale;
@@ -828,12 +833,12 @@ function drawDoll(
     ctx.stroke();
 
     ctx.fillStyle = "rgba(255,40,40,0.9)";
-    // ctx.shadowColor = "#ff0000";
-    // ctx.shadowBlur  = 24 * scale;
+    ctx.shadowColor = "#ff0000";
+    ctx.shadowBlur  = 24 * scale;
     ctx.beginPath();
     ctx.arc(colDelta, 600, 9 * scale, 0, Math.PI * 2);
     ctx.fill();
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
   }
 
   ctx.restore();
@@ -903,11 +908,11 @@ function renderPanel(
   
   if (isPlayerOn) {
     const glowPulse = 0.7 + Math.sin(atmosphericT * 3) * 0.3;
-    // ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
-    // ctx.shadowBlur = 40;
+    ctx.shadowColor = `rgba(${br}, ${bg + 120}, ${bb + 120}, ${glowPulse})`;
+    ctx.shadowBlur = 40;
     ctx.fillStyle = `rgba(${br + 100}, ${bg + 140}, ${bb + 120}, ${glowPulse * 0.5})`;
     ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
   }
 
   const borderAlpha = isPlayerOn ? 0.85 : 0.30 + glintVal * 0.4;
@@ -927,8 +932,8 @@ function renderPanel(
     
     ctx.save();
     ctx.translate(figureX, figureY);
-    // ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
-    // ctx.shadowBlur = isPlayerOn ? 15 : 5;
+    ctx.shadowColor = `rgba(255, 255, 255, ${figureGlow})`;
+    ctx.shadowBlur = isPlayerOn ? 15 : 5;
     ctx.strokeStyle = `rgba(255, 255, 255, ${figureGlow * 1.5})`;
     ctx.lineWidth = 2.5;
     
@@ -944,17 +949,17 @@ function renderPanel(
       ctx.arc(0, 0, figureSize * 1.1, 0, Math.PI * 2);
     }
     ctx.stroke();
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
   if (isPlayerOn && quality === "high") {
-    // ctx.shadowColor = rgb(br, bg, bb, 0.8);
-    // ctx.shadowBlur = 18;
+    ctx.shadowColor = rgb(br, bg, bb, 0.8);
+    ctx.shadowBlur = 18;
     ctx.strokeStyle = rgb(br, bg, bb, 0.6);
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, PANEL_W, PANEL_H);
-    // ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0;
   }
 
   if (panel.state === "cracking" && panel.crackTimer > 0) {
@@ -1141,7 +1146,7 @@ interface TouchState {
   right: boolean;
 }
 
-function createGameState(seed: number, difficulty: number): GameState {
+function createGameState(seed: number, difficulty: "easy"|"normal"|"hard"): GameState {
   const startY = rowWorldY(0);
   return {
     phase: "playing", elimPhase: "none", elimTimer: 0,
@@ -1152,7 +1157,7 @@ function createGameState(seed: number, difficulty: number): GameState {
       startY, facing: 1, status: "alive", fallY: 0, fallVy: 0, screenShakeX: 0, screenShakeY: 0, walkBob: 0, walkBobDir: 1,
     },
     camera: { y: startY - WORLD_H * 0.5, targetY: startY - WORLD_H * 0.5, shake: 0, shakeTimer: 0, shakeDecay: SHAKE_DECAY_RATE, zoom: 1, targetZoom: 1 },
-    timeLeft: COUNTDOWN_TOTAL, elapsed: 0, slowMoMult: 1, particles: [], audioEvents: new Set(),
+    timeLeft: getTimeLimit(difficulty), elapsed: 0, slowMoMult: 1, particles: [], audioEvents: new Set(),
     atmosphericT: 0, vignetteIntensity: 0, vignetteTarget: 0, flashAlpha: 0, fadeAlpha: 0, inputConsumed: false, seed, ambientDripTimer: 0, lateGameZoomActive: false, timeOnRow: 0
   };
 }
@@ -1240,7 +1245,7 @@ const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inpu
     background: "rgba(20,60,120,0.55)", border: "1.5px solid rgba(80,160,255,0.4)",
     color: "rgba(160,210,255,0.9)", fontSize: 24, fontFamily: "monospace", display: "flex",
     alignItems: "center", justifyContent: "center", cursor: "pointer",
-    userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(4px)", zIndex: 100
+    userSelect: "none", WebkitUserSelect: "none", touchAction: "none", zIndex: 100
   };
 
   return (
@@ -1281,6 +1286,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
   
   const [finalScore, setFinalScore] = useState(0);
   const addScore = useGameStore((s) => s.addScore);
+  const difficulty = useGameStore((s) => s.settings.difficulty);
   const scoreRecorded = useRef(false);
 
   const uiPhaseRef = useRef(uiPhase);
@@ -1305,7 +1311,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
   useEffect(() => {
     SoundManager.getInstance().preload([
-      "step", "exhale-texture", "glass_step", "shatter", "fall", "victory", "eliminated", "suspense"
+      "step", "exhale-texture", "glass_step", "glass_break", "shatter", "fall", "victory", "eliminated", "suspense"
     ] as any[]);
     return () => {
       SoundManager.getInstance().stopAll(0);
@@ -1383,13 +1389,13 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
   const startGame = useCallback(() => {
     const seed = Date.now() ^ (Math.random() * 0xffffffff);
-    gsRef.current = createGameState(seed >>> 0, 1);
+    gsRef.current = createGameState(seed >>> 0, difficulty);
     if (!assetsRef.current) {
       assetsRef.current = initBakedAssets();
     }
     scoreRecorded.current = false;
     setUiPhase("playing");
-  }, []);
+  }, [difficulty]);
 
   const restartGame = useCallback(() => {
     startGame();
@@ -1418,12 +1424,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
               break;
             case "fall":
               sm.play("fall", 0);
-              break;
-            case "victory":
-              sm.play("victory", 0);
-              break;
-            case "eliminated":
-              sm.play("eliminated", 0);
               break;
           }
         }
@@ -1458,7 +1458,8 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     }
 
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
-      const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
+      const timeLimit = getTimeLimit(difficulty);
+      const timeBonus = Math.floor((gs.timeLeft / timeLimit) * 500);
       const score = (TOTAL_ROWS * 100) + timeBonus;
       if (!scoreRecorded.current) {
           addScore(score);

@@ -629,6 +629,10 @@ for (let i = 0; i < 40; i++) {
 }
 
 // ── Audio ──────────────────────────────────────────────
+let hasInteracted = false;
+window.addEventListener('pointerdown', () => { hasInteracted = true; }, { once: true });
+window.addEventListener('touchstart', () => { hasInteracted = true; }, { once: true });
+
 let audioCtx = null;
 function getAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -648,6 +652,7 @@ function playTick(freq, dur = 0.05, vol = 0.15) {
 }
 function playScrape(intensity) {
   try {
+    if (intensity > 0.5 && navigator.vibrate && hasInteracted) navigator.vibrate(15);
     const ac = getAudio();
     const buf = ac.createBuffer(1, ac.sampleRate * 0.08, ac.sampleRate);
     const d = buf.getChannelData(0);
@@ -666,6 +671,7 @@ function playScrape(intensity) {
 }
 function playMicrocrack(severity) {
   try {
+    if (navigator.vibrate && hasInteracted) navigator.vibrate(30);
     const ac = getAudio();
     const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate);
     const d = buf.getChannelData(0);
@@ -1340,7 +1346,9 @@ function render(){
   } else { shakeX=0; shakeY=0; }
 
   const tension=1-candyIntegrity;
-  vignetteRed=lerp(vignetteRed, tension*0.7, 0.04);
+  let targetRed = tension * 0.7;
+  if (tension > 0.8) targetRed = 0.8 + Math.sin(frame * 0.2) * 0.2;
+  vignetteRed = lerp(vignetteRed, targetRed, 0.04);
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
@@ -1674,19 +1682,25 @@ function render(){
       
       // Visible crack lines overlay
       ctx.strokeStyle = `rgba(25,6,0,${crackAlpha * 0.85})`;
-      ctx.lineWidth = Math.max(2, crackAlpha * 6) * scale;
-      ctx.setLineDash([8 * scale, 4 * scale]);
-      for (let i = 0; i < Math.floor(crackAlpha * 12); i++) {
-        const x1 = Math.random() * CANDY_W * scale;
-        const y1 = Math.random() * CANDY_H * scale;
-        const angle = Math.random() * Math.PI;
-        const len = (30 + Math.random() * 60) * scale * crackAlpha;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
-        ctx.stroke();
+      ctx.lineWidth = Math.max(1.5, crackAlpha * 4) * scale;
+      for (let i = 0; i < Math.floor(crackAlpha * 8); i++) {
+        const cx = Math.random() * CANDY_W * scale;
+        const cy = Math.random() * CANDY_H * scale;
+        const branches = 3 + Math.floor(Math.random() * 3);
+        for(let b=0; b<branches; b++) {
+          const angle = Math.random() * Math.PI * 2;
+          const len = (20 + Math.random() * 50) * scale * crackAlpha;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+          if (Math.random() > 0.5) {
+             const angle2 = angle + (Math.random()-0.5);
+             const len2 = len * 0.5;
+             ctx.lineTo(cx + Math.cos(angle)*len + Math.cos(angle2)*len2, cy + Math.sin(angle)*len + Math.sin(angle2)*len2);
+          }
+          ctx.stroke();
+        }
       }
-      ctx.setLineDash([]);
     }
     
     if (edgeStress > 0.3) {

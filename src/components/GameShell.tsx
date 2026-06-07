@@ -62,12 +62,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useGameStore, selectSessionStats } from "@/store/gameStore";
-import { useShallow } from "zustand/react/shallow";
+import {
+  useGameStore,
+  selectSessionPlayed,
+  selectSessionSurvived,
+} from "@/store/gameStore";
 import { inputManager } from "@/managers/InputManager";
 import { HUD } from "@/components/hud";
 import { ResultScreen } from "@/components/ui/ResultScreen";
-import type { EliminationPayload, ViewportState } from "@/store/gameStore";
+import type { ViewportState } from "@/store/gameStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 1 — CONTEXT
@@ -112,15 +115,6 @@ export function useGameShell(): GameShellContextValue {
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 2 — OVERLAY ANIMATION CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Total duration of the elimination overlay sequence in ms */
-const ELIM_OVERLAY_DURATION_MS = 2800;
-
-/** Duration of the victory overlay sequence in ms */
-const VICTORY_OVERLAY_DURATION_MS = 3200;
-
-/** How long the red flash phase lasts at the start of elimination */
-const ELIM_FLASH_DURATION_MS = 180;
 
 /** Delay before the "ELIMINATED" card fades in */
 const ELIM_CARD_DELAY_MS = 600;
@@ -283,12 +277,9 @@ export interface GameShellProps {
   showGlobalHUD?: boolean;
   /**
    * When provided, GameShell renders a GameNav back button at z:300.
-   * Games that pass onExit to GameShell should REMOVE their own inline
-   * back buttons to avoid duplicates. GlassBridge and RLGL keep their
-   * own buttons because they are not wrapped in GameShell by default;
-   * only DalgonaCandy uses this prop.
    */
   onExit?: () => void;
+  showGameNav?: boolean;
   onRestart?: () => void;
 }
 
@@ -307,17 +298,18 @@ const GameShell: React.FC<GameShellProps> = ({
   onVictoryComplete,
   background = "#000",
   showGlobalHUD = true,
+  showGameNav = true,
   onExit,
   onRestart,
 }) => {
   // ── Store subscriptions ─────────────────────────────────────────────────
   const runtimePhase   = useGameStore((s) => s.runtimePhase);
   const eliminationPayload = useGameStore((s) => s.eliminationPayload);
-  const clearElimination   = useGameStore((s) => s.clearElimination);
   const setRuntimePhase    = useGameStore((s) => s.setRuntimePhase);
   const setViewportState   = useGameStore((s) => s.setViewportState);
-  const sessionStats       = useGameStore(useShallow(selectSessionStats));
-
+  
+  const sessionPlayed = useGameStore(selectSessionPlayed);
+  const sessionSurvived = useGameStore(selectSessionSurvived);
   // ── Refs ────────────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -443,6 +435,21 @@ const GameShell: React.FC<GameShellProps> = ({
     onEliminationComplete?.();
   }, [setRuntimePhase, onExit, onEliminationComplete]);
 
+  // Global sound triggers based on phase changes
+  const prevPhaseRef = useRef(runtimePhase);
+  useEffect(() => {
+    if (prevPhaseRef.current !== "victory" && runtimePhase === "victory") {
+      import("@/managers/SoundManager").then(({ SoundManager }) => {
+        SoundManager.getInstance().play("victory");
+      });
+    } else if (prevPhaseRef.current !== "eliminated" && runtimePhase === "eliminated") {
+      import("@/managers/SoundManager").then(({ SoundManager }) => {
+        SoundManager.getInstance().play("eliminated");
+      });
+    }
+    prevPhaseRef.current = runtimePhase;
+  }, [runtimePhase]);
+
   // ── Victory overlay completion handler ──────────────────────────────────
   const handleVictoryComplete = useCallback(() => {
     setRuntimePhase("idle");
@@ -504,7 +511,7 @@ const GameShell: React.FC<GameShellProps> = ({
         children (buttons etc.) need to opt back in with pointer-events: auto.
         */}
         {/* ── GameNav — back button, always wins over HUD ── */}
-        {onExit && (
+        {showGameNav && onExit && (
           <div
             style={{
               position: "absolute",
@@ -535,10 +542,10 @@ const GameShell: React.FC<GameShellProps> = ({
           <div style={{ position: "absolute", zIndex: 900, inset: 0, pointerEvents: "auto" }}>
             <ResultScreen 
               outcome={runtimePhase}
-              score={runtimePhase === "victory" ? 45600000000 : 0} 
+              score={runtimePhase === "victory" ? useGameStore.getState().hud.score : 0} 
               statLine={runtimePhase === "eliminated" ? eliminationPayload?.reason || "ELIMINATED" : "ROUND CLEARED"}
-              survived={sessionStats.survived}
-              played={sessionStats.played}
+              survived={sessionSurvived}
+              played={sessionPlayed}
               total={456}
               onMenu={runtimePhase === "victory" ? handleVictoryComplete : handleEliminationComplete}
               onTryAgain={() => {

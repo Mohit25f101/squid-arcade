@@ -35,7 +35,7 @@ import {
  * ────────────────────────────────────────────────────────────────────────────*/
 
 const FIELD_LEN          = 90;          
-const FIELD_WIDTH        = 30;
+const FIELD_WIDTH        = 45;
 const FINISH_Z           = -10;         
 const START_Z            = FIELD_LEN - 10;
 const PLAYER_SPEED       = 8.0;
@@ -48,7 +48,7 @@ const RED_DURATION_MIN   = 2.0;
 const GREEN_DURATION_MAX = 4.0;         // force red after this many seconds even if song not done
 
 const MOVE_THRESHOLD     = 0.05;        
-const NPC_COUNT          = 18;
+const NPC_COUNT          = 30;
 
 // Difficulty-based timer constants
 const TIMER_EASY   = 60;  // Easy = 60 seconds
@@ -147,41 +147,55 @@ function Arena({
 }) {
   return (
     <group>
+      {/* Main Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, FIELD_LEN / 2 - 5]} receiveShadow>
-        <planeGeometry args={[FIELD_WIDTH + 6, FIELD_LEN + 20]} />
-        <meshStandardMaterial color="#cda878" roughness={0.95} />
+        <planeGeometry args={[FIELD_WIDTH + 20, FIELD_LEN + 40, 16, 16]} />
+        <meshStandardMaterial color="#b38f61" roughness={0.98} bumpScale={0.02} />
       </mesh>
+      {/* Starting Ring Area */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, FIELD_LEN / 2 - 5]}>
         <ringGeometry args={[FIELD_WIDTH / 2 - 3, FIELD_WIDTH / 2 + 10, 64]} />
-        <meshStandardMaterial color="#a8865d" roughness={0.95} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#8b6c47" roughness={0.95} side={THREE.DoubleSide} />
       </mesh>
+      {/* Start Line */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, START_Z]}>
         <planeGeometry args={[FIELD_WIDTH, 0.6]} />
         <meshStandardMaterial color="#ffffff" roughness={0.9} emissive="#ffffff" emissiveIntensity={0.05} />
       </mesh>
+      {/* Finish Line */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, FINISH_Z]}>
         <planeGeometry args={[FIELD_WIDTH, 0.6]} />
         <meshStandardMaterial color="#f5c542" roughness={0.85} emissive="#f5c542" emissiveIntensity={0.2} />
       </mesh>
-      <mesh position={[-FIELD_WIDTH / 2 - 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
-        <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
+      
+      {/* Side Walls (Pink) */}
+      <mesh position={[-FIELD_WIDTH / 2 - 2, 8, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
+        <boxGeometry args={[2, 16, FIELD_LEN + 30]} />
         <meshStandardMaterial color="#e34a8a" roughness={0.65} />
       </mesh>
-      <mesh position={[FIELD_WIDTH / 2 + 0.5, 5, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
-        <boxGeometry args={[1, 10, FIELD_LEN + 14]} />
+      <mesh position={[FIELD_WIDTH / 2 + 2, 8, FIELD_LEN / 2 - 5]} castShadow receiveShadow>
+        <boxGeometry args={[2, 16, FIELD_LEN + 30]} />
         <meshStandardMaterial color="#e34a8a" roughness={0.65} />
       </mesh>
-      <mesh position={[0, 6, -14]} castShadow receiveShadow>
-        <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
-        <meshStandardMaterial color="#75a1d1" roughness={0.8} />
+      
+      {/* Back Wall (Doll Area) */}
+      <mesh position={[0, 8, -14]} castShadow receiveShadow>
+        <boxGeometry args={[FIELD_WIDTH + 6, 16, 1]} />
+        <meshStandardMaterial color="#5581b1" roughness={0.8} />
       </mesh>
-      <mesh position={[0, 11, -14.6]}>
-        <planeGeometry args={[FIELD_WIDTH + 2, 4]} />
+      <mesh position={[0, 15, -14.6]}>
+        <planeGeometry args={[FIELD_WIDTH + 6, 8]} />
         <meshStandardMaterial color="#a7c3df" roughness={0.95} />
       </mesh>
-      <mesh position={[0, 6, FIELD_LEN]} >
-        <boxGeometry args={[FIELD_WIDTH + 2, 12, 1]} />
-        <meshStandardMaterial color="#3d2c1f" roughness={0.85} />
+      
+      {/* Spectator Background / VIP Area */}
+      <mesh position={[0, 12, FIELD_LEN + 15]} castShadow receiveShadow>
+        <boxGeometry args={[FIELD_WIDTH + 20, 24, 8]} />
+        <meshStandardMaterial color="#22150e" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 20, FIELD_LEN + 11]} castShadow>
+        <boxGeometry args={[FIELD_WIDTH, 6, 2]} />
+        <meshStandardMaterial color="#0a0503" roughness={0.9} />
       </mesh>
       {[20, 45, 70].map((z) => (
         <React.Fragment key={z}>
@@ -344,8 +358,11 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
   const shotTimerRef = useRef<number>(0);
   const greenTimerRef = useRef(0); // how long we've been in green light
   const redLightCallFiredRef = useRef(false); // prevents double-play per cycle
+  const hasMovedRef = useRef(false);
+  const hasWonRef = useRef(false);
 
   const handleDollSongEnd = useCallback(() => {
+    console.log("[RLGL] handleDollSongEnd called. Phase:", lightPhaseRef.current, "GamePhase:", gamePhaseRef.current);
     if (lightPhaseRef.current === LightPhase.GREEN && gamePhaseRef.current === GamePhase.PLAYING) {
       lightPhaseRef.current = LightPhase.WARNING;
       turnTRef.current = 0;
@@ -354,10 +371,12 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
   }, []);
 
   const startDollSong = useCallback(() => {
+    console.log("[RLGL] startDollSong called. Requesting 'rlgl_green'.");
     MusicManager.getInstance().play("rlgl_green", 0, handleDollSongEnd);
   }, [handleDollSongEnd]);
 
   const stopDollSong = useCallback(() => {
+    console.log("[RLGL] stopDollSong called.");
     MusicManager.getInstance().stop(220);
   }, []);
 
@@ -382,11 +401,11 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       fallAxis: [1, 0, 0],
     });
     for (let i = 1; i <= NPC_COUNT; i++) {
-      const lane = ((i - 1) % 7) - 3; 
-      const row  = Math.floor((i - 1) / 7);
+      const lane = ((i - 1) % 10) - 4.5; 
+      const row  = Math.floor((i - 1) / 10);
       arr.push({
         id: i,
-        x: lane * 2.6 + (Math.random() - 0.5) * 0.4,
+        x: lane * 3.2 + (Math.random() - 0.5) * 0.4,
         z: START_Z - 1.0 - row * 1.4,
         vx: 0,
         vz: 0,
@@ -416,6 +435,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
     dollRotationRef.current = 0;
     elimStateRef.current  = "idle";
     elimTimerRef.current  = 0;
+    hasMovedRef.current   = false;
+    hasWonRef.current     = false;
     
     gamePhaseRef.current  = GamePhase.COUNTDOWN;
     countdownRef.current  = 3;
@@ -510,7 +531,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         redLightCallFiredRef.current = true;
         sm.play("red_light_call" as any);
       }
-
       if (turnTRef.current >= 1) {
         turnTRef.current = 1;
         lightPhaseRef.current = LightPhase.RED;
@@ -546,7 +566,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       dollRotationRef.current = 0;
       greenTimerRef.current += dt;
       // Force transition to warning if green light has lasted too long
-      if (greenTimerRef.current >= GREEN_DURATION_MAX) {
+      const warningChance = difficulty === "hard" ? 0.05 : 0.02;
+      if (greenTimerRef.current >= GREEN_DURATION_MAX || (greenTimerRef.current > 2 && Math.random() < warningChance * dt * 2)) {
         greenTimerRef.current = 0;
         redLightCallFiredRef.current = false; // reset for the new warning cycle
         lightPhaseRef.current = LightPhase.WARNING;
@@ -567,9 +588,33 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       // RLGL Movement: Instant stop/start
       human.vz = wantMove ? -speed : 0;
       human.vx = 0;
-      human.z += human.vz * dt;
 
       if (wantMove) {
+        hasMovedRef.current = true;
+        let avoidX = 0;
+        const AVOID_RADIUS = 3.0;
+        const AVOID_STRENGTH = 4.0;
+        for (let i = 1; i < players.length; i++) {
+          const npc = players[i];
+          if (!npc.alive) continue;
+          const dx = human.x - npc.x;
+          const dz = human.z - npc.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist < AVOID_RADIUS && dist > 0.01) {
+            // Only avoid if NPC is ahead of us
+            if (npc.z < human.z) {
+              avoidX += (dx / dist) * AVOID_STRENGTH * (1 - dist / AVOID_RADIUS);
+            }
+          }
+        }
+        avoidX = Math.max(-6, Math.min(6, avoidX));
+        human.x += avoidX * dt;
+        human.x = Math.max(-FIELD_WIDTH / 2 + 1, Math.min(FIELD_WIDTH / 2 - 1, human.x));
+      }
+      
+      human.z += human.vz * dt;
+
+      if (hasMovedRef.current) {
         lastStepRef.current += dt;
         if (lastStepRef.current > 0.32) {
           lastStepRef.current = 0;
@@ -577,17 +622,13 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         }
       }
 
-      if (human.z <= FINISH_Z) {
-        human.finished = true;
-        human.z = FINISH_Z;
-        human.vz = 0;
-        
+      if (playersRef.current[0].z <= FINISH_Z && !hasWonRef.current) {
+        hasWonRef.current = true;
         gamePhaseRef.current = GamePhase.VICTORY; 
         
         stopDollSong();
         sm.stopLoop("heartbeat" as any, 300);
         sm.stopLoop("scan_tone" as any, 300);
-        sm.play("player_victory" as any);
         sm.play("crowd_cheer" as any);
         
         const timeBonus = Math.floor(timeLeftRef.current * 50);
@@ -672,7 +713,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             if (elimTimerRef.current >= 0.1) {
               elimStateRef.current = "audio";
               elimTimerRef.current = 0;
-              sm.play("player_eliminated" as any);
             }
             break;
             
@@ -699,7 +739,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             
           case "shake":
             if (elimTimerRef.current >= 0.2) {
-              elimStateRef.current = "fall";
+              elimStateRef.current = "doll_kill";
               elimTimerRef.current = 0;
               human.alive = false;
               human.fallProgress = 0;
@@ -710,6 +750,13 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             }
             break;
             
+          case "doll_kill":
+            if (elimTimerRef.current >= 0.5) {
+              elimStateRef.current = "fall";
+              elimTimerRef.current = 0;
+            }
+            break;
+
           case "fall":
             if (elimTimerRef.current >= 1.5) {
               elimStateRef.current = "summary";
@@ -772,6 +819,15 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         shake={shakeRef.current}
       />
       
+      <fog attach="fog" args={[isRed ? "#4a0808" : "#a8cbe0", 20, 160]} />
+      <Sky 
+        sunPosition={[15, 20, 20]} 
+        turbidity={isRed ? 10 : 2} 
+        rayleigh={isRed ? 2 : 0.8} 
+        mieCoefficient={0.005} 
+        mieDirectionalG={0.8} 
+      />
+      
       <ambientLight 
         intensity={isRed ? 0.25 : 0.65} 
         color={isRed ? "#4a0808" : "#ffe8c4"} 
@@ -780,8 +836,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         position={[15, 20, 20]}
         intensity={isRed ? 0.5 : 1.2}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-30}
         shadow-camera-right={30}
         shadow-camera-top={30}
@@ -1007,17 +1063,14 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
   }, [onComplete]);
 
   const activeTouchesRef = useRef(0);
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleInputStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
-    activeTouchesRef.current = e.touches.length;
     inputRef.current.forward = true;
   }, []);
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    activeTouchesRef.current = e.touches.length;
-    if (e.touches.length === 0) inputRef.current.forward = false;
+  const handleInputEnd = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    inputRef.current.forward = false;
   }, []);
-  const handleTouchCancel = useCallback(() => {
-    activeTouchesRef.current = 0;
+  const handleInputCancel = useCallback(() => {
     inputRef.current.forward = false;
   }, []);
 
@@ -1035,7 +1088,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       <Canvas
         shadows
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{ antialias: false, powerPreference: "high-performance" }}
         camera={{ fov: 55, near: 0.1, far: 250, position: [0, 6, 95] }}
         onPointerMissed={() => { /* noop */ }}
       >
@@ -1101,9 +1154,12 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       <div
         data-testid="rlgl3d-touch-layer"
         className="rlgl3d-touch-only"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchCancel}
+        onTouchStart={handleInputStart}
+        onTouchEnd={handleInputEnd}
+        onTouchCancel={handleInputCancel}
+        onMouseDown={handleInputStart}
+        onMouseUp={handleInputEnd}
+        onMouseLeave={handleInputCancel}
         style={{
           position: "absolute", inset: 0, zIndex: 8,
           pointerEvents: "auto",
@@ -1139,9 +1195,6 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
         @keyframes rlgl3d-pulse {
           from { box-shadow: inset 0 0 180px 50px rgba(220,20,20,0.45); }
           to   { box-shadow: inset 0 0 260px 80px rgba(255,40,40,0.7);  }
-        }
-        @media (pointer: fine) {
-          .rlgl3d-touch-only { display: none !important; }
         }
         @keyframes rlgl3d-hint-fade {
           0%   { opacity: 1; }

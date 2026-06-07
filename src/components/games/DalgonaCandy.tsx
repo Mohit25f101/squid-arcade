@@ -16,6 +16,30 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
   const difficulty         = useGameStore((s) => s.settings.difficulty);
   const dalgonaLevel       = useGameStore((s) => s.dalgonaLevel);
 
+  const timeLimit = difficulty === "easy" ? 60 : difficulty === "hard" ? 30 : 45;
+  const timerRef = React.useRef(timeLimit);
+  const eliminatedFiredRef = React.useRef(false);
+
+  useEffect(() => {
+    useGameStore.setState({ hud: { ...useGameStore.getState().hud, time: timeLimit } });
+    
+    const interval = setInterval(() => {
+      const state = useGameStore.getState();
+      if (state.runtimePhase !== "playing" || eliminatedFiredRef.current) return;
+      
+      timerRef.current -= 1;
+      useGameStore.setState({ hud: { ...state.hud, time: Math.max(0, timerRef.current) } });
+      
+      if (timerRef.current <= 0) {
+        eliminatedFiredRef.current = true;
+        triggerElimination({ sourceGame: "dalgona", reason: "TIME OUT" });
+        if (onComplete) onComplete(0, "eliminated");
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timeLimit, triggerElimination, onComplete]);
+
   useEffect(() => {
     return () => {
       SoundManager.getInstance().stopAll(0);
@@ -28,12 +52,14 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
       
       switch (e.data.type) {
         case 'DALGONA_SUCCESS':
-          SoundManager.getInstance().play("victory");
+          if (eliminatedFiredRef.current) return;
           setRuntimePhase("victory");
-          if (onComplete) onComplete(15000, "victory");
+          useGameStore.getState().incrementDalgonaLevel();
+          if (onComplete) onComplete(Math.floor((timerRef.current / timeLimit) * 15000), "victory");
           break;
         case 'DALGONA_ELIMINATED':
-          SoundManager.getInstance().play("eliminated");
+          if (eliminatedFiredRef.current) return;
+          eliminatedFiredRef.current = true;
           triggerElimination({ sourceGame: "dalgona", reason: e.data.reason || "candy-snapped" });
           if (onComplete) onComplete(0, "eliminated");
           break;
