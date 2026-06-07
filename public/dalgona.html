@@ -543,8 +543,8 @@ const CANDY_Y = (WORLD_H - CANDY_H) / 2 - 20;
 // ── Physics constants (REBALANCED — HARDER) ──────────
 const BASE_STRESS = 0.00180;
 let INSTABILITY_MULT = 0.045;
-const EDGE_TO_INTEGRITY = 0.55;
-const FRACTURE_THRESHOLD = 0.35;
+const EDGE_TO_INTEGRITY = 6.0;
+const FRACTURE_THRESHOLD = 0.08;
 let CARVE_RADIUS = 6;
 let ON_EDGE_TOL = 8;
 const COMPLETION_WIN = 0.96;
@@ -630,8 +630,17 @@ for (let i = 0; i < 40; i++) {
 
 // ── Audio ──────────────────────────────────────────────
 let hasInteracted = false;
-window.addEventListener('pointerdown', () => { hasInteracted = true; }, { once: true });
-window.addEventListener('touchstart', () => { hasInteracted = true; }, { once: true });
+window.addEventListener('pointerup', () => { hasInteracted = true; }, { once: true });
+window.addEventListener('touchend', () => { hasInteracted = true; }, { once: true });
+window.addEventListener('click', () => { hasInteracted = true; }, { once: true });
+
+function safeVibrate(duration) {
+  if (!navigator.vibrate) return;
+  const activated = navigator.userActivation ? navigator.userActivation.hasBeenActive : hasInteracted;
+  if (activated) {
+    try { navigator.vibrate(duration); } catch(e){}
+  }
+}
 
 let audioCtx = null;
 function getAudio() {
@@ -652,7 +661,7 @@ function playTick(freq, dur = 0.05, vol = 0.15) {
 }
 function playScrape(intensity) {
   try {
-    if (intensity > 0.5 && navigator.vibrate && hasInteracted) navigator.vibrate(15);
+    if (intensity > 0.5) safeVibrate(15);
     const ac = getAudio();
     const buf = ac.createBuffer(1, ac.sampleRate * 0.08, ac.sampleRate);
     const d = buf.getChannelData(0);
@@ -671,7 +680,7 @@ function playScrape(intensity) {
 }
 function playMicrocrack(severity) {
   try {
-    if (navigator.vibrate && hasInteracted) navigator.vibrate(30);
+    safeVibrate(30);
     const ac = getAudio();
     const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate);
     const d = buf.getChannelData(0);
@@ -737,9 +746,12 @@ const SHAPES = {
   },
 
   umbrella: () => [
-    {nx:0.50,ny:0.90},{nx:0.50,ny:0.76},{nx:0.44,ny:0.76},{nx:0.44,ny:0.70},{nx:0.10,ny:0.70},{nx:0.10,ny:0.58},
-    {nx:0.16,ny:0.44},{nx:0.26,ny:0.34},{nx:0.38,ny:0.28},{nx:0.50,ny:0.26},{nx:0.62,ny:0.28},{nx:0.74,ny:0.34},
-    {nx:0.84,ny:0.44},{nx:0.90,ny:0.58},{nx:0.90,ny:0.70},{nx:0.56,ny:0.70},{nx:0.56,ny:0.76},{nx:0.50,ny:0.76}
+    {nx: 0.10, ny: 0.50}, {nx: 0.13, ny: 0.35}, {nx: 0.22, ny: 0.22}, {nx: 0.35, ny: 0.13}, {nx: 0.50, ny: 0.10}, 
+    {nx: 0.65, ny: 0.13}, {nx: 0.78, ny: 0.22}, {nx: 0.87, ny: 0.35}, {nx: 0.90, ny: 0.50},
+    {nx: 0.77, ny: 0.45}, {nx: 0.63, ny: 0.50}, {nx: 0.54, ny: 0.46},
+    {nx: 0.54, ny: 0.75}, {nx: 0.58, ny: 0.82}, {nx: 0.55, ny: 0.90}, {nx: 0.45, ny: 0.90}, {nx: 0.42, ny: 0.82}, 
+    {nx: 0.46, ny: 0.75}, {nx: 0.46, ny: 0.46},
+    {nx: 0.37, ny: 0.50}, {nx: 0.23, ny: 0.45}
   ]
 };
 const SHAPE_ICONS = { triangle:'▲', circle:'⬤', star:'★', umbrella:'☂' };
@@ -870,7 +882,7 @@ function updateBullets() {
 function resize(){
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
   const fitScale = Math.min(vw / WORLD_W, vh / WORLD_H);
   scale = fitScale * dpr;

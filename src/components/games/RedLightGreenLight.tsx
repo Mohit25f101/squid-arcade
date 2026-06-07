@@ -1087,7 +1087,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
     >
       <Canvas
         shadows
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{ antialias: false, powerPreference: "high-performance" }}
         camera={{ fov: 55, near: 0.1, far: 250, position: [0, 6, 95] }}
         onPointerMissed={() => { /* noop */ }}
