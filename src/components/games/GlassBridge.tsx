@@ -1338,7 +1338,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 2) : 1;
+    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio ?? 1, 1.5) : 1;
 
     const resize = () => {
       const cw = container.clientWidth;
