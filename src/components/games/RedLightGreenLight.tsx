@@ -780,8 +780,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         position={[15, 20, 20]}
         intensity={isRed ? 0.5 : 1.2}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-30}
         shadow-camera-right={30}
         shadow-camera-top={30}
@@ -1035,7 +1035,7 @@ export default function RedLightGreenLight3D({ onExit, onComplete }: RLGLProps) 
       <Canvas
         shadows
         dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: "high-performance" }}
+        gl={{ antialias: false, powerPreference: "high-performance" }}
         camera={{ fov: 55, near: 0.1, far: 250, position: [0, 6, 95] }}
         onPointerMissed={() => { /* noop */ }}
       >

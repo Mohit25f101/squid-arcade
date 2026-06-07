@@ -31,6 +31,11 @@ export type SoundId =
   | "room_tone"
   | "scan_tone"
   | "red_light_call"
+  | "glass_step"
+  | "glass_break"
+  | "fall"
+  | "exhale-texture"
+  | "suspense"
   | "heartbeat";
 
 interface SoundDefinition {
@@ -64,8 +69,13 @@ const SOUND_DEFS: Record<SoundId, SoundDefinition> = {
   land:        { src: ["/audio/sfx/land.mp3"], volume: 0.5, maxOverlap: 2 },
   eliminated:  { src: ["/audio/sfx/elimination.mp3"], volume: 0.9, maxOverlap: 3 },
   victory:     { src: ["/audio/sfx/victory.mp3"], volume: 0.8, maxOverlap: 1 },
-  heartbeat:   { src: ["/audio/sfx/heartbeat.mp3"], volume: 1.0, loop: true, maxOverlap: 1 },
-  red_light_call: { src: ["/audio/sfx/squid_game_red_green.mp3"], volume: 0.9, maxOverlap: 1 },
+  heartbeat:       { src: ["/audio/sfx/heartbeat.mp3"], volume: 1.0, loop: true, maxOverlap: 1 },
+  red_light_call:  { src: ["/audio/sfx/squid_game_red_green.mp3"], volume: 0.9, maxOverlap: 1 },
+  glass_step:      { src: ["/audio/sfx/glass_step.mp3"], volume: 0.5, maxOverlap: 3 },
+  glass_break:     { src: ["/audio/sfx/shatter.mp3"], volume: 1.0, maxOverlap: 2 },
+  fall:            { src: ["/audio/sfx/fall.mp3"], volume: 0.9, maxOverlap: 1 },
+  "exhale-texture": { src: ["/audio/sfx/exhale-texture.mp3"], volume: 0.5, maxOverlap: 2 },
+  suspense:        { src: ["/audio/sfx/suspense.mp3"], volume: 0.6, maxOverlap: 1 },
 };
 
 export class SoundManager {

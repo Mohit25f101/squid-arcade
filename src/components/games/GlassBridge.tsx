@@ -569,6 +569,7 @@ function updatePlayer(gs: GameState, dtSec: number): void {
     }
 
     if (!panel.safe) {
+      SoundManager.getInstance().play("glass_break");
       triggerElimination(gs);
       const px = colWorldX(p.col) + PANEL_W / 2;
       const py = rowWorldY(p.row) + PANEL_H / 2;
@@ -1240,7 +1241,7 @@ const MobileTouchControls: React.FC<MobileTouchControlsProps> = ({ visible, inpu
     background: "rgba(20,60,120,0.55)", border: "1.5px solid rgba(80,160,255,0.4)",
     color: "rgba(160,210,255,0.9)", fontSize: 24, fontFamily: "monospace", display: "flex",
     alignItems: "center", justifyContent: "center", cursor: "pointer",
-    userSelect: "none", WebkitUserSelect: "none", touchAction: "none", backdropFilter: "blur(4px)", zIndex: 100
+    userSelect: "none", WebkitUserSelect: "none", touchAction: "none", zIndex: 100
   };
 
   return (
@@ -1305,7 +1306,7 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
 
   useEffect(() => {
     SoundManager.getInstance().preload([
-      "step", "exhale-texture", "glass_step", "shatter", "fall", "victory", "eliminated", "suspense"
+      "step", "exhale-texture", "glass_step", "glass_break", "shatter", "fall", "victory", "eliminated", "suspense"
     ] as any[]);
     return () => {
       SoundManager.getInstance().stopAll(0);
