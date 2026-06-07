@@ -44,16 +44,10 @@ export default function GameRouter() {
     (score: number, outcome: "victory" | "eliminated") => {
       const currentGame = useGameStore.getState().activeGame;
       if (currentGame !== "menu") {
-        recordGameCompletion({
-          gameId: currentGame,
-          score,
-          outcome,
-          timestamp: Date.now(),
-        });
         updateBestScore(currentGame, score);
       }
     },
-    [recordGameCompletion, updateBestScore],
+    [updateBestScore],
   );
 
   const [transitionState, setTransitionState] = useState("idle");

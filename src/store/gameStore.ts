@@ -517,9 +517,6 @@ export const selectIsEliminated = (s: GameStoreState) => s.runtimePhase === "eli
 export const selectIsVictory = (s: GameStoreState) => s.runtimePhase === "victory";
 export const selectViewport = (s: GameStoreState) => s.viewportState;
 
-export const selectSessionStats = (s: GameStoreState): SessionStats => {
-  const played = s.sessionHistory.length;
-  const survived = s.sessionHistory.filter(h => h.outcome === 'victory').length;
-  const total = s.sessionHistory.reduce((acc, curr) => acc + curr.score, 0);
-  return { played, survived, total };
-};
+export const selectSessionPlayed = (s: GameStoreState) => s.sessionHistory.length;
+export const selectSessionSurvived = (s: GameStoreState) => s.sessionHistory.filter(h => h.outcome === 'victory').length;
+export const selectSessionTotal = (s: GameStoreState) => s.sessionHistory.reduce((acc, curr) => acc + curr.score, 0);

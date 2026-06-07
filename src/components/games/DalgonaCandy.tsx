@@ -30,6 +30,7 @@ export default function DalgonaCandy({ onExit, onComplete }: DalgonaCandyProps) 
         case 'DALGONA_SUCCESS':
           SoundManager.getInstance().play("victory");
           setRuntimePhase("victory");
+          useGameStore.getState().incrementDalgonaLevel();
           if (onComplete) onComplete(15000, "victory");
           break;
         case 'DALGONA_ELIMINATED':
