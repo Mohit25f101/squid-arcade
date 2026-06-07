@@ -17,6 +17,8 @@ interface GameProps {
 const WORLD_W = 1280;
 const WORLD_H = 720;
 const TOTAL_ROWS = 18;
+const ROW_SPACING = 3.5;
+const getTimeLimit = (difficulty: string) => difficulty === "easy" ? 60 : difficulty === "hard" ? 30 : 45; 
 
 const PLAYER_W = 68; 
 const PLAYER_H = 100;
@@ -1155,7 +1157,7 @@ function createGameState(seed: number, difficulty: "easy"|"normal"|"hard"): Game
       startY, facing: 1, status: "alive", fallY: 0, fallVy: 0, screenShakeX: 0, screenShakeY: 0, walkBob: 0, walkBobDir: 1,
     },
     camera: { y: startY - WORLD_H * 0.5, targetY: startY - WORLD_H * 0.5, shake: 0, shakeTimer: 0, shakeDecay: SHAKE_DECAY_RATE, zoom: 1, targetZoom: 1 },
-    timeLeft: COUNTDOWN_TOTAL, elapsed: 0, slowMoMult: 1, particles: [], audioEvents: new Set(),
+    timeLeft: getTimeLimit(difficulty), elapsed: 0, slowMoMult: 1, particles: [], audioEvents: new Set(),
     atmosphericT: 0, vignetteIntensity: 0, vignetteTarget: 0, flashAlpha: 0, fadeAlpha: 0, inputConsumed: false, seed, ambientDripTimer: 0, lateGameZoomActive: false, timeOnRow: 0
   };
 }
@@ -1423,12 +1425,6 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
             case "fall":
               sm.play("fall", 0);
               break;
-            case "victory":
-              sm.play("victory", 0);
-              break;
-            case "eliminated":
-              sm.play("eliminated", 0);
-              break;
           }
         }
       }
@@ -1462,7 +1458,8 @@ const GlassBridge: React.FC<GameProps> = ({ onExit, onComplete }) => {
     }
 
     if (gs.phase === "victory" && uiPhaseRef.current === "playing") {
-      const timeBonus = Math.floor((gs.timeLeft / COUNTDOWN_TOTAL) * 500);
+      const timeLimit = getTimeLimit(difficulty);
+      const timeBonus = Math.floor((gs.timeLeft / timeLimit) * 500);
       const score = (TOTAL_ROWS * 100) + timeBonus;
       if (!scoreRecorded.current) {
           addScore(score);

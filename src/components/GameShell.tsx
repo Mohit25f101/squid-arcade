@@ -437,6 +437,21 @@ const GameShell: React.FC<GameShellProps> = ({
     onEliminationComplete?.();
   }, [setRuntimePhase, onExit, onEliminationComplete]);
 
+  // Global sound triggers based on phase changes
+  const prevPhaseRef = useRef(runtimePhase);
+  useEffect(() => {
+    if (prevPhaseRef.current !== "victory" && runtimePhase === "victory") {
+      import("@/managers/SoundManager").then(({ SoundManager }) => {
+        SoundManager.getInstance().play("victory");
+      });
+    } else if (prevPhaseRef.current !== "eliminated" && runtimePhase === "eliminated") {
+      import("@/managers/SoundManager").then(({ SoundManager }) => {
+        SoundManager.getInstance().play("eliminated");
+      });
+    }
+    prevPhaseRef.current = runtimePhase;
+  }, [runtimePhase]);
+
   // ── Victory overlay completion handler ──────────────────────────────────
   const handleVictoryComplete = useCallback(() => {
     setRuntimePhase("idle");

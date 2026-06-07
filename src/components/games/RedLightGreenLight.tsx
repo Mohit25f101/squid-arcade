@@ -527,7 +527,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         redLightCallFiredRef.current = true;
         sm.play("red_light_call" as any);
       }
-
       if (turnTRef.current >= 1) {
         turnTRef.current = 1;
         lightPhaseRef.current = LightPhase.RED;
@@ -563,7 +562,8 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       dollRotationRef.current = 0;
       greenTimerRef.current += dt;
       // Force transition to warning if green light has lasted too long
-      if (greenTimerRef.current >= GREEN_DURATION_MAX) {
+      const warningChance = difficulty === "hard" ? 0.05 : 0.02;
+      if (greenTimerRef.current >= GREEN_DURATION_MAX || (greenTimerRef.current > 2 && Math.random() < warningChance * dt * 2)) {
         greenTimerRef.current = 0;
         redLightCallFiredRef.current = false; // reset for the new warning cycle
         lightPhaseRef.current = LightPhase.WARNING;
@@ -586,6 +586,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       human.vx = 0;
 
       if (wantMove) {
+        hasMovedRef.current = true;
         let avoidX = 0;
         const AVOID_RADIUS = 3.0;
         const AVOID_STRENGTH = 4.0;
@@ -609,7 +610,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
       
       human.z += human.vz * dt;
 
-      if (wantMove) {
+      if (hasMovedRef.current) {
         lastStepRef.current += dt;
         if (lastStepRef.current > 0.32) {
           lastStepRef.current = 0;
@@ -617,17 +618,13 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
         }
       }
 
-      if (human.z <= FINISH_Z) {
-        human.finished = true;
-        human.z = FINISH_Z;
-        human.vz = 0;
-        
+      if (playersRef.current[0].z <= FINISH_Z && !hasWonRef.current) {
+        hasWonRef.current = true;
         gamePhaseRef.current = GamePhase.VICTORY; 
         
         stopDollSong();
         sm.stopLoop("heartbeat" as any, 300);
         sm.stopLoop("scan_tone" as any, 300);
-        sm.play("player_victory" as any);
         sm.play("crowd_cheer" as any);
         
         const timeBonus = Math.floor(timeLeftRef.current * 50);
@@ -712,7 +709,6 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             if (elimTimerRef.current >= 0.1) {
               elimStateRef.current = "audio";
               elimTimerRef.current = 0;
-              sm.play("player_eliminated" as any);
             }
             break;
             
@@ -739,7 +735,7 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             
           case "shake":
             if (elimTimerRef.current >= 0.2) {
-              elimStateRef.current = "fall";
+              elimStateRef.current = "doll_kill";
               elimTimerRef.current = 0;
               human.alive = false;
               human.fallProgress = 0;
@@ -750,6 +746,13 @@ function Scene({ onGameOver, onHudUpdate, pausedRef, inputRef, roundTimer, diffi
             }
             break;
             
+          case "doll_kill":
+            if (elimTimerRef.current >= 0.5) {
+              elimStateRef.current = "fall";
+              elimTimerRef.current = 0;
+            }
+            break;
+
           case "fall":
             if (elimTimerRef.current >= 1.5) {
               elimStateRef.current = "summary";
